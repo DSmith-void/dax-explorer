@@ -299,7 +299,7 @@ describe('whole expressions', () => {
     ]);
   });
 
-  it('lexes a measure header with spaces as separate identifiers (the parser will combine them)', () => {
+  it('lexes words separated by spaces as separate identifiers (measure headers are split off before lexing)', () => {
     expect(pairs('Sales Percent of Total =')).toEqual([
       ['Identifier', 'Sales'],
       ['Identifier', 'Percent'],
@@ -342,6 +342,23 @@ describe('span invariants', () => {
       expect(source.slice(previousEnd, token.span.start)).toMatch(/^\s*$/);
       previousEnd = token.span.end;
     }
+  });
+});
+
+describe('startOffset', () => {
+  it('starts lexing at the given offset and keeps spans relative to the full source', () => {
+    const { tokens, diagnostics } = tokenize('Name | X = 1 + [A]', 10);
+    expect(diagnostics).toEqual([]);
+    expect(tokens.map((t) => [t.kind, t.text, t.span.start])).toEqual([
+      ['Number', '1', 11],
+      ['Operator', '+', 13],
+      ['BracketedName', '[A]', 15],
+      ['EndOfInput', '', 18],
+    ]);
+  });
+
+  it('clamps an offset beyond the end of the source', () => {
+    expect(tokenize('abc', 99).tokens).toEqual([{ kind: 'EndOfInput', text: '', span: { start: 3, end: 3 } }]);
   });
 });
 

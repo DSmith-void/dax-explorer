@@ -22,10 +22,17 @@ export function ExpressionTreePanel({ result }: ExpressionTreePanelProps) {
     return (
       <Panel id="expression-tree" title="Expression Tree" status="Tokens only">
         <p className="placeholder-lead">
-          The parser is not built yet, so this shows the <strong>tokens</strong> the lexer produced. The
-          tree view arrives in the next milestone.
+          The parser is not built yet, so this shows the <strong>tokens</strong> the lexer produced
+          {result.header ? <> for the expression after the measure name</> : null}. The tree view arrives
+          in the next milestone.
         </p>
-        <TokenTable source={result.text} tokens={result.lex.tokens} />
+        {result.lex ? (
+          <TokenTable source={result.text} tokens={result.lex.tokens} />
+        ) : (
+          <p className="placeholder-lead">
+            Nothing was tokenized because the measure header could not be found. See Diagnostics below.
+          </p>
+        )}
       </Panel>
     );
   }

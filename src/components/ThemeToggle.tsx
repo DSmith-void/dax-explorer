@@ -1,4 +1,5 @@
 import type { ThemePreference } from '../app/useThemePreference';
+import { SegmentedControl } from './SegmentedControl';
 
 interface ThemeToggleProps {
   value: ThemePreference;
@@ -12,20 +13,5 @@ const OPTIONS: { value: ThemePreference; label: string }[] = [
 ];
 
 export function ThemeToggle({ value, onChange }: ThemeToggleProps) {
-  return (
-    <div className="theme-toggle" role="radiogroup" aria-label="Color theme">
-      {OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          role="radio"
-          aria-checked={value === option.value}
-          className={value === option.value ? 'is-active' : undefined}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
+  return <SegmentedControl label="Color theme" options={OPTIONS} value={value} onChange={onChange} />;
 }

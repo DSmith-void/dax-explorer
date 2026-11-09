@@ -37,12 +37,16 @@ function isIdentifierPart(ch: string | undefined): boolean {
  * The lexer never throws. Text it cannot tokenize becomes an `Error` token
  * plus a `Diagnostic`, and lexing continues after it, so later stages can
  * still report as much as possible.
+ *
+ * `startOffset` lets the caller lex only part of the text (for example the
+ * expression after a measure header) while every span still refers to
+ * positions in the full source.
  */
-export function tokenize(source: string): LexResult {
+export function tokenize(source: string, startOffset = 0): LexResult {
   const tokens: Token[] = [];
   const diagnostics: Diagnostic[] = [];
   const length = source.length;
-  let pos = 0;
+  let pos = Math.max(0, Math.min(startOffset, length));
 
   const slice = (start: number, end: number) => source.slice(start, end);
 

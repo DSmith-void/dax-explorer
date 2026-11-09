@@ -131,6 +131,10 @@
   flex: 1 1 16rem;
 }
 
+.field-fit {
+  flex: 0 0 auto;
+}
+
 .field-label {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
@@ -196,16 +200,17 @@ select {
   color: var(--color-text-muted);
 }
 
-/* --- Theme toggle (segmented control) --- */
-.theme-toggle {
+/* --- Segmented control (theme toggle, input type) --- */
+.segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   padding: 2px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-surface-muted);
 }
 
-.theme-toggle button {
+.segmented button {
   padding: 4px 10px;
   border: none;
   border-radius: 6px;
@@ -215,7 +220,7 @@ select {
   cursor: pointer;
 }
 
-.theme-toggle button.is-active {
+.segmented button.is-active {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow);
@@ -303,6 +308,25 @@ select {
   border-color: var(--color-error-border);
   background: var(--color-error-bg);
   color: var(--color-error-text);
+}
+
+.notice-info {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.notice-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.measure-name {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 
 .diagnostics-body {

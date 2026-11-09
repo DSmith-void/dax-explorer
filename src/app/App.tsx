@@ -4,18 +4,28 @@ import { DaxInputPanel } from '../components/DaxInputPanel';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { SAMPLE_MEASURES } from '../samples/sampleMeasures';
+import type { InputMode } from '../engine/definition';
+import { SAMPLE_MEASURES, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
 import { useThemePreference } from './useThemePreference';
 
 export function App() {
   const [theme, setTheme] = useThemePreference();
   const [daxText, setDaxText] = useState(SAMPLE_MEASURES[0].expression);
+  const [inputMode, setInputMode] = useState<InputMode>('measure-definition');
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
-  function handleAnalyze() {
-    setResult(analyze(daxText));
+  function handleSelectSample(sample: SampleMeasure) {
+    setDaxText(sample.expression);
+    // All built-in samples are written as "Name = expression".
+    setInputMode('measure-definition');
   }
+
+  function handleAnalyze() {
+    setResult(analyze(daxText, inputMode));
+  }
+
+  const inputChangedSinceAnalysis = result !== null && (result.text !== daxText || result.mode !== inputMode);
 
   return (
     <div className="app">
@@ -31,16 +41,16 @@ export function App() {
         <DaxInputPanel
           value={daxText}
           onChange={setDaxText}
+          mode={inputMode}
+          onModeChange={setInputMode}
           samples={SAMPLE_MEASURES}
+          onSelectSample={handleSelectSample}
           onAnalyze={handleAnalyze}
         />
         <div className="analysis-column">
           <ExpressionTreePanel result={result} />
           <ContextInspectorPanel />
-          <DiagnosticsPanel
-            result={result}
-            inputChangedSinceAnalysis={result !== null && result.text !== daxText}
-          />
+          <DiagnosticsPanel result={result} inputChangedSinceAnalysis={inputChangedSinceAnalysis} />
         </div>
       </main>
 
