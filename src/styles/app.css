@@ -83,6 +83,7 @@
 
 .panel-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
@@ -361,12 +362,27 @@ select {
   border-left: 1px solid var(--color-border);
 }
 
+.panel-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.ast-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+
 .ast-node {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 2px 8px;
-  width: 100%;
+  flex: 1 1 14rem;
+  min-width: 0;
   margin: 1px 0;
   padding: 3px 8px;
   border: 1px solid transparent;
@@ -411,6 +427,79 @@ select {
 .ast-node.category-unresolved .ast-label {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
+}
+
+.ast-node.category-measure .ast-label {
+  font-weight: 600;
+}
+
+.ast-node.category-unknown-function .ast-label {
+  font-weight: 600;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* Certainty of a measure/column classification */
+.certainty-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.certainty-tag.tone-certain {
+  border-color: var(--color-success-border);
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+}
+
+.certainty-tag.tone-user {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.certainty-tag.tone-assumed {
+  border-style: dashed;
+  border-color: var(--color-notice-border);
+  color: var(--color-notice-text);
+  background: var(--color-notice-bg);
+}
+
+.certainty-tag.tone-unknown {
+  border-style: dashed;
+  color: var(--color-text-muted);
+}
+
+/* Inline measure / column switch on reference nodes */
+.ref-choice {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ref-choice button {
+  padding: 1px 8px;
+  border: none;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.ref-choice button + button {
+  border-left: 1px solid var(--color-border);
+}
+
+.ref-choice button:hover {
+  color: var(--color-text);
+}
+
+.ref-choice button.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
 .ast-node.category-structure .ast-label,
@@ -476,6 +565,23 @@ select {
 
 .inspector-note {
   color: var(--color-text-muted);
+}
+
+.inspector-detail {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.function-details {
+  display: grid;
+  gap: 6px;
+}
+
+.argument-list {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 2px;
 }
 
 .link-button {

@@ -3,10 +3,10 @@
 A learning and debugging tool that will visually explain how a DAX expression is evaluated: filter context,
 row context, context transition, CALCULATE modifiers, virtual tables, and more.
 
-> **Status: early preview (milestone 3).** DAX is parsed into an expression tree (function calls, references,
-> variables, operators) that you can click to highlight the matching text. Syntax errors are reported with
-> positions and the parser recovers to show as much of the tree as possible. There is **no semantic (context)
-> analysis yet**, and the app says so explicitly.
+> **Status: early preview (milestone 4).** DAX is parsed into a clickable expression tree. A curated function
+> catalog identifies argument roles, and every `[Name]` / `Table[Name]` reference is classified as a measure or
+> column **with its source of evidence** (required by a function, your choice, assumed by naming convention, or
+> unknown in strict mode). There is **no context analysis yet**, and the app says so explicitly.
 
 ## Design principles
 
@@ -42,8 +42,8 @@ npm run dev       # start the local dev server
 
 ## Project layout
 
-- `src/engine/` — the DAX engine: measure-header split, lexer and parser. Pure TypeScript with
-  **no UI dependencies**; the linter enforces this.
+- `src/engine/` — the DAX engine: measure-header split, lexer, parser, function catalog and binder.
+  Pure TypeScript with **no UI dependencies**; the linter enforces this.
 - `src/app/`, `src/components/`, `src/styles/` — the React user interface.
 - `src/samples/` — synthetic sample measures.
 

@@ -1,4 +1,5 @@
 import type { AnalysisResult } from '../app/analysis';
+import type { BindResult } from '../engine/binder/binder';
 import type { Diagnostic } from '../engine/diagnostics';
 import { childrenOf, type AstNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
@@ -6,12 +7,17 @@ import { Panel } from './Panel';
 
 interface DiagnosticsPanelProps {
   result: AnalysisResult | null;
+  binding: BindResult | null;
   inputChangedSinceAnalysis: boolean;
 }
 
-export function DiagnosticsPanel({ result, inputChangedSinceAnalysis }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ result, binding, inputChangedSinceAnalysis }: DiagnosticsPanelProps) {
+  const diagnostics = result
+    ? [...result.diagnostics, ...(binding?.diagnostics ?? [])].sort((a, b) => a.span.start - b.span.start)
+    : [];
+
   return (
-    <Panel id="diagnostics" title="Diagnostics & Explanation" status={result ? 'Syntax only' : 'Planned'}>
+    <Panel id="diagnostics" title="Diagnostics & Explanation" status={result ? 'Syntax + references' : 'Planned'}>
       <div aria-live="polite" className="diagnostics-body">
         {result === null ? (
           <p className="placeholder-lead">
@@ -31,12 +37,22 @@ export function DiagnosticsPanel({ result, inputChangedSinceAnalysis }: Diagnost
                 </p>
               </div>
             )}
-            <ProblemsSummary result={result} />
+            <ProblemsSummary result={result} diagnostics={diagnostics} />
+            {binding && <ReferenceSummary binding={binding} />}
+            {binding && binding.unknownFunctions.length > 0 && (
+              <div className="notice notice-info">
+                <p className="notice-title">Not in the function catalog</p>
+                <p>
+                  {binding.unknownFunctions.join(', ')}: shown in the tree, but nothing is concluded from{' '}
+                  {binding.unknownFunctions.length === 1 ? 'its' : 'their'} arguments.
+                </p>
+              </div>
+            )}
             <div className="notice notice-unsupported" role="status">
-              <p className="notice-title">Semantic analysis unavailable</p>
+              <p className="notice-title">Context analysis unavailable</p>
               <p>
-                The expression's structure has been parsed, but context analysis is not built yet, so{' '}
-                <strong>nothing about this expression's meaning has been analyzed</strong>.
+                Structure and reference types are known, but filter and row context are not analyzed yet, so{' '}
+                <strong>nothing about how this expression is evaluated has been concluded</strong>.
               </p>
             </div>
             {inputChangedSinceAnalysis && (
@@ -49,9 +65,30 @@ export function DiagnosticsPanel({ result, inputChangedSinceAnalysis }: Diagnost
   );
 }
 
-function ProblemsSummary({ result }: { result: AnalysisResult }) {
-  const errors = result.diagnostics.filter((d) => d.severity === 'error');
-  const warnings = result.diagnostics.filter((d) => d.severity === 'warning');
+function ReferenceSummary({ binding }: { binding: BindResult }) {
+  const all = [...binding.references.values()];
+  if (all.length === 0) return null;
+  const count = (predicate: (r: (typeof all)[number]) => boolean) => all.filter(predicate).length;
+  const parts = [
+    { n: count((r) => r.source === 'function-signature'), text: 'required by a function' },
+    { n: count((r) => r.source === 'user'), text: 'set by you' },
+    { n: count((r) => r.source === 'convention' || r.source === 'other-occurrence'), text: 'assumed' },
+    { n: count((r) => r.source === 'unresolved'), text: 'unknown' },
+  ].filter((part) => part.n > 0);
+
+  return (
+    <div className="notice notice-info">
+      <p className="notice-title">
+        {all.length} measure/column {all.length === 1 ? 'reference' : 'references'}
+      </p>
+      <p>{parts.map((part) => `${part.n} ${part.text}`).join(' · ')}</p>
+    </div>
+  );
+}
+
+function ProblemsSummary({ result, diagnostics }: { result: AnalysisResult; diagnostics: Diagnostic[] }) {
+  const errors = diagnostics.filter((d) => d.severity === 'error');
+  const warnings = diagnostics.filter((d) => d.severity === 'warning');
 
   return (
     <>

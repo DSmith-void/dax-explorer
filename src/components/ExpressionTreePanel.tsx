@@ -1,30 +1,63 @@
 import type { CSSProperties } from 'react';
 import type { AnalysisResult } from '../app/analysis';
+import type { BindResult, ReferenceType, ResolutionMode } from '../engine/binder/binder';
 import type { AstNode } from '../engine/parser/ast';
 import { ExpressionTree } from './ExpressionTree';
 import { Panel } from './Panel';
+import { SegmentedControl } from './SegmentedControl';
 import { TokenTable } from './TokenTable';
 
 /** Static illustration shown before the first analysis. */
 const EXAMPLE_NODES: { depth: number; text: string; kind: string }[] = [
-  { depth: 0, text: 'DIVIDE', kind: 'function call' },
-  { depth: 1, text: '[Total Sales]', kind: 'measure or column?' },
-  { depth: 1, text: 'CALCULATE', kind: 'function call' },
-  { depth: 2, text: '[Total Sales]', kind: 'measure or column?' },
-  { depth: 2, text: 'REMOVEFILTERS', kind: 'function call' },
-  { depth: 3, text: 'Product[Category]', kind: 'column reference' },
+  { depth: 0, text: 'DIVIDE', kind: 'function' },
+  { depth: 1, text: '[Total Sales]', kind: 'measure' },
+  { depth: 1, text: 'CALCULATE', kind: 'function' },
+  { depth: 2, text: '[Total Sales]', kind: 'measure' },
+  { depth: 2, text: 'REMOVEFILTERS', kind: 'function' },
+  { depth: 3, text: 'Product[Category]', kind: 'column' },
 ];
+
+const MODE_OPTIONS: { value: ResolutionMode; label: string; title: string }[] = [
+  {
+    value: 'convention',
+    label: 'Naming convention',
+    title: '[Name] is assumed to be a measure and Table[Name] a column, unless known otherwise. Assumptions are labeled.',
+  },
+  { value: 'strict', label: 'Strict', title: 'Nothing is assumed. Unknown references stay unknown until you choose.' },
+];
+
+const MODE_HINTS: Record<ResolutionMode, string> = {
+  convention: '[Name] is assumed to be a measure and Table[Name] a column unless a function requires otherwise.',
+  strict: 'Nothing is assumed: references stay unknown unless a function requires a column or you choose.',
+};
 
 interface ExpressionTreePanelProps {
   result: AnalysisResult | null;
+  binding: BindResult | null;
   selectedId: number | null;
   onSelectNode: (node: AstNode) => void;
+  referenceMode: ResolutionMode;
+  onReferenceModeChange: (mode: ResolutionMode) => void;
+  onChooseReferenceType: (key: string, type: ReferenceType | null) => void;
+  userChoiceCount: number;
+  onClearChoices: () => void;
 }
 
-export function ExpressionTreePanel({ result, selectedId, onSelectNode }: ExpressionTreePanelProps) {
+export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
+  const { result, binding, selectedId, onSelectNode, referenceMode, onReferenceModeChange } = props;
+
+  const modeSwitch = (
+    <div className="panel-setting">
+      <span className="field-label" aria-hidden="true">
+        Reference types
+      </span>
+      <SegmentedControl label="Reference types" options={MODE_OPTIONS} value={referenceMode} onChange={onReferenceModeChange} />
+    </div>
+  );
+
   if (!result) {
     return (
-      <Panel id="expression-tree" title="Expression Tree" status="Syntax only">
+      <Panel id="expression-tree" title="Expression Tree" status="Syntax + references" actions={modeSwitch}>
         <p className="placeholder-lead">
           Press <strong>Analyze DAX</strong> to see the structure of the expression: function calls, references,
           variables and operators.
@@ -46,14 +79,30 @@ export function ExpressionTreePanel({ result, selectedId, onSelectNode }: Expres
   const tokenCount = result.lex ? result.lex.tokens.filter((t) => t.kind !== 'EndOfInput').length : 0;
 
   return (
-    <Panel id="expression-tree" title="Expression Tree" status="Syntax only">
+    <Panel id="expression-tree" title="Expression Tree" status="Syntax + references" actions={modeSwitch}>
       {root ? (
         <>
           <p className="placeholder-lead">
-            How the expression is put together{result.header ? ' (after the measure name)' : ''}. Click a node to
-            highlight its text in the editor. Meaning (filters, context) is not analyzed yet.
+            Click a node to highlight its text. {MODE_HINTS[referenceMode]} Use <em>measure</em> / <em>column</em> to
+            decide for a name everywhere.
           </p>
-          <ExpressionTree root={root} source={result.text} selectedId={selectedId} onSelect={onSelectNode} />
+          <ExpressionTree
+            root={root}
+            source={result.text}
+            binding={binding}
+            selectedId={selectedId}
+            onSelect={onSelectNode}
+            onChooseReferenceType={props.onChooseReferenceType}
+          />
+          {props.userChoiceCount > 0 && (
+            <p className="hint">
+              {props.userChoiceCount} remembered {props.userChoiceCount === 1 ? 'choice' : 'choices'} (stored in this
+              browser only).{' '}
+              <button type="button" className="link-button" onClick={props.onClearChoices}>
+                Forget all
+              </button>
+            </p>
+          )}
         </>
       ) : (
         <p className="placeholder-lead">

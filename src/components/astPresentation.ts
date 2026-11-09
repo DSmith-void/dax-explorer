@@ -1,7 +1,21 @@
+import type { BindResult, ReferenceResolution } from '../engine/binder/binder';
 import type { AstNode, BinaryOperator } from '../engine/parser/ast';
 
 /** Visual grouping used for styling tree nodes. */
-export type NodeCategory = 'function' | 'reference' | 'unresolved' | 'variable' | 'operator' | 'literal' | 'structure' | 'error';
+export type NodeCategory =
+  | 'function'
+  | 'unknown-function'
+  | 'measure'
+  | 'reference'
+  | 'unresolved'
+  | 'variable'
+  | 'operator'
+  | 'literal'
+  | 'structure'
+  | 'error';
+
+/** How certain a reference classification is. */
+export type CertaintyTone = 'certain' | 'user' | 'assumed' | 'unknown';
 
 export interface NodePresentation {
   /** Short text shown for the node, e.g. "CALCULATE" or "Product[Category]". */
@@ -9,6 +23,8 @@ export interface NodePresentation {
   /** What kind of syntax this is, in plain words. */
   kind: string;
   category: NodeCategory;
+  /** Optional certainty tag for references, e.g. "required" or "assumed". */
+  tag?: { text: string; tone: CertaintyTone; title: string };
 }
 
 const BINARY_KIND: Record<BinaryOperator, string> = {
@@ -35,7 +51,22 @@ function sourceText(node: AstNode, source: string, maxLength = 60): string {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
-export function presentNode(node: AstNode, source: string): NodePresentation {
+/** Short certainty tag for a resolved reference. */
+export function resolutionTag(resolution: ReferenceResolution): NonNullable<NodePresentation['tag']> {
+  switch (resolution.source) {
+    case 'function-signature':
+      return { text: 'required', tone: 'certain', title: resolution.detail };
+    case 'user':
+      return { text: 'your choice', tone: 'user', title: resolution.detail };
+    case 'other-occurrence':
+    case 'convention':
+      return { text: 'assumed', tone: 'assumed', title: resolution.detail };
+    case 'unresolved':
+      return { text: 'unknown', tone: 'unknown', title: resolution.detail };
+  }
+}
+
+export function presentNode(node: AstNode, source: string, binding?: BindResult | null): NodePresentation {
   switch (node.kind) {
     case 'NumberLiteral':
       return { label: sourceText(node, source), kind: 'number', category: 'literal' };
@@ -43,13 +74,34 @@ export function presentNode(node: AstNode, source: string): NodePresentation {
       return { label: sourceText(node, source), kind: 'text', category: 'literal' };
     case 'BooleanLiteral':
       return { label: node.value ? 'TRUE' : 'FALSE', kind: 'boolean', category: 'literal' };
-    case 'FunctionCall':
-      return { label: node.name, kind: 'function call', category: 'function' };
+    case 'FunctionCall': {
+      const call = binding?.calls.get(node.id);
+      if (binding && !call?.spec) {
+        return { label: node.name, kind: 'function · not in catalog', category: 'unknown-function' };
+      }
+      return { label: node.name, kind: call?.spec ? `function · ${call.spec.category}` : 'function call', category: 'function' };
+    }
     case 'ColumnRef':
-      return { label: sourceText(node, source), kind: 'column reference', category: 'reference' };
-    case 'BracketRef':
-      return { label: sourceText(node, source), kind: 'measure or column?', category: 'unresolved' };
+    case 'BracketRef': {
+      const resolution = binding?.references.get(node.id);
+      if (!resolution) {
+        return {
+          label: sourceText(node, source),
+          kind: node.kind === 'ColumnRef' ? 'column reference' : 'measure or column?',
+          category: node.kind === 'ColumnRef' ? 'reference' : 'unresolved',
+        };
+      }
+      return {
+        label: sourceText(node, source),
+        kind: resolution.type ?? 'measure or column?',
+        category: resolution.type === 'measure' ? 'measure' : resolution.type === 'column' ? 'reference' : 'unresolved',
+        tag: resolutionTag(resolution),
+      };
+    }
     case 'TableRef':
+      if (binding?.keywordNodeIds.has(node.id)) {
+        return { label: node.name, kind: 'keyword argument', category: 'literal' };
+      }
       return { label: sourceText(node, source), kind: 'table reference', category: 'reference' };
     case 'VariableRef':
       return { label: node.name, kind: 'variable reference', category: 'variable' };
@@ -62,7 +114,11 @@ export function presentNode(node: AstNode, source: string): NodePresentation {
     case 'VarDeclaration':
       return { label: `VAR ${node.name}`, kind: 'variable definition', category: 'variable' };
     case 'TableConstructor':
-      return { label: '{ … }', kind: `table constructor, ${node.items.length} ${node.items.length === 1 ? 'row' : 'rows'}`, category: 'structure' };
+      return {
+        label: '{ … }',
+        kind: `table constructor, ${node.items.length} ${node.items.length === 1 ? 'row' : 'rows'}`,
+        category: 'structure',
+      };
     case 'Tuple':
       return { label: '( … )', kind: `row of ${node.items.length} values`, category: 'structure' };
     case 'Omitted':
