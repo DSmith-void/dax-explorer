@@ -1,9 +1,12 @@
+import type { Ref } from 'react';
 import type { InputMode } from '../engine/definition';
 import type { SampleMeasure } from '../samples/sampleMeasures';
 import { Panel } from './Panel';
 import { SegmentedControl } from './SegmentedControl';
 
 interface DaxInputPanelProps {
+  /** Lets the app highlight text in the editor when a tree node is selected. */
+  editorRef: Ref<HTMLTextAreaElement>;
   value: string;
   onChange: (value: string) => void;
   mode: InputMode;
@@ -31,6 +34,7 @@ const MODE_HINTS: Record<InputMode, string> = {
 };
 
 export function DaxInputPanel({
+  editorRef,
   value,
   onChange,
   mode,
@@ -82,6 +86,7 @@ export function DaxInputPanel({
         DAX expression
       </label>
       <textarea
+        ref={editorRef}
         id="dax-editor"
         className="dax-editor"
         value={value}

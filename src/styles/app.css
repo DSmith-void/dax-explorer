@@ -347,7 +347,148 @@ select {
   font-weight: 600;
 }
 
-/* --- Token table (temporary view until the parser exists) --- */
+/* --- Expression tree --- */
+.ast-tree,
+.ast-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ast-tree ul {
+  margin-left: 0.7rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--color-border);
+}
+
+.ast-node {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  margin: 1px 0;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ast-node:hover {
+  background: var(--color-surface-muted);
+}
+
+.ast-node.is-selected {
+  background: var(--color-surface-muted);
+  border-color: var(--color-accent);
+}
+
+.ast-label {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.ast-kind {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.ast-role {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.ast-node.category-function .ast-label {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.ast-node.category-unresolved .ast-label {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.ast-node.category-structure .ast-label,
+.ast-node.category-operator .ast-label {
+  font-weight: 600;
+}
+
+.ast-node.category-error .ast-label,
+.ast-node.category-error .ast-kind {
+  color: var(--color-error-text);
+}
+
+.token-details summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  padding-block: 4px;
+}
+
+.token-details[open] summary {
+  margin-bottom: 8px;
+}
+
+/* --- Context inspector --- */
+.inspector {
+  display: grid;
+  gap: 10px;
+  font-size: 0.875rem;
+}
+
+.inspector-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.inspector-facts dt {
+  color: var(--color-text-muted);
+}
+
+.inspector-facts dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.inspector-label {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.inspector-source {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 12rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.inspector-note {
+  color: var(--color-text-muted);
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- Token table (now inside a collapsible "Tokens" section) --- */
 .table-scroll {
   overflow-x: auto;
   max-height: 28rem;

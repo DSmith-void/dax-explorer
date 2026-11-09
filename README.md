@@ -3,9 +3,10 @@
 A learning and debugging tool that will visually explain how a DAX expression is evaluated: filter context,
 row context, context transition, CALCULATE modifiers, virtual tables, and more.
 
-> **Status: early preview (milestone 2).** DAX text is tokenized (split into names, references, numbers,
-> strings, operators and comments) with precise positions and lexical error reporting. There is **no parser
-> or semantic analysis yet**, and the app says so explicitly.
+> **Status: early preview (milestone 3).** DAX is parsed into an expression tree (function calls, references,
+> variables, operators) that you can click to highlight the matching text. Syntax errors are reported with
+> positions and the parser recovers to show as much of the tree as possible. There is **no semantic (context)
+> analysis yet**, and the app says so explicitly.
 
 ## Design principles
 
@@ -41,8 +42,8 @@ npm run dev       # start the local dev server
 
 ## Project layout
 
-- `src/engine/` — the DAX engine (currently the lexer). Pure TypeScript with **no UI dependencies**;
-  the linter enforces this.
+- `src/engine/` — the DAX engine: measure-header split, lexer and parser. Pure TypeScript with
+  **no UI dependencies**; the linter enforces this.
 - `src/app/`, `src/components/`, `src/styles/` — the React user interface.
 - `src/samples/` — synthetic sample measures.
 

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ContextInspectorPanel } from '../components/ContextInspectorPanel';
 import { DaxInputPanel } from '../components/DaxInputPanel';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
 import { ThemeToggle } from '../components/ThemeToggle';
 import type { InputMode } from '../engine/definition';
+import type { AstNode } from '../engine/parser/ast';
 import { SAMPLE_MEASURES, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
 import { useThemePreference } from './useThemePreference';
@@ -14,6 +15,8 @@ export function App() {
   const [daxText, setDaxText] = useState(SAMPLE_MEASURES[0].expression);
   const [inputMode, setInputMode] = useState<InputMode>('measure-definition');
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
 
   function handleSelectSample(sample: SampleMeasure) {
     setDaxText(sample.expression);
@@ -23,9 +26,20 @@ export function App() {
 
   function handleAnalyze() {
     setResult(analyze(daxText, inputMode));
+    setSelectedNodeId(null);
   }
 
   const inputChangedSinceAnalysis = result !== null && (result.text !== daxText || result.mode !== inputMode);
+
+  function handleSelectNode(node: AstNode) {
+    setSelectedNodeId(node.id);
+    // Highlight the node's text in the editor, but only if the positions still match the editor contents.
+    const editor = editorRef.current;
+    if (editor && !inputChangedSinceAnalysis) {
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(node.span.start, node.span.end);
+    }
+  }
 
   return (
     <div className="app">
@@ -39,6 +53,7 @@ export function App() {
 
       <main className="workspace">
         <DaxInputPanel
+          editorRef={editorRef}
           value={daxText}
           onChange={setDaxText}
           mode={inputMode}
@@ -48,8 +63,8 @@ export function App() {
           onAnalyze={handleAnalyze}
         />
         <div className="analysis-column">
-          <ExpressionTreePanel result={result} />
-          <ContextInspectorPanel />
+          <ExpressionTreePanel result={result} selectedId={selectedNodeId} onSelectNode={handleSelectNode} />
+          <ContextInspectorPanel result={result} selectedId={selectedNodeId} onSelectNode={handleSelectNode} />
           <DiagnosticsPanel result={result} inputChangedSinceAnalysis={inputChangedSinceAnalysis} />
         </div>
       </main>

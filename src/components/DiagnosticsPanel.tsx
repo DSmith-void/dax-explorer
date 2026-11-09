@@ -1,5 +1,6 @@
 import type { AnalysisResult } from '../app/analysis';
 import type { Diagnostic } from '../engine/diagnostics';
+import { childrenOf, type AstNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
 import { Panel } from './Panel';
 
@@ -10,7 +11,7 @@ interface DiagnosticsPanelProps {
 
 export function DiagnosticsPanel({ result, inputChangedSinceAnalysis }: DiagnosticsPanelProps) {
   return (
-    <Panel id="diagnostics" title="Diagnostics & Explanation" status={result ? 'Lexing only' : 'Planned'}>
+    <Panel id="diagnostics" title="Diagnostics & Explanation" status={result ? 'Syntax only' : 'Planned'}>
       <div aria-live="polite" className="diagnostics-body">
         {result === null ? (
           <p className="placeholder-lead">
@@ -34,7 +35,7 @@ export function DiagnosticsPanel({ result, inputChangedSinceAnalysis }: Diagnost
             <div className="notice notice-unsupported" role="status">
               <p className="notice-title">Semantic analysis unavailable</p>
               <p>
-                Only tokenization has run. Parsing and context analysis are not built yet, so{' '}
+                The expression's structure has been parsed, but context analysis is not built yet, so{' '}
                 <strong>nothing about this expression's meaning has been analyzed</strong>.
               </p>
             </div>
@@ -70,20 +71,26 @@ function ProblemsSummary({ result }: { result: AnalysisResult }) {
           diagnostics={warnings}
         />
       )}
-      {errors.length === 0 && result.lex && <LexSuccess result={result} />}
+      {errors.length === 0 && result.parse?.root && <ParseSuccess result={result} />}
     </>
   );
 }
 
-function LexSuccess({ result }: { result: AnalysisResult }) {
+function countNodes(node: AstNode): number {
+  return 1 + childrenOf(node).reduce((sum, child) => sum + countNodes(child.node), 0);
+}
+
+function ParseSuccess({ result }: { result: AnalysisResult }) {
+  const root = result.parse?.root;
+  const nodeCount = root ? countNodes(root) : 0;
   const tokenCount = result.lex?.tokens.filter((t) => t.kind !== 'EndOfInput').length ?? 0;
   const lineSummary = `${result.lineCount.toLocaleString()} ${result.lineCount === 1 ? 'line' : 'lines'}`;
   return (
     <div className="notice notice-success">
-      <p className="notice-title">Tokenized successfully</p>
+      <p className="notice-title">Parsed successfully</p>
       <p>
-        {tokenCount.toLocaleString()} tokens from {result.characterCount.toLocaleString()} characters on{' '}
-        {lineSummary}. No lexical errors.
+        {nodeCount.toLocaleString()} tree nodes from {tokenCount.toLocaleString()} tokens on {lineSummary}. No syntax
+        errors.
       </p>
     </div>
   );

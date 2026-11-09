@@ -46,7 +46,25 @@ describe('analyze: expression mode', () => {
     expect(result.lex?.tokens.map((t) => t.kind)).toEqual(['BracketedName', 'Operator', 'Number', 'EndOfInput']);
   });
 
-  it('still reports symbols outside brackets as lexical errors', () => {
-    expect(analyze('Sales | Plant', 'expression').diagnostics).toMatchObject([{ code: 'unexpected-character' }]);
+  it('still reports symbols outside brackets (lexer), then the stray text after them (parser)', () => {
+    expect(analyze('Sales | Plant', 'expression').diagnostics.map((d) => d.code)).toEqual([
+      'unexpected-character',
+      'unexpected-trailing-input',
+    ]);
+  });
+
+  it('parses the expression into a tree', () => {
+    expect(analyze('[Total Sales] = 0', 'expression').parse?.root).toMatchObject({ kind: 'BinaryOp', operator: '=' });
+  });
+});
+
+describe('analyze: diagnostics from all stages', () => {
+  it('reports a parser error with header-relative positions', () => {
+    const result = analyze('Bad = DIVIDE([A] [B])', 'measure-definition');
+    expect(result.diagnostics).toMatchObject([{ code: 'expected-comma-or-paren', span: { start: 17, end: 20 } }]);
+  });
+
+  it('does not report a lexer error twice', () => {
+    expect(analyze('X = 1 @', 'measure-definition').diagnostics.map((d) => d.code)).toEqual(['unexpected-character']);
   });
 });
