@@ -1,0 +1,126 @@
+/*
+ * Theme tokens.
+ * Light palette on :root. Dark palette applies when:
+ *   - the OS prefers dark AND the user hasn't forced light, or
+ *   - the user explicitly chose dark (data-theme="dark").
+ */
+:root {
+  color-scheme: light;
+
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f0f2f5;
+  --color-border: #d9dde3;
+  --color-text: #1b1f24;
+  --color-text-muted: #5b6470;
+  --color-accent: #2f5bd3;
+  --color-accent-hover: #244bb5;
+  --color-accent-contrast: #ffffff;
+  --color-focus: #2f5bd3;
+  --color-code-bg: #f6f8fa;
+
+  --color-notice-bg: #fff7e6;
+  --color-notice-border: #e8b04a;
+  --color-notice-text: #6b4a00;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace;
+
+  --radius: 8px;
+  --gap: 16px;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-bg: #0f1216;
+    --color-surface: #171b21;
+    --color-surface-muted: #1e232b;
+    --color-border: #2c333d;
+    --color-text: #e6e9ee;
+    --color-text-muted: #9aa4b2;
+    --color-accent: #6b93ff;
+    --color-accent-hover: #86a7ff;
+    --color-accent-contrast: #0b1020;
+    --color-focus: #86a7ff;
+    --color-code-bg: #12161b;
+
+    --color-notice-bg: #2a2212;
+    --color-notice-border: #8a6a24;
+    --color-notice-text: #f1d18a;
+
+    --shadow: none;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #0f1216;
+  --color-surface: #171b21;
+  --color-surface-muted: #1e232b;
+  --color-border: #2c333d;
+  --color-text: #e6e9ee;
+  --color-text-muted: #9aa4b2;
+  --color-accent: #6b93ff;
+  --color-accent-hover: #86a7ff;
+  --color-accent-contrast: #0b1020;
+  --color-focus: #86a7ff;
+  --color-code-bg: #12161b;
+
+  --color-notice-bg: #2a2212;
+  --color-notice-border: #8a6a24;
+  --color-notice-text: #f1d18a;
+
+  --shadow: none;
+}
+
+/* --- Base --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,0 +1,294 @@
+/* --- App frame --- */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px var(--gap);
+  padding: 14px var(--gap);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.brand h1 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.tagline {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.app-footer {
+  padding: 12px var(--gap);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+/* --- Workspace layout ---
+ * Wide screens: editor on the left, analysis panels stacked on the right.
+ * Narrow screens: everything stacks in one column.
+ */
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--gap);
+  align-items: start;
+  /* Don't stretch rows to fill spare height when stacked on narrow screens. */
+  align-content: start;
+  padding: var(--gap);
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+}
+
+.analysis-column {
+  display: grid;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* On wide screens keep the editor visible while the analysis column scrolls. */
+@media (min-width: 901px) {
+  .input-panel {
+    position: sticky;
+    top: var(--gap);
+  }
+}
+
+/* --- Panels --- */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-header h2 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.panel-actions {
+  margin-left: auto;
+}
+
+.panel-body {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.status-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+/* --- DAX input --- */
+.input-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 16rem;
+}
+
+.field-label {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.sample-concept {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.dax-editor {
+  width: 100%;
+  min-height: 20rem;
+  resize: vertical;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.input-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.primary-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* --- Theme toggle (segmented control) --- */
+.theme-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+}
+
+.theme-toggle button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.theme-toggle button.is-active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+}
+
+/* --- Placeholder content --- */
+.placeholder-lead {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.placeholder-example {
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  background: var(--color-code-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+}
+
+.placeholder-example li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 1px;
+  /* Indentation per tree depth, set inline as --depth. */
+  padding-left: calc(var(--depth, 0) * 1.1rem);
+}
+
+.placeholder-example .node-text {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.placeholder-example .node-kind {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.placeholder-note {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.placeholder-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+/* --- Notices --- */
+.notice {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-notice-border);
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+  font-size: 0.875rem;
+  display: grid;
+  gap: 4px;
+}
+
+.notice-title {
+  font-weight: 650;
+}
+
+.notice-meta {
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}

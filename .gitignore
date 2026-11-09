@@ -1,0 +1,42 @@
+# --- Dependencies and build output ---
+node_modules
+dist
+dist-ssr
+coverage
+*.tsbuildinfo
+
+# --- Logs ---
+logs
+*.log
+npm-debug.log*
+
+# --- Environment files and secrets (never commit) ---
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.pfx
+
+# --- Local AI-assistant configuration (machine/user specific) ---
+.claude/settings.local.json
+CLAUDE.local.md
+
+# --- Power BI files: real models must never be committed.
+# Synthetic examples, if ever needed, will be added deliberately with an exception rule.
+*.pbix
+*.pbit
+*.pbip
+*.SemanticModel/
+*.Report/
+*.abf
+
+# --- Editor / OS files ---
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.sw?
