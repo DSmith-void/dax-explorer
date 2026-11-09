@@ -292,3 +292,102 @@ select {
   font-size: 0.8125rem;
   opacity: 0.85;
 }
+
+.notice-success {
+  border-color: var(--color-success-border);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.notice-error {
+  border-color: var(--color-error-border);
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+
+.diagnostics-body {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnostic-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 2px;
+}
+
+.diagnostic-position {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* --- Token table (temporary view until the parser exists) --- */
+.table-scroll {
+  overflow-x: auto;
+  max-height: 28rem;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.token-table {
+  width: 100%;
+  /* On narrow screens, scroll the table inside .table-scroll rather than crushing columns. */
+  min-width: 30rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.token-table th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-muted);
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.token-table th,
+.token-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.token-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.token-table .num {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.token-table .code {
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  /* Break only words that cannot fit on a line by themselves (e.g. very long strings). */
+  overflow-wrap: break-word;
+}
+
+.token-kind {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.token-table tr.token-Comment td {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.token-table tr.token-Error td {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}

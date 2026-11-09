@@ -4,5 +4,23 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/engine/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["react", "react-dom", "react/*", "react-dom/*", "**/app/**", "**/components/**", "**/styles/**", "*.css"],
+                "message": "src/engine must stay UI-independent: no React, app, component or style imports."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

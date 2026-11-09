@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
+import type { AnalysisResult } from '../app/analysis';
 import { Panel } from './Panel';
+import { TokenTable } from './TokenTable';
 
 /** Static illustration of a future tree for the default sample. Not produced by a parser. */
 const EXAMPLE_NODES: { depth: number; text: string; kind: string }[] = [
@@ -11,7 +13,23 @@ const EXAMPLE_NODES: { depth: number; text: string; kind: string }[] = [
   { depth: 3, text: 'Product[Category]', kind: 'column ref' },
 ];
 
-export function ExpressionTreePanel() {
+interface ExpressionTreePanelProps {
+  result: AnalysisResult | null;
+}
+
+export function ExpressionTreePanel({ result }: ExpressionTreePanelProps) {
+  if (result) {
+    return (
+      <Panel id="expression-tree" title="Expression Tree" status="Tokens only">
+        <p className="placeholder-lead">
+          The parser is not built yet, so this shows the <strong>tokens</strong> the lexer produced. The
+          tree view arrives in the next milestone.
+        </p>
+        <TokenTable source={result.text} tokens={result.lex.tokens} />
+      </Panel>
+    );
+  }
+
   return (
     <Panel id="expression-tree" title="Expression Tree" status="Planned">
       <p className="placeholder-lead">
@@ -26,7 +44,7 @@ export function ExpressionTreePanel() {
           </li>
         ))}
       </ul>
-      <p className="placeholder-note">Illustration only. No parsing has happened.</p>
+      <p className="placeholder-note">Illustration only. Press Analyze DAX to see real tokens.</p>
     </Panel>
   );
 }

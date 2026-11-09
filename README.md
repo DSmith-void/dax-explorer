@@ -3,8 +3,9 @@
 A learning and debugging tool that will visually explain how a DAX expression is evaluated: filter context,
 row context, context transition, CALCULATE modifiers, virtual tables, and more.
 
-> **Status: early preview (milestone 1).** The application shell exists, but there is **no DAX parser or
-> analyzer yet**. Pressing *Analyze DAX* currently reports that analysis is unavailable.
+> **Status: early preview (milestone 2).** DAX text is tokenized (split into names, references, numbers,
+> strings, operators and comments) with precise positions and lexical error reporting. There is **no parser
+> or semantic analysis yet**, and the app says so explicitly.
 
 ## Design principles
 
@@ -35,10 +36,19 @@ npm run dev       # start the local dev server
 | `npm run build`   | Type-check (`tsc -b`) and build static files to `dist/` |
 | `npm run preview` | Serve the production build locally                     |
 | `npm run lint`    | Lint with oxlint                                       |
+| `npm test`        | Run the unit tests once (Vitest)                       |
+| `npm run test:watch` | Re-run tests automatically as files change          |
+
+## Project layout
+
+- `src/engine/` — the DAX engine (currently the lexer). Pure TypeScript with **no UI dependencies**;
+  the linter enforces this.
+- `src/app/`, `src/components/`, `src/styles/` — the React user interface.
+- `src/samples/` — synthetic sample measures.
 
 ## Tech stack
 
-React, TypeScript (strict), Vite, and plain CSS with custom properties for light/dark themes.
+React, TypeScript (strict), Vite, Vitest, and plain CSS with custom properties for light/dark themes.
 
 ## License
 

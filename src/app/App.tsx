@@ -1,24 +1,20 @@
 import { useState } from 'react';
 import { ContextInspectorPanel } from '../components/ContextInspectorPanel';
 import { DaxInputPanel } from '../components/DaxInputPanel';
-import { DiagnosticsPanel, type AnalysisRequest } from '../components/DiagnosticsPanel';
+import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { SAMPLE_MEASURES } from '../samples/sampleMeasures';
+import { analyze, type AnalysisResult } from './analysis';
 import { useThemePreference } from './useThemePreference';
 
 export function App() {
   const [theme, setTheme] = useThemePreference();
   const [daxText, setDaxText] = useState(SAMPLE_MEASURES[0].expression);
-  const [lastRequest, setLastRequest] = useState<AnalysisRequest | null>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
 
   function handleAnalyze() {
-    // Milestone 1: record the request only. No parsing or semantic analysis exists yet.
-    setLastRequest({
-      text: daxText,
-      characterCount: daxText.length,
-      lineCount: daxText.split(/\r\n|\r|\n/).length,
-    });
+    setResult(analyze(daxText));
   }
 
   return (
@@ -39,11 +35,11 @@ export function App() {
           onAnalyze={handleAnalyze}
         />
         <div className="analysis-column">
-          <ExpressionTreePanel />
+          <ExpressionTreePanel result={result} />
           <ContextInspectorPanel />
           <DiagnosticsPanel
-            lastRequest={lastRequest}
-            inputChangedSinceRequest={lastRequest !== null && lastRequest.text !== daxText}
+            result={result}
+            inputChangedSinceAnalysis={result !== null && result.text !== daxText}
           />
         </div>
       </main>
