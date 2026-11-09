@@ -577,6 +577,210 @@ select {
   gap: 6px;
 }
 
+.inspector-section {
+  display: grid;
+  gap: 6px;
+}
+
+.inspector-section h3,
+.alternative h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.inspector-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 4px;
+  color: var(--color-text-muted);
+}
+
+/* --- Symbolic context --- */
+.context-view {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.context-view li {
+  padding-left: 10px;
+  border-left: 3px solid transparent;
+}
+
+.context-view code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.context-incoming {
+  font-weight: 600;
+}
+
+.context-origin {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.context-caveat,
+.context-unknown {
+  font-size: 0.8125rem;
+  color: var(--color-notice-text);
+}
+
+.context-row {
+  font-size: 0.8125rem;
+  color: var(--color-accent);
+}
+
+/* Lines that differ from the context the node itself is evaluated in */
+.context-view li.is-changed {
+  border-left-color: var(--color-success-border);
+  background: var(--color-success-bg);
+}
+
+.calculate-steps {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: grid;
+  gap: 6px;
+}
+
+.calculate-steps code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.operation-list {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: grid;
+  gap: 4px;
+}
+
+.operation-list code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  margin-right: 6px;
+  overflow-wrap: anywhere;
+}
+
+.op-detail {
+  color: var(--color-text-muted);
+}
+
+.op-unknown {
+  color: var(--color-notice-text);
+}
+
+.alternatives {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 10px;
+}
+
+.alternative {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+}
+
+.alternative p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* Beginner glossary */
+.glossary {
+  margin-top: 10px;
+  font-size: 0.875rem;
+}
+
+.glossary summary {
+  cursor: pointer;
+  color: var(--color-accent);
+}
+
+.glossary dl {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.glossary dt {
+  font-weight: 650;
+}
+
+.glossary dd {
+  margin: 0 0 4px;
+  color: var(--color-text-muted);
+}
+
+/* Context markers in the tree */
+.context-marker {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.context-marker.marker-transition {
+  border-color: var(--color-notice-border);
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+}
+
+.context-marker.marker-row {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.context-marker.marker-filters {
+  border-color: var(--color-success-border);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+/* Explanation list */
+.insight-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 6px;
+}
+
+.insight-kind {
+  font-weight: 650;
+  margin-right: 6px;
+}
+
+.insight .link-button {
+  margin-right: 6px;
+  font-size: 0.8125rem;
+}
+
+.insight-message {
+  display: block;
+  color: var(--color-text-muted);
+}
+
 .argument-list {
   margin: 0;
   padding-left: 1.4rem;

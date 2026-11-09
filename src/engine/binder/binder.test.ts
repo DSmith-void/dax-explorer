@@ -49,8 +49,11 @@ describe('function catalog', () => {
         if (firstOptional !== -1) {
           expect(params.slice(firstOptional).every((param) => param.optional || param.repeating), spec.name).toBe(true);
         }
-        params.forEach((param, i) => {
-          if (param.repeating) expect(i, `${spec.name}: repeating must be last`).toBe(params.length - 1);
+        const firstRepeating = params.findIndex((param) => param.repeating);
+        if (firstRepeating !== -1) {
+          expect(params.slice(firstRepeating).every((param) => param.repeating), `${spec.name}: repeating group must be trailing`).toBe(true);
+        }
+        params.forEach((param) => {
           if (param.role === 'keyword') expect(param.keywords?.length, `${spec.name}: keywords`).toBeGreaterThan(0);
         });
       }
@@ -59,9 +62,19 @@ describe('function catalog', () => {
 
   it('gives iterators an iterated table argument and a row expression', () => {
     for (const spec of FUNCTION_CATALOG.filter((f) => f.category === 'iterator')) {
-      expect(spec.iteratesArgument, spec.name).toBe(0);
-      expect(spec.overloads[0].some((param) => param.role === 'rowExpression'), spec.name).toBe(true);
+      const params = spec.overloads[0];
+      expect(spec.iteratesArgument, spec.name).toBeDefined();
+      expect(params[spec.iteratesArgument!].role, `${spec.name}: iterated argument is a table`).toBe('table');
+      expect(params.some((param) => param.role === 'rowExpression'), spec.name).toBe(true);
     }
+  });
+
+  it.each([
+    ['TOPN', 6, ['scalar', 'table', 'rowExpression', 'keyword', 'rowExpression', 'keyword']],
+    ['ADDCOLUMNS', 5, ['table', 'scalar', 'rowExpression', 'scalar', 'rowExpression']],
+    ['CONCATENATEX', 5, ['table', 'rowExpression', 'scalar', 'rowExpression', 'keyword']],
+  ] as const)('cycles repeating parameter groups: %s with %i arguments', (name, count, roles) => {
+    expect(parametersForCall(lookupFunction(name)!, count)?.map((param) => param.role)).toEqual(roles);
   });
 
   it.each([
@@ -124,7 +137,7 @@ describe('reference resolution: function signature evidence', () => {
   it('describes the requirement', () => {
     const root = rootOf('SUM([Amount])');
     const [ref] = [...bind(root, CONVENTION).references.values()];
-    expect(ref.detail).toBe('required by SUM (column argument)');
+    expect(ref.detail).toBe('certain: SUM only accepts a column here');
   });
 
   it('ignores evidence from functions that are not in the catalog', () => {
@@ -160,7 +173,7 @@ describe('reference resolution: strict mode', () => {
     const root = rootOf('SUM([Amount]) + [Amount]');
     const refs = [...bind(root, STRICT).references.values()];
     expect(refs[1]).toMatchObject({ type: null, source: 'unresolved' });
-    expect(refs[1].detail).toContain('used as a column in SUM elsewhere');
+    expect(refs[1].detail).toContain('it is used as a column in SUM elsewhere');
   });
 });
 

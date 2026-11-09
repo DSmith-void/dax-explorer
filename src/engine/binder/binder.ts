@@ -143,7 +143,7 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
         key,
         type: 'column',
         source: 'function-signature',
-        detail: `required by ${requirement.functionName} (${requirement.parameterName} argument)`,
+        detail: `certain: ${requirement.functionName} only accepts a column here`,
         locked: true,
       };
       if (userChoice === 'measure') {
@@ -164,7 +164,7 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
             key,
             type: 'column',
             source: 'other-occurrence',
-            detail: `assumed: used as a column in ${elsewhere.functionName} elsewhere in this expression`,
+            detail: `assumed to be a column, because the same name is used as a column in ${elsewhere.functionName} elsewhere in this DAX`,
             locked: false,
           }
         : {
@@ -174,8 +174,8 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
             source: 'convention',
             detail:
               node.kind === 'BracketRef'
-                ? 'assumed: naming convention ([Name] without a table is a measure)'
-                : 'assumed: naming convention (Table[Name] is a column)',
+                ? 'assumed, because names in [brackets] without a table name are usually measures'
+                : 'assumed, because names written as Table[Name] are usually columns',
             locked: false,
           };
     } else {
@@ -186,8 +186,8 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
         type: null,
         source: 'unresolved',
         detail: elsewhere
-          ? `unknown: choose measure or column (note: used as a column in ${elsewhere.functionName} elsewhere)`
-          : 'unknown: choose measure or column',
+          ? `unknown: use the measure / column buttons to choose (hint: it is used as a column in ${elsewhere.functionName} elsewhere)`
+          : 'unknown: use the measure / column buttons to choose',
         locked: false,
       };
     }

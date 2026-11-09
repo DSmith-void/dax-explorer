@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { AnalysisResult } from '../app/analysis';
 import type { BindResult, ReferenceType, ResolutionMode } from '../engine/binder/binder';
+import type { ContextAnalysis } from '../engine/context/model';
 import type { AstNode } from '../engine/parser/ast';
 import { ExpressionTree } from './ExpressionTree';
 import { Panel } from './Panel';
@@ -10,9 +11,9 @@ import { TokenTable } from './TokenTable';
 /** Static illustration shown before the first analysis. */
 const EXAMPLE_NODES: { depth: number; text: string; kind: string }[] = [
   { depth: 0, text: 'DIVIDE', kind: 'function' },
-  { depth: 1, text: '[Total Sales]', kind: 'measure' },
-  { depth: 1, text: 'CALCULATE', kind: 'function' },
-  { depth: 2, text: '[Total Sales]', kind: 'measure' },
+  { depth: 1, text: '[Total Sales]', kind: 'measure · sees F' },
+  { depth: 1, text: 'CALCULATE', kind: 'function · changes filters' },
+  { depth: 2, text: '[Total Sales]', kind: 'measure · sees F without Category' },
   { depth: 2, text: 'REMOVEFILTERS', kind: 'function' },
   { depth: 3, text: 'Product[Category]', kind: 'column' },
 ];
@@ -27,13 +28,14 @@ const MODE_OPTIONS: { value: ResolutionMode; label: string; title: string }[] = 
 ];
 
 const MODE_HINTS: Record<ResolutionMode, string> = {
-  convention: '[Name] is assumed to be a measure and Table[Name] a column unless a function requires otherwise.',
-  strict: 'Nothing is assumed: references stay unknown unless a function requires a column or you choose.',
+  convention: 'Names like [Total Sales] are assumed to be measures, and names like Sales[Amount] columns, unless the DAX proves otherwise.',
+  strict: 'Nothing is assumed: a name stays "unknown" until the DAX proves what it is or you choose.',
 };
 
 interface ExpressionTreePanelProps {
   result: AnalysisResult | null;
   binding: BindResult | null;
+  analysis: ContextAnalysis | null;
   selectedId: number | null;
   onSelectNode: (node: AstNode) => void;
   referenceMode: ResolutionMode;
@@ -83,13 +85,14 @@ export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
       {root ? (
         <>
           <p className="placeholder-lead">
-            Click a node to highlight its text. {MODE_HINTS[referenceMode]} Use <em>measure</em> / <em>column</em> to
-            decide for a name everywhere.
+            Click any part to highlight it in the editor and see its details below. {MODE_HINTS[referenceMode]} Use the{' '}
+            <em>measure</em> / <em>column</em> buttons to set a name yourself.
           </p>
           <ExpressionTree
             root={root}
             source={result.text}
             binding={binding}
+            analysis={props.analysis}
             selectedId={selectedId}
             onSelect={onSelectNode}
             onChooseReferenceType={props.onChooseReferenceType}

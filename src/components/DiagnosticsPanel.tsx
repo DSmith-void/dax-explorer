@@ -1,23 +1,34 @@
 import type { AnalysisResult } from '../app/analysis';
 import type { BindResult } from '../engine/binder/binder';
+import type { ContextAnalysis, InsightKind } from '../engine/context/model';
 import type { Diagnostic } from '../engine/diagnostics';
-import { childrenOf, type AstNode } from '../engine/parser/ast';
+import { childrenOf, findNode, type AstNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
 import { Panel } from './Panel';
 
 interface DiagnosticsPanelProps {
   result: AnalysisResult | null;
   binding: BindResult | null;
+  analysis: ContextAnalysis | null;
   inputChangedSinceAnalysis: boolean;
+  onSelectNode: (node: AstNode) => void;
 }
 
-export function DiagnosticsPanel({ result, binding, inputChangedSinceAnalysis }: DiagnosticsPanelProps) {
+const INSIGHT_LABEL: Record<InsightKind, string> = {
+  'context-transition': 'A row becomes a filter',
+  'variable-fixed': 'Variable is not recalculated',
+  'column-without-row-context': 'Column has no current row',
+  'not-modeled': 'Not checked',
+  'unknown-function': 'Unknown function',
+};
+
+export function DiagnosticsPanel({ result, binding, analysis, inputChangedSinceAnalysis, onSelectNode }: DiagnosticsPanelProps) {
   const diagnostics = result
     ? [...result.diagnostics, ...(binding?.diagnostics ?? [])].sort((a, b) => a.span.start - b.span.start)
     : [];
 
   return (
-    <Panel id="diagnostics" title="Diagnostics & Explanation" status={result ? 'Syntax + references' : 'Planned'}>
+    <Panel id="diagnostics" title="Diagnostics & Explanation" status={result ? 'Symbolic' : 'Planned'}>
       <div aria-live="polite" className="diagnostics-body">
         {result === null ? (
           <p className="placeholder-lead">
@@ -48,11 +59,16 @@ export function DiagnosticsPanel({ result, binding, inputChangedSinceAnalysis }:
                 </p>
               </div>
             )}
+            {analysis && result.parse?.root && (
+              <Explanation analysis={analysis} root={result.parse.root} source={result.text} onSelectNode={onSelectNode} />
+            )}
             <div className="notice notice-unsupported" role="status">
-              <p className="notice-title">Context analysis unavailable</p>
+              <p className="notice-title">About these explanations</p>
               <p>
-                Structure and reference types are known, but filter and row context are not analyzed yet, so{' '}
-                <strong>nothing about how this expression is evaluated has been concluded</strong>.
+                The app doesn't see your report, data or data model. "The report's filters" means whatever filters apply
+                where the measure is used (slicers, the visual's rows and columns, and so on). No numbers are calculated.
+                Anything marked <strong>not checked</strong> is beyond what the app can work out yet; it says so rather
+                than guess.
               </p>
             </div>
             {inputChangedSinceAnalysis && (
@@ -62,6 +78,52 @@ export function DiagnosticsPanel({ result, binding, inputChangedSinceAnalysis }:
         )}
       </div>
     </Panel>
+  );
+}
+
+function Explanation({
+  analysis,
+  root,
+  source,
+  onSelectNode,
+}: {
+  analysis: ContextAnalysis;
+  root: AstNode;
+  source: string;
+  onSelectNode: (node: AstNode) => void;
+}) {
+  if (analysis.insights.length === 0) {
+    return (
+      <div className="notice notice-info">
+        <p className="notice-title">What to notice</p>
+        <p>
+          Nothing unusual here: no row-by-row steps, no reused variables, nothing the app couldn't check. Click parts of the
+          tree to see which filters apply where.
+        </p>
+      </div>
+    );
+  }
+  const positionAt = createLineMap(source);
+  return (
+    <div className="notice notice-info explanation">
+      <p className="notice-title">What to notice (in the order DAX calculates)</p>
+      <ol className="insight-list">
+        {analysis.insights.map((insight, i) => {
+          const node = findNode(root, insight.nodeId);
+          return (
+            <li key={i} className={`insight insight-${insight.kind}`}>
+              <span className="insight-kind">{INSIGHT_LABEL[insight.kind]}</span>
+              {node && (
+                <button type="button" className="link-button" onClick={() => onSelectNode(node)}>
+                  line {positionAt(node.span.start).line}
+                </button>
+              )}
+              <span className="insight-message">{insight.message}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 

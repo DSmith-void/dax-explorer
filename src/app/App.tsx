@@ -5,6 +5,7 @@ import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { bind, type ReferenceType, type ResolutionMode } from '../engine/binder/binder';
+import { analyzeContext } from '../engine/context/analyzer';
 import type { InputMode } from '../engine/definition';
 import type { AstNode } from '../engine/parser/ast';
 import { SAMPLE_MEASURES, type SampleMeasure } from '../samples/sampleMeasures';
@@ -39,6 +40,11 @@ export function App() {
   const binding = useMemo(
     () => (result?.parse ? bind(result.parse.root, { mode: referenceMode, userChoices }) : null),
     [result, referenceMode, userChoices],
+  );
+  // Context analysis depends on the binding (a measure and a column behave differently), so it is derived too.
+  const contextAnalysis = useMemo(
+    () => (result?.parse && binding ? analyzeContext(result.parse.root, binding, result.text) : null),
+    [result, binding],
   );
 
   function handleSelectSample(sample: SampleMeasure) {
@@ -98,6 +104,7 @@ export function App() {
           <ExpressionTreePanel
             result={result}
             binding={binding}
+            analysis={contextAnalysis}
             selectedId={selectedNodeId}
             onSelectNode={handleSelectNode}
             referenceMode={referenceMode}
@@ -109,10 +116,17 @@ export function App() {
           <ContextInspectorPanel
             result={result}
             binding={binding}
+            analysis={contextAnalysis}
             selectedId={selectedNodeId}
             onSelectNode={handleSelectNode}
           />
-          <DiagnosticsPanel result={result} binding={binding} inputChangedSinceAnalysis={inputChangedSinceAnalysis} />
+          <DiagnosticsPanel
+            result={result}
+            binding={binding}
+            analysis={contextAnalysis}
+            inputChangedSinceAnalysis={inputChangedSinceAnalysis}
+            onSelectNode={handleSelectNode}
+          />
         </div>
       </main>
 

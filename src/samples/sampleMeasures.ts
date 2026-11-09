@@ -16,7 +16,7 @@ export const SAMPLE_MEASURES: readonly SampleMeasure[] = [
   {
     id: 'percent-of-total',
     title: 'Sales Percent of Total',
-    concept: 'CALCULATE removing a filter: numerator and denominator see different filter contexts.',
+    concept: 'The top and bottom of the division use different filters: the bottom ignores Category, giving the total for all categories.',
     expression: `Sales Percent of Total =
 DIVIDE(
     [Total Sales],
@@ -29,7 +29,7 @@ DIVIDE(
   {
     id: 'average-per-customer',
     title: 'Average Sales per Customer',
-    concept: 'An iterator creates row context; the measure reference triggers context transition.',
+    concept: 'AVERAGEX goes customer by customer, and [Total Sales] is calculated for just that customer each time.',
     expression: `Average Sales per Customer =
 AVERAGEX(
     VALUES(Customer[Customer Key]),
@@ -39,7 +39,7 @@ AVERAGEX(
   {
     id: 'plant-share-with-vars',
     title: 'Plant Share (with variables)',
-    concept: 'Variables are evaluated once, in the context where they are defined.',
+    concept: 'Each variable is calculated once, where it is written: one with the report\'s filters, one with all plants.',
     expression: `Plant Share =
 VAR CurrentPlantSales = [Total Sales]
 VAR AllPlantSales =
@@ -49,5 +49,25 @@ VAR AllPlantSales =
     )
 RETURN
     DIVIDE(CurrentPlantSales, AllPlantSales)`,
+  },
+  {
+    id: 'top-plant',
+    title: 'Top Plant by Sales',
+    concept: 'TOPN and CONCATENATEX both go plant by plant, and [Total Sales] is calculated for just that plant each time.',
+    expression: `Top Plant by Sales =
+VAR TopPlant =
+    TOPN(
+        1,
+        FILTER(
+            VALUES(Plant[Plant Name]),
+            Plant[Plant Name] <> "Unknown"
+        ),
+        [Total Sales], DESC
+    )
+RETURN
+    CONCATENATEX(
+        TopPlant,
+        Plant[Plant Name] & ": " & FORMAT([Total Sales], "#,##0")
+    )`,
   },
 ];

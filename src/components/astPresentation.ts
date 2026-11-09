@@ -1,4 +1,18 @@
 import type { BindResult, ReferenceResolution } from '../engine/binder/binder';
+import type { FunctionCategory } from '../engine/catalog/functions';
+
+/** Plain-language names for function categories. */
+const CATEGORY_TEXT: Record<FunctionCategory, string> = {
+  aggregation: 'adds up or counts',
+  iterator: 'goes row by row',
+  'filter modification': 'changes filters',
+  table: 'returns a table',
+  'scope and filter inspection': 'checks filters',
+  relationship: 'uses relationships',
+  logical: 'logic',
+  math: 'math',
+  text: 'text',
+};
 import type { AstNode, BinaryOperator } from '../engine/parser/ast';
 
 /** Visual grouping used for styling tree nodes. */
@@ -77,9 +91,9 @@ export function presentNode(node: AstNode, source: string, binding?: BindResult 
     case 'FunctionCall': {
       const call = binding?.calls.get(node.id);
       if (binding && !call?.spec) {
-        return { label: node.name, kind: 'function · not in catalog', category: 'unknown-function' };
+        return { label: node.name, kind: 'function · unknown to this app', category: 'unknown-function' };
       }
-      return { label: node.name, kind: call?.spec ? `function · ${call.spec.category}` : 'function call', category: 'function' };
+      return { label: node.name, kind: call?.spec ? `function · ${CATEGORY_TEXT[call.spec.category]}` : 'function', category: 'function' };
     }
     case 'ColumnRef':
     case 'BracketRef': {

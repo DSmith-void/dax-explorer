@@ -29,7 +29,10 @@ export interface ParamSpec {
   name: string;
   role: ArgRole;
   optional?: boolean;
-  /** The last parameter may repeat any number of times (e.g. the filters of CALCULATE). */
+  /**
+   * Trailing parameters marked `repeating` form a group that may repeat any number of times,
+   * e.g. the filters of CALCULATE (group of 1) or TOPN's "order by, ASC/DESC" pairs (group of 2).
+   */
   repeating?: boolean;
   /** Allowed values for role 'keyword'. */
   keywords?: readonly string[];
@@ -43,7 +46,8 @@ export type FunctionCategory =
   | 'scope and filter inspection'
   | 'relationship'
   | 'logical'
-  | 'math';
+  | 'math'
+  | 'text';
 
 export interface FunctionSpec {
   name: string;
@@ -89,45 +93,45 @@ const columnInspection = (name: string, summary: string): FunctionSpec => ({
 
 const SPECS: FunctionSpec[] = [
   // --- Aggregations over a column ---
-  aggregation('SUM', 'Adds up the values of a column in the current filter context.'),
-  aggregation('AVERAGE', 'Averages the values of a column in the current filter context.'),
-  aggregation('COUNT', 'Counts non-blank numeric/date values in a column.'),
-  aggregation('COUNTA', 'Counts non-blank values in a column.'),
-  aggregation('COUNTBLANK', 'Counts blank values in a column.'),
-  aggregation('DISTINCTCOUNT', 'Counts distinct values in a column.'),
+  aggregation('SUM', 'Adds up a column, using only the rows that pass the filters in effect.'),
+  aggregation('AVERAGE', 'Averages a column, using only the rows that pass the filters in effect.'),
+  aggregation('COUNT', 'Counts the numbers or dates in a column (blanks are skipped), using only rows that pass the filters.'),
+  aggregation('COUNTA', 'Counts the non-blank values in a column, using only rows that pass the filters.'),
+  aggregation('COUNTBLANK', 'Counts the blank values in a column, using only rows that pass the filters.'),
+  aggregation('DISTINCTCOUNT', 'Counts how many different values a column has, using only rows that pass the filters.'),
   {
     name: 'MIN',
     category: 'aggregation',
     returns: 'scalar',
-    summary: 'Smallest value of a column, or the smaller of two values.',
+    summary: 'The smallest value in a column (rows that pass the filters), or the smaller of two values.',
     overloads: [[p('column', 'column')], [p('value1', 'scalar'), p('value2', 'scalar')]],
   },
   {
     name: 'MAX',
     category: 'aggregation',
     returns: 'scalar',
-    summary: 'Largest value of a column, or the larger of two values.',
+    summary: 'The largest value in a column (rows that pass the filters), or the larger of two values.',
     overloads: [[p('column', 'column')], [p('value1', 'scalar'), p('value2', 'scalar')]],
   },
   {
     name: 'COUNTROWS',
     category: 'aggregation',
     returns: 'scalar',
-    summary: 'Counts the rows of a table in the current filter context.',
+    summary: 'Counts the rows of a table that pass the filters in effect.',
     overloads: [[p('table', 'table', { optional: true })]],
   },
 
   // --- Iterators ---
-  iterator('SUMX', 'For each row of a table, evaluates an expression (row context) and adds up the results.'),
-  iterator('AVERAGEX', 'For each row of a table, evaluates an expression (row context) and averages the results.'),
-  iterator('MINX', 'For each row of a table, evaluates an expression (row context) and returns the smallest result.'),
-  iterator('MAXX', 'For each row of a table, evaluates an expression (row context) and returns the largest result.'),
-  iterator('COUNTX', 'For each row of a table, evaluates an expression (row context) and counts non-blank results.'),
+  iterator('SUMX', 'Goes through a table row by row, calculates something for each row, and adds up the results.'),
+  iterator('AVERAGEX', 'Goes through a table row by row, calculates something for each row, and averages the results.'),
+  iterator('MINX', 'Goes through a table row by row, calculates something for each row, and returns the smallest result.'),
+  iterator('MAXX', 'Goes through a table row by row, calculates something for each row, and returns the largest result.'),
+  iterator('COUNTX', 'Goes through a table row by row, calculates something for each row, and counts the non-blank results.'),
   {
     name: 'FILTER',
     category: 'iterator',
     returns: 'table',
-    summary: 'Returns the rows of a table for which a condition, evaluated per row (row context), is true.',
+    summary: 'Goes through a table row by row and keeps only the rows where the condition is true.',
     overloads: [[p('table', 'table'), p('condition', 'rowExpression')]],
     iteratesArgument: 0,
   },
@@ -135,17 +139,15 @@ const SPECS: FunctionSpec[] = [
     name: 'ADDCOLUMNS',
     category: 'iterator',
     returns: 'table',
-    summary: 'Adds calculated columns to a table; each expression is evaluated per row (row context).',
-    // Further name/expression pairs alternate roles, which this catalog cannot express exactly; they are
-    // all marked 'rowExpression'. Harmless: the names are string literals, not references.
-    overloads: [[p('table', 'table'), p('name', 'scalar'), p('expression', 'rowExpression'), p('more names and expressions', 'rowExpression', { optional: true, repeating: true })]],
+    summary: 'Adds new columns to a table; each new value is calculated row by row.',
+    overloads: [[p('table', 'table'), p('name', 'scalar', { repeating: true }), p('expression', 'rowExpression', { repeating: true })]],
     iteratesArgument: 0,
   },
   {
     name: 'RANKX',
     category: 'iterator',
     returns: 'scalar',
-    summary: 'Ranks a value against an expression evaluated for each row of a table.',
+    summary: 'Goes through a table row by row, calculates something for each row, and gives the rank of a value among the results.',
     overloads: [
       [
         p('table', 'table'),
@@ -163,49 +165,49 @@ const SPECS: FunctionSpec[] = [
     name: 'CALCULATE',
     category: 'filter modification',
     returns: 'scalar',
-    summary: 'Evaluates an expression in a modified filter context (and performs context transition).',
+    summary: 'Calculates something with changed filters: it can add, replace or remove filters, but only for that calculation.',
     overloads: [[p('expression', 'scalar'), p('filter', 'filter', { optional: true, repeating: true })]],
   },
   {
     name: 'CALCULATETABLE',
     category: 'filter modification',
     returns: 'table',
-    summary: 'Evaluates a table expression in a modified filter context (and performs context transition).',
+    summary: 'Returns a table using changed filters: it can add, replace or remove filters, but only for that table.',
     overloads: [[p('table', 'table'), p('filter', 'filter', { optional: true, repeating: true })]],
   },
   {
     name: 'ALL',
     category: 'filter modification',
     returns: 'table',
-    summary: 'Removes filters from a table or columns (as a CALCULATE modifier), or returns all their rows.',
+    summary: 'Inside CALCULATE: removes filters from a table or columns. Used on its own: returns all rows or values, ignoring filters.',
     overloads: [[p('table or column', 'tableOrColumn', { optional: true }), p('column', 'column', { optional: true, repeating: true })]],
   },
   {
     name: 'REMOVEFILTERS',
     category: 'filter modification',
     returns: 'table',
-    summary: 'Removes filters from a table or columns. Only valid as a CALCULATE modifier.',
+    summary: 'Removes filters from a table or columns. Only works inside CALCULATE (or CALCULATETABLE).',
     overloads: [[p('table or column', 'tableOrColumn', { optional: true }), p('column', 'column', { optional: true, repeating: true })]],
   },
   {
     name: 'ALLEXCEPT',
     category: 'filter modification',
     returns: 'table',
-    summary: 'Removes all filters from a table except those on the listed columns.',
+    summary: 'Removes all filters from a table, except the filters on the columns you list.',
     overloads: [[p('table', 'table'), p('column', 'column', { repeating: true })]],
   },
   {
     name: 'ALLSELECTED',
     category: 'filter modification',
     returns: 'table',
-    summary: 'Restores the filters that were applied outside the current visual (shadow filter context).',
+    summary: 'Brings back the filters chosen outside the current visual (such as slicers), ignoring the visual\'s own rows and columns.',
     overloads: [[p('table or column', 'tableOrColumn', { optional: true }), p('column', 'column', { optional: true, repeating: true })]],
   },
   {
     name: 'KEEPFILTERS',
     category: 'filter modification',
     returns: 'table',
-    summary: 'Makes a CALCULATE filter intersect with existing filters instead of replacing them.',
+    summary: 'Inside CALCULATE: adds a filter on top of the existing ones instead of replacing them, so rows must pass both.',
     overloads: [[p('filter', 'filter')]],
   },
 
@@ -214,14 +216,14 @@ const SPECS: FunctionSpec[] = [
     name: 'VALUES',
     category: 'table',
     returns: 'table',
-    summary: 'Distinct values of a column (or rows of a table) visible in the current filter context.',
+    summary: 'Lists the different values of a column (or the rows of a table) that pass the filters in effect.',
     overloads: [[p('table or column', 'tableOrColumn')]],
   },
   {
     name: 'DISTINCT',
     category: 'table',
     returns: 'table',
-    summary: 'Distinct values of a column (or rows of a table) in the current filter context.',
+    summary: 'Lists the different values of a column (or the rows of a table) that pass the filters in effect.',
     overloads: [[p('table or column', 'tableOrColumn')]],
   },
 
@@ -230,24 +232,24 @@ const SPECS: FunctionSpec[] = [
     name: 'SELECTEDVALUE',
     category: 'scope and filter inspection',
     returns: 'scalar',
-    summary: 'The value of a column when exactly one value is visible, otherwise the alternate result (BLANK by default).',
+    summary: 'If the filters leave exactly one value in the column, returns it; otherwise returns the fallback (BLANK if none is given).',
     overloads: [[p('column', 'column'), p('alternate result', 'scalar', { optional: true })]],
   },
-  columnInspection('HASONEVALUE', 'TRUE when exactly one distinct value of the column is visible in the filter context.'),
-  columnInspection('HASONEFILTER', 'TRUE when the column is directly filtered to exactly one value.'),
-  columnInspection('ISINSCOPE', 'TRUE when the column is a grouping level of the current visual cell.'),
+  columnInspection('HASONEVALUE', 'TRUE when the filters leave exactly one value in the column.'),
+  columnInspection('HASONEFILTER', 'TRUE when the column itself is filtered to exactly one value.'),
+  columnInspection('ISINSCOPE', 'TRUE when the visual is currently grouping by this column at this point (for example, a row level in a matrix).'),
   {
     name: 'ISFILTERED',
     category: 'scope and filter inspection',
     returns: 'scalar',
-    summary: 'TRUE when the table or column is directly filtered.',
+    summary: 'TRUE when the table or column itself has a filter on it.',
     overloads: [[p('table or column', 'tableOrColumn')]],
   },
   {
     name: 'ISCROSSFILTERED',
     category: 'scope and filter inspection',
     returns: 'scalar',
-    summary: 'TRUE when the table or column is filtered directly or through relationships.',
+    summary: 'TRUE when the table or column is filtered, either directly or through a related table.',
     overloads: [[p('table or column', 'tableOrColumn')]],
   },
 
@@ -256,21 +258,21 @@ const SPECS: FunctionSpec[] = [
     name: 'RELATED',
     category: 'relationship',
     returns: 'scalar',
-    summary: 'In a row context, returns a column value from the related "one" side table.',
+    summary: 'While going row by row, looks up a value from a related table (for example, the product\'s category for a sales row).',
     overloads: [[p('column', 'column')]],
   },
   {
     name: 'USERELATIONSHIP',
     category: 'relationship',
     returns: 'table',
-    summary: 'Activates an inactive relationship for this CALCULATE.',
+    summary: 'Inside CALCULATE: uses a different (normally inactive) relationship between two tables.',
     overloads: [[p('column 1', 'column'), p('column 2', 'column')]],
   },
   {
     name: 'CROSSFILTER',
     category: 'relationship',
     returns: 'table',
-    summary: 'Changes the filter direction of a relationship for this CALCULATE.',
+    summary: 'Inside CALCULATE: changes the direction in which a relationship passes filters between two tables.',
     overloads: [[p('column 1', 'column'), p('column 2', 'column'), p('direction', 'keyword', { keywords: ['NONE', 'ONEWAY', 'BOTH', 'ONEWAY_LEFTFILTERSRIGHT', 'ONEWAY_RIGHTFILTERSLEFT'] })]],
   },
 
@@ -279,22 +281,126 @@ const SPECS: FunctionSpec[] = [
     name: 'IF',
     category: 'logical',
     returns: 'scalar',
-    summary: 'Returns one value when a condition is TRUE and another (BLANK by default) when it is FALSE.',
+    summary: 'Returns one result when a condition is true and another (BLANK if none is given) when it is false.',
     overloads: [[p('condition', 'scalar'), p('value if true', 'scalar'), p('value if false', 'scalar', { optional: true })]],
   },
   {
     name: 'COALESCE',
     category: 'logical',
     returns: 'scalar',
-    summary: 'Returns the first argument that is not BLANK.',
+    summary: 'Returns the first value in the list that is not BLANK.',
     overloads: [[p('value', 'scalar'), p('value', 'scalar', { repeating: true })]],
   },
   {
     name: 'DIVIDE',
     category: 'math',
     returns: 'scalar',
-    summary: 'Divides, returning the alternate result (BLANK by default) instead of an error when dividing by zero.',
+    summary: 'Divides one value by another. Dividing by zero gives the fallback (BLANK if none is given) instead of an error.',
     overloads: [[p('numerator', 'scalar'), p('denominator', 'scalar'), p('alternate result', 'scalar', { optional: true })]],
+  },
+  {
+    name: 'TOPN',
+    category: 'iterator',
+    returns: 'table',
+    summary: 'Goes through a table row by row, calculates a ranking value for each row, and keeps the top N rows.',
+    overloads: [
+      [
+        p('N', 'scalar'),
+        p('table', 'table'),
+        p('order by', 'rowExpression', { optional: true, repeating: true }),
+        p('order', 'keyword', { optional: true, repeating: true, keywords: ['ASC', 'DESC'] }),
+      ],
+    ],
+    iteratesArgument: 1,
+  },
+  {
+    name: 'CONCATENATEX',
+    category: 'iterator',
+    returns: 'scalar',
+    summary: 'Goes through a table row by row, calculates a piece of text for each row, and joins them into one text.',
+    overloads: [
+      [
+        p('table', 'table'),
+        p('expression', 'rowExpression'),
+        p('delimiter', 'scalar', { optional: true }),
+        p('order by', 'rowExpression', { optional: true, repeating: true }),
+        p('order', 'keyword', { optional: true, repeating: true, keywords: ['ASC', 'DESC'] }),
+      ],
+    ],
+    iteratesArgument: 0,
+  },
+  {
+    name: 'SELECTCOLUMNS',
+    category: 'iterator',
+    returns: 'table',
+    summary: 'Builds a new table whose columns are calculated row by row from another table.',
+    overloads: [[p('table', 'table'), p('name', 'scalar', { repeating: true }), p('expression', 'rowExpression', { repeating: true })]],
+    iteratesArgument: 0,
+  },
+  {
+    name: 'RELATEDTABLE',
+    category: 'relationship',
+    returns: 'table',
+    summary: 'While going row by row, returns the related rows from another table (for example, all sales of the current customer).',
+    overloads: [[p('table', 'table')]],
+  },
+  {
+    name: 'ISBLANK',
+    category: 'logical',
+    returns: 'scalar',
+    summary: 'TRUE when the value is BLANK (empty).',
+    overloads: [[p('value', 'scalar')]],
+  },
+  {
+    name: 'AND',
+    category: 'logical',
+    returns: 'scalar',
+    summary: 'TRUE when both values are true (same as &&).',
+    overloads: [[p('logical 1', 'scalar'), p('logical 2', 'scalar')]],
+  },
+  {
+    name: 'OR',
+    category: 'logical',
+    returns: 'scalar',
+    summary: 'TRUE when either value is true (same as ||).',
+    overloads: [[p('logical 1', 'scalar'), p('logical 2', 'scalar')]],
+  },
+  {
+    name: 'SWITCH',
+    category: 'logical',
+    returns: 'scalar',
+    summary: 'Compares a value with a list of options and returns the result for the first match.',
+    overloads: [
+      [p('expression', 'scalar'), p('value', 'scalar'), p('result', 'scalar'), p('more values, results or else', 'scalar', { optional: true, repeating: true })],
+    ],
+  },
+  {
+    name: 'FORMAT',
+    category: 'text',
+    returns: 'scalar',
+    summary: 'Converts a value to text using a format string.',
+    overloads: [[p('value', 'scalar'), p('format', 'scalar'), p('locale', 'scalar', { optional: true })]],
+  },
+  {
+    name: 'UNICHAR',
+    category: 'text',
+    returns: 'scalar',
+    summary: 'Returns the character for a Unicode code point.',
+    overloads: [[p('number', 'scalar')]],
+  },
+  {
+    name: 'ROUND',
+    category: 'math',
+    returns: 'scalar',
+    summary: 'Rounds a number to the given number of digits.',
+    overloads: [[p('number', 'scalar'), p('digits', 'scalar')]],
+  },
+  {
+    name: 'ABS',
+    category: 'math',
+    returns: 'scalar',
+    summary: 'Absolute value of a number.',
+    overloads: [[p('number', 'scalar')]],
   },
   { name: 'BLANK', category: 'logical', returns: 'scalar', summary: 'Returns BLANK.', overloads: [[]] },
   { name: 'TRUE', category: 'logical', returns: 'scalar', summary: 'Returns TRUE.', overloads: [[]] },
@@ -326,9 +432,12 @@ export function parametersForCall(spec: FunctionSpec, argumentCount: number): Pa
   for (const params of spec.overloads) {
     const { min, max } = arity(params);
     if (argumentCount < min || argumentCount > max) continue;
+    // Trailing repeating parameters form a group that cycles: a, b, a, b, ...
+    const groupStart = params.findIndex((param) => param.repeating);
+    const groupSize = groupStart === -1 ? 0 : params.length - groupStart;
     const result: ParamSpec[] = [];
     for (let i = 0; i < argumentCount; i++) {
-      result.push(i < params.length ? params[i] : params[params.length - 1]);
+      result.push(i < params.length ? params[i] : params[groupStart + ((i - groupStart) % groupSize)]);
     }
     return result;
   }
