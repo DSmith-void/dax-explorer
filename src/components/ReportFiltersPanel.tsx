@@ -252,7 +252,6 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
     try {
       const data = await client.evaluate('table', visualRowsDax(result.visual, MAX_VISUAL_ROWS), MAX_VISUAL_ROWS);
       setRows({ cells: data.rows, truncated: data.truncated });
-      if (result.visual.groupBy.length === 0) setPicked(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not list the visual's rows.");
     } finally {
@@ -260,10 +259,11 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
     }
   }
 
-  function use() {
-    if (!visual || !rows || picked === null) return;
-    const row = rows.cells[picked];
-    const fromRow: ReportFilter[] = visual.groupBy.map((column, i) => ({ kind: 'values', column, values: [row[i] as FilterValue] }));
+  /** Sets F to the visual's filters, plus the picked row's group-by values when `withRow`. */
+  function use(withRow: boolean) {
+    if (!visual || !rows) return;
+    const row = withRow && picked !== null ? rows.cells[picked] : undefined;
+    const fromRow: ReportFilter[] = row ? visual.groupBy.map((column, i) => ({ kind: 'values', column, values: [row[i] as FilterValue] })) : [];
     onChange([...visual.filters, ...fromRow]);
   }
 
@@ -334,11 +334,19 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
               Note: {n}
             </p>
           ))}
+          <ReadDetails visual={visual} />
         </div>
       )}
 
       {visual && rows && (
         <>
+          {rows.cells.length === 0 ? (
+            <p className="visual-empty">
+              This visual shows no rows with these filters (for example, a slicer may select dates without data). You can still use
+              its filters.
+            </p>
+          ) : (
+            <>
           <p className="field-label">{visual.groupBy.length > 0 ? 'Pick the row you are looking at:' : 'The value:'}</p>
           <div className="table-scroll visual-rows">
             <table className="token-table">
@@ -374,13 +382,70 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
             </table>
           </div>
           {rows.truncated && <p className="data-bar-muted">Showing the first {MAX_VISUAL_ROWS} rows.</p>}
-          <div>
-            <button type="button" className="primary-button" disabled={picked === null} onClick={use}>
-              Use {visual.groupBy.length > 0 ? 'this row' : "the visual's filters"}
+            </>
+          )}
+          <div className="data-panel-actions">
+            {visual.groupBy.length > 0 && rows.cells.length > 0 && (
+              <button type="button" className="primary-button" disabled={picked === null} onClick={() => use(true)}>
+                Use this row
+              </button>
+            )}
+            <button
+              type="button"
+              className={visual.groupBy.length > 0 && rows.cells.length > 0 ? 'secondary-button' : 'primary-button'}
+              onClick={() => use(false)}
+              title="The visual's filters (slicers, page and report filters) without choosing one of its rows"
+            >
+              Use the visual's filters{visual.groupBy.length > 0 ? ' only' : ''}
             </button>
           </div>
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * "What DAX Explorer read": every SUMMARIZECOLUMNS in the query and which one was used, plus the query run
+ * for the rows. For checking the reader's choice when a visual misbehaves; shows names, not data.
+ */
+function ReadDetails({ visual }: { visual: VisualQuery }) {
+  const [copied, setCopied] = useState(false);
+  const rowsDax = visualRowsDax(visual, MAX_VISUAL_ROWS);
+  return (
+    <details className="read-details">
+      <summary>What DAX Explorer read</summary>
+      <p className="data-bar-muted">
+        The query has {visual.parts.length} {visual.parts.length === 1 ? 'part' : 'parts'} that build a table of values
+        (SUMMARIZECOLUMNS). The visual's own part is used; the others are usually helpers, such as a Top N filter.
+      </p>
+      <ul className="read-parts">
+        {visual.parts.map((part, i) => (
+          <li key={i} className={part.used ? 'is-used' : undefined}>
+            <strong>{part.used ? 'Used' : 'Not used'}</strong> · <code>{part.where}</code> · groups by{' '}
+            {part.groupBy.length > 0 ? <code>{part.groupBy.map(columnText).join(', ')}</code> : 'nothing'}
+            {part.labels.length > 0 && (
+              <>
+                {' '}
+                · values <code>{part.labels.join(', ')}</code>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="field-label">The query DAX Explorer ran for the rows (you can try it in DAX Studio):</p>
+      <pre className="read-query">{`EVALUATE
+${rowsDax}`}</pre>
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={() => {
+          void navigator.clipboard.writeText(`EVALUATE
+${rowsDax}`).then(() => setCopied(true));
+        }}
+      >
+        {copied ? 'Copied' : 'Copy this query'}
+      </button>
+    </details>
   );
 }

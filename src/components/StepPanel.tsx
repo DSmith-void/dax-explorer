@@ -8,6 +8,10 @@ import type { DetailLevel } from './ContextInspectorPanel';
 import { ContextView } from './ContextView';
 import { Icon, type IconName } from './Icons';
 import { OperationList } from './OperationList';
+import { StepValue } from './StepValue';
+import { formatQueryValue } from './valueFormat';
+import type { ValueState } from '../app/useStepValues';
+import type { RowChoice, StepQuery } from '../engine/context/stepQuery';
 
 interface StepPanelProps {
   entries: readonly TimelineEntry[];
@@ -18,6 +22,17 @@ interface StepPanelProps {
   source: string;
   detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
+  /** Real values from the connected report. */
+  values: StepValues;
+  connected: boolean;
+}
+
+/** What StepPanel needs from useStepValues. */
+export interface StepValues {
+  queryFor: (entry: TimelineEntry) => StepQuery;
+  stateOf: (query: StepQuery) => ValueState;
+  rows: ReadonlyMap<number, RowChoice>;
+  pickRow: (iteratorNodeId: number, choice: RowChoice) => void;
 }
 
 const KIND_LABEL: Record<TimelineKind, string> = {
@@ -53,7 +68,7 @@ function Box({ title, icon, count, className, children }: { title: string; icon:
 }
 
 /** The "Step" tab: what happens at the current step, the filters, the variables, and the story so far. */
-export function StepPanel({ entries, index, onStep, analysis, root, source, detail, onSelectNode }: StepPanelProps) {
+export function StepPanel({ entries, index, onStep, analysis, root, source, detail, onSelectNode, values, connected }: StepPanelProps) {
   const current = entries[index];
   if (!current) {
     return <p className="empty-note">Nothing to step through yet. Pick a measure, or write your own DAX and press Explain.</p>;
@@ -77,6 +92,14 @@ export function StepPanel({ entries, index, onStep, analysis, root, source, deta
         </p>
         <h4 className="step-title">{current.title}</h4>
         <p className="step-summary">{current.summary}</p>
+        <StepValue
+          entry={current}
+          query={values.queryFor(current)}
+          state={values.stateOf(values.queryFor(current))}
+          connected={connected}
+          rows={values.rows}
+          onPickRow={values.pickRow}
+        />
         {current.kind === 'start' && entries.length > 1 && (
           <p className="step-hint">
             Press <strong>Next</strong> (or the <kbd>→</kbd> key) to go through the calculation one step at a time.
@@ -150,7 +173,8 @@ export function StepPanel({ entries, index, onStep, analysis, root, source, deta
             >
               <button type="button" onClick={() => onStep(e.index)} aria-current={e.index === index ? 'step' : undefined}>
                 <span className="story-number">{e.index + 1}</span>
-                {e.title}
+                <span className="story-title">{e.title}</span>
+                {connected && <StoryValue query={values.queryFor(e)} state={values.stateOf(values.queryFor(e))} />}
               </button>
             </li>
           ))}
@@ -158,4 +182,10 @@ export function StepPanel({ entries, index, onStep, analysis, root, source, deta
       </Box>
     </div>
   );
+}
+
+/** A step's value in the story list, once it has been calculated (single values only). */
+function StoryValue({ query, state }: { query: StepQuery; state: ValueState }) {
+  if (query.kind !== 'scalar' || state.status !== 'ready') return null;
+  return <span className="story-value">{formatQueryValue(state.result.rows[0]?.[0] ?? null)}</span>;
 }

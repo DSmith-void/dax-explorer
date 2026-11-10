@@ -30,6 +30,18 @@ export interface VisualQuery {
   measures: VisualMeasure[];
   /** Things in the query that were not used, in plain words. */
   notes: string[];
+  /** Every SUMMARIZECOLUMNS in the query, where it is, and which one was used: for checking the reader's choice. */
+  parts: QueryPart[];
+}
+
+/** One SUMMARIZECOLUMNS in a visual's query. */
+export interface QueryPart {
+  /** Where it is: "VAR __DS0Core" or "EVALUATE". */
+  where: string;
+  groupBy: ColumnName[];
+  /** The names it gives its values ("Total_Sales", ...). */
+  labels: string[];
+  used: boolean;
 }
 
 export type VisualQueryResult = { ok: true; visual: VisualQuery } | { ok: false; error: string };
@@ -97,6 +109,9 @@ function columnOf(node: AstNode): ColumnName | null {
   return node.kind === 'ColumnRef' ? { table: node.table, column: node.column } : null;
 }
 
+/** Functions whose "name", value pairs add calculated columns: the values aren't columns of the model. */
+const NAMED_VALUES = new Set(['SUMMARIZECOLUMNS', 'ADDCOLUMNS', 'SELECTCOLUMNS', 'ROW', 'SUMMARIZE']);
+
 function columnsIn(node: AstNode): ColumnName[] {
   const found: ColumnName[] = [];
   const visit = (n: AstNode) => {
@@ -104,6 +119,14 @@ function columnsIn(node: AstNode): ColumnName[] {
     if (column) {
       if (!found.some((c) => c.table.toLowerCase() === column.table.toLowerCase() && c.column.toLowerCase() === column.column.toLowerCase())) {
         found.push(column);
+      }
+      return;
+    }
+    if (n.kind === 'FunctionCall' && NAMED_VALUES.has(n.name.toUpperCase())) {
+      // Skip the value after each "name": it is a calculation (often a measure written like a column).
+      for (let i = 0; i < n.args.length; i++) {
+        if (n.args[i].kind === 'StringLiteral') i++;
+        else visit(n.args[i]);
       }
       return;
     }
@@ -164,12 +187,12 @@ export function readVisualQuery(source: string): VisualQueryResult {
     return { ok: false, error: "This doesn't look like a visual's query: it has no EVALUATE. In Performance analyzer, use “Copy query” on the visual." };
   }
 
-  const vars = new Map<string, { expr: Expr; text: string }>();
+  const vars = new Map<string, { expr: Expr; text: string; name: string }>();
   const notes: string[] = [];
   for (const part of parts) {
     if (part.kind === 'var') {
       const parsed = parseTokens(part.tokens, source);
-      if (parsed) vars.set(part.name.toLowerCase(), parsed);
+      if (parsed) vars.set(part.name.toLowerCase(), { ...parsed, name: part.name });
       else notes.push(`The part named ${part.name} couldn't be read, so it isn't used.`);
     } else if (part.kind === 'measure') {
       notes.push(`The query defines its own measure [${part.name}] (for example a visual calculation); it isn't explained here.`);
@@ -236,7 +259,7 @@ export function readVisualQuery(source: string): VisualQueryResult {
     const columns = columnsIn(target);
     const simple = valuesFilter(target);
     if (simple) filters.push(simple);
-    else filters.push({ kind: 'table', columns, dax, description: describeFilter(dax, columns) });
+    else filters.push({ kind: 'table', columns, dax, description: rangeDescription(target) ?? describeFilter(dax, columns) });
   };
 
   const args = found.call.args;
@@ -264,7 +287,96 @@ export function readVisualQuery(source: string): VisualQueryResult {
   }
   for (const extra of found.around) addFilter(extra);
 
-  return { ok: true, visual: { groupBy, filters, measures, notes } };
+  // Every SUMMARIZECOLUMNS, for the "what was read" view.
+  const summaries: QueryPart[] = [];
+  const places: { where: string; expr: Expr }[] = [
+    ...[...vars.values()].map((v) => ({ where: `VAR ${v.name}`, expr: v.expr })),
+    { where: 'EVALUATE', expr: main.expr },
+  ];
+  for (const place of places) {
+    const visit = (n: AstNode) => {
+      if (n.kind === 'FunctionCall' && n.name.toUpperCase() === 'SUMMARIZECOLUMNS') {
+        const cols: ColumnName[] = [];
+        const labels: string[] = [];
+        for (let i = 0; i < n.args.length; i++) {
+          const a = n.args[i];
+          const c = columnOf(a);
+          if (c) cols.push(c);
+          else if (isCall(a, 'ROLLUPADDISSUBTOTAL', 'ROLLUPGROUP')) cols.push(...columnsIn(a));
+          else if (a.kind === 'StringLiteral') {
+            labels.push(a.value);
+            i++; // the value that goes with the name (often a measure written like a column)
+          }
+        }
+        summaries.push({ where: place.where, groupBy: cols, labels, used: n === found.call });
+      }
+      for (const child of childrenOf(n)) visit(child.node);
+    };
+    visit(place.expr);
+  }
+
+  return { ok: true, visual: { groupBy, filters, measures, notes, parts: summaries } };
+}
+
+const COMPARISON_WORDS: Record<string, string> = { '>=': 'from', '>': 'after', '<': 'before', '<=': 'up to' };
+const FLIPPED: Record<string, string> = { '>=': '<=', '>': '<', '<': '>', '<=': '>=' };
+
+/** A value written as a literal (including DATE(…) + TIME(…)), as plain text; null when it isn't one. */
+function plainValue(node: AstNode): string | null {
+  if (node.kind === 'BinaryOp' && node.operator === '+') {
+    const date = plainValue(node.left);
+    const time = node.right.kind === 'FunctionCall' && node.right.name.toUpperCase() === 'TIME' && node.right.args.every((a) => a.kind === 'NumberLiteral')
+      ? node.right.args.map((a) => (a.kind === 'NumberLiteral' ? String(a.value).padStart(2, '0') : '')).join(':')
+      : null;
+    return date && time ? `${date} ${time}` : null;
+  }
+  const value = literalOf(node);
+  if (value === undefined) return null;
+  if (value !== null && typeof value === 'object') return value.date;
+  return value === null ? '(Blank)' : typeof value === 'string' ? `"${value}"` : String(value);
+}
+
+/**
+ * Plain words for the range filters Power BI writes for "Between" and relative date slicers and filters:
+ * FILTER(KEEPFILTERS(VALUES(col)), AND(col >= DATE(…), col < DATE(…))) → "col from 2026-01-05 to before 2026-02-01".
+ * Null for anything else (it is then described by its DAX).
+ */
+function rangeDescription(node: AstNode): string | null {
+  if (!isCall(node, 'FILTER') || node.args.length !== 2) return null;
+  let table: AstNode = node.args[0];
+  if (isCall(table, 'KEEPFILTERS') && table.args.length === 1) table = table.args[0];
+  if (!isCall(table, 'VALUES') || table.args.length !== 1) return null;
+  const column = columnOf(table.args[0]);
+  if (!column) return null;
+  const sameCol = (n: AstNode) => {
+    const c = columnOf(n);
+    return c !== null && c.table.toLowerCase() === column.table.toLowerCase() && c.column.toLowerCase() === column.column.toLowerCase();
+  };
+  const conditions: AstNode[] = [];
+  const collect = (n: AstNode) => {
+    if (isCall(n, 'AND') && n.args.length === 2) n.args.forEach(collect);
+    else if (n.kind === 'BinaryOp' && n.operator === '&&') [n.left, n.right].forEach(collect);
+    else conditions.push(n);
+  };
+  collect(node.args[1]);
+  const words: string[] = [];
+  for (const c of conditions) {
+    if (c.kind !== 'BinaryOp') return null;
+    let operator: string = c.operator;
+    let other: AstNode;
+    if (sameCol(c.left)) other = c.right;
+    else if (sameCol(c.right)) {
+      other = c.left;
+      operator = FLIPPED[operator] ?? operator;
+    } else return null;
+    const word = COMPARISON_WORDS[operator] ?? (operator === '=' ? 'on' : null);
+    const value = plainValue(other);
+    if (!word || value === null) return null;
+    words.push(`${word} ${value}`);
+  }
+  if (words.length === 0) return null;
+  // "from X and before Y" reads better as "from X to before Y".
+  return `${column.table}[${column.column}] ${words.join(words.length === 2 && words[0].startsWith('from') ? ' to ' : ' and ')}`;
 }
 
 function describeFilter(dax: string, columns: ColumnName[]): string {

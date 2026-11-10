@@ -1876,3 +1876,118 @@ select {
 .visual-rows tr.is-picked td {
   background: var(--color-accent-soft);
 }
+
+/* --- Real values at a step --- */
+.value-block {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+}
+
+.value-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.value-caption,
+.value-for {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.value-note {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.value-error {
+  font-size: 0.8125rem;
+  color: var(--color-error-text);
+}
+
+.value-table {
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.value-table tr.is-picked td {
+  background: var(--color-accent-soft);
+}
+
+.value-table tbody tr {
+  cursor: pointer;
+}
+
+.story-title {
+  flex: 1;
+}
+
+.story-value {
+  flex: none;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Value and visual-row tables fit their box (they still scroll when there are many columns). */
+.value-table .token-table,
+.visual-rows .token-table {
+  min-width: 0;
+}
+
+.value-table .token-table td.num {
+  color: var(--color-text);
+  font-weight: 650;
+}
+
+.value-table .pick-cell {
+  width: 1.75rem;
+}
+
+.visual-empty {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+}
+
+.read-details {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.read-details summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--color-accent);
+}
+
+.read-parts {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 4px;
+  font-size: 0.8125rem;
+}
+
+.read-parts li.is-used {
+  color: var(--color-accent);
+}
+
+.read-query {
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--color-code-bg);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: pre;
+}

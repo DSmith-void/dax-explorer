@@ -105,6 +105,40 @@ EVALUATE SUMMARIZECOLUMNS('Plant'[Plant Name], __B, "S", [Local])`);
     expect(visual.filters).toEqual([]);
   });
 
+  it("lists every SUMMARIZECOLUMNS and uses the visual's own (not a Top N helper)", () => {
+    const visual = read(`DEFINE
+	VAR __DS0FilterTable2 =
+		TOPN(3, SUMMARIZECOLUMNS('Plant'[Plant Name], 'Plant'[Plant Code], "MinPlant", CALCULATE(MIN('Plant'[Plant Name])), "Total_Sales", 'Sales'[Total Sales]), [Total_Sales], 0)
+	VAR __DS0Core =
+		SUMMARIZECOLUMNS('Product'[Product], __DS0FilterTable2, "Total_Sales", 'Sales'[Total Sales])
+	VAR __DS0PrimaryWindowed =
+		TOPN(1001, __DS0Core, [Total_Sales], 0, 'Product'[Product], 1)
+EVALUATE
+	__DS0PrimaryWindowed`);
+    expect(visual.groupBy).toEqual([{ table: 'Product', column: 'Product' }]);
+    expect(visual.parts).toEqual([
+      { where: 'VAR __DS0FilterTable2', groupBy: [{ table: 'Plant', column: 'Plant Name' }, { table: 'Plant', column: 'Plant Code' }], labels: ['MinPlant', 'Total_Sales'], used: false },
+      { where: 'VAR __DS0Core', groupBy: [{ table: 'Product', column: 'Product' }], labels: ['Total_Sales'], used: true },
+    ]);
+    // The Top N helper is a filter of the visual: kept as one (it doesn't refer to other parts).
+    expect(visual.filters).toMatchObject([{ kind: 'table', columns: [{ table: 'Plant', column: 'Plant Name' }, { table: 'Plant', column: 'Plant Code' }] }]);
+  });
+
+  it('describes date ranges from "Between" and relative date slicers in plain words (the DAX is kept as written)', () => {
+    const visual = read(TABLE_VISUAL);
+    expect(visual.filters[1]).toMatchObject({ kind: 'table', description: 'Date[Date] from 2024-01-01 to before 2025-01-01' });
+    expect(visual.filters[1].kind === 'table' && visual.filters[1].dax).toContain('AND(');
+
+    const other = read(`EVALUATE SUMMARIZECOLUMNS(
+      FILTER(VALUES('Date'[Date]), DATE(2026, 11, 5) <= 'Date'[Date] && 'Date'[Date] < DATE(2026, 11, 6) + TIME(8, 0, 0)),
+      FILTER(KEEPFILTERS(VALUES('Date'[Year])), 'Date'[Year] > 2024),
+      "S", [Total Sales])`);
+    expect(other.filters.map((f) => f.kind === 'table' && f.description)).toEqual([
+      'Date[Date] from 2026-11-05 to before 2026-11-06 08:00:00',
+      'Date[Year] after 2024',
+    ]);
+  });
+
   it('explains when the text is not a visual query', () => {
     expect(readVisualQuery('Total Sales = SUM(Sales[Amount])')).toEqual({ ok: false, error: expect.stringContaining('no EVALUATE') });
     expect(readVisualQuery('EVALUATE VALUES(Product[Category])')).toEqual({ ok: false, error: expect.stringContaining('No SUMMARIZECOLUMNS') });

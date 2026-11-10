@@ -26,6 +26,7 @@ import { analyze, type AnalysisResult } from './analysis';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
 import { measureDefinitionText, toModelSnapshot } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
+import { useStepValues } from './useStepValues';
 import { useThemePreference } from './useThemePreference';
 
 type Choices = Record<string, ReferenceType>;
@@ -123,6 +124,18 @@ export function App() {
   const highlightNode = selectedNode ?? (current?.nodeId !== null && current ? findNode(root, current.nodeId) : null);
   const problemCount = (result?.diagnostics.length ?? 0) + (binding?.diagnostics.length ?? 0);
   const matchingSample = result ? SAMPLE_MEASURES.find((s) => s.expression === result.text) : undefined;
+
+  // Real values at each step, from the connected report.
+  const stepValues = useStepValues({
+    client: helperClient,
+    connectionKey: connectedModel ? `${connectedModel.connection.port}:${connectedModel.model.databaseName}` : null,
+    timeline,
+    current,
+    root,
+    binding,
+    source: result?.text ?? '',
+    reportFilters,
+  });
 
   function goToStep(next: number) {
     const clamped = Math.max(0, Math.min(next, timeline.length - 1));
@@ -336,6 +349,8 @@ export function App() {
                 source={result?.text ?? ''}
                 detail={detail}
                 onSelectNode={handleSelectNode}
+                values={stepValues}
+                connected={connectedModel !== null}
               />
             )}
             {tab === 'part' && (
