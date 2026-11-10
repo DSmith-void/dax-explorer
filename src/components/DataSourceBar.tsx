@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   startSample,
   type ConnectionInfo,
@@ -25,7 +25,7 @@ const reportLabel = (name: string | null) => name ?? 'an unnamed report';
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * Which data the app is working with, and the way to connect to your own.
+ * Which data the app is working with (a pill in the toolbar), and a panel to connect to your own.
  *
  * The default is the built-in examples (explanations only). Connecting is always the user's choice:
  * open Power BI Desktop reports are listed, but nothing is read until the user presses Connect.
@@ -88,7 +88,7 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
     if (opening && view.kind === 'ready') void run('load', loadInstances);
   }
 
-  function useSampleData() {
+  function startSampleData() {
     void run('sample', async () => {
       setPanelOpen(false);
       try {
@@ -102,82 +102,115 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
 
   const connection = view.kind === 'ready' ? view.status.connection : null;
   const summary = view.kind === 'ready' ? view.status.modelSummary : null;
+  const sampleRunning = action === 'sample';
+
+  // The panel closes on a click outside it, or Escape.
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!container.current?.contains(event.target as Node)) setPanelOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPanelOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [panelOpen]);
+
+  const pillLabel =
+    view.kind === 'checking'
+      ? 'Checking…'
+      : sampleRunning
+        ? sampleProgress === 'loading'
+          ? 'Loading the sample…'
+          : 'Opening the sample…'
+        : connection
+          ? connection.isSample
+            ? 'Sample data'
+            : reportLabel(connection.reportName)
+          : 'Built-in examples';
+  const tone = error ? ' is-error' : connection ? ' is-connected' : sampleRunning ? ' is-busy' : '';
 
   return (
-    <section className={`data-bar${connection ? ' is-connected' : ''}`} aria-label="Data">
-      <div className="data-bar-row" aria-live="polite">
-        <span className="data-bar-label">Data</span>
-        {view.kind === 'checking' ? (
-          <span className="data-bar-muted">Checking…</span>
-        ) : action === 'sample' ? (
-          <span>
-            <strong>Sample data</strong>{' '}
-            <span className="data-bar-muted">
-              ·{' '}
-              {sampleProgress === 'loading'
-                ? 'waiting for Power BI Desktop to finish loading the sample…'
-                : 'opening the sample in Power BI Desktop (this can take a minute)…'}
-            </span>
-          </span>
-        ) : connection ? (
-          <span>
-            {connection.isSample ? (
-              <>
-                <strong>Sample data</strong> <span className="data-bar-muted">· the made-up Initech company, in Power BI Desktop</span>
-              </>
-            ) : (
-              <>
-                <strong>{reportLabel(connection.reportName)}</strong> <span className="data-bar-muted">in Power BI Desktop</span>
-              </>
-            )}
-            {summary && (
-              <span className="data-bar-muted">
-                {' '}
-                · {plural(summary.tables, 'table', 'tables')} · {plural(summary.measures, 'measure', 'measures')} ·{' '}
-                {plural(summary.relationships, 'relationship', 'relationships')}
-              </span>
-            )}
-          </span>
-        ) : (
-          <span>
-            <strong>Built-in examples</strong> <span className="data-bar-muted">· explanations only, no numbers</span>
-          </span>
-        )}
-
-        {view.kind !== 'checking' && (
-          <span className="data-bar-actions">
-            {view.kind === 'ready' && !connection?.isSample && (
-              <button type="button" className="secondary-button" disabled={connecting} onClick={useSampleData}>
-                {action === 'sample' ? 'Opening sample…' : 'Use sample data'}
-              </button>
-            )}
-            <button type="button" className="secondary-button" aria-expanded={panelOpen} onClick={togglePanel}>
-              {connection ? 'Change' : 'Use my data'} {panelOpen ? '▴' : '▾'}
-            </button>
-            {connection && (
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={connecting}
-                onClick={() =>
-                  void run('disconnect', async () => {
-                    await client.disconnect();
-                    setPanelOpen(false);
-                    await refreshStatus();
-                  })
-                }
-              >
-                Disconnect
-              </button>
-            )}
-          </span>
-        )}
-      </div>
+    <div className="data-source" ref={container}>
+      <button
+        type="button"
+        className={`data-pill${tone}`}
+        aria-expanded={panelOpen}
+        aria-haspopup="dialog"
+        onClick={togglePanel}
+        title="Which data DAX Explorer is using; connect to your own"
+      >
+        <span className="data-pill-dot" aria-hidden="true" />
+        <span className="data-pill-label">
+          <span className="visually-hidden">Data: </span>
+          {pillLabel}
+          {/* On the built-in examples, the pill also reads as an invitation to connect. */}
+          {view.kind !== 'checking' && !connection && !sampleRunning && <span className="data-pill-action"> · Connect…</span>}
+        </span>
+        <span className="data-pill-caret" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      <span className="visually-hidden" aria-live="polite">
+        {sampleRunning ? pillLabel : ''}
+      </span>
 
       {panelOpen && (
-        <div className="data-panel">
+        <div className="data-panel" role="dialog" aria-label="Data">
+          <section className="data-panel-section">
+            <h3 className="data-panel-title">Using now</h3>
+            {connection ? (
+              <p>
+                {connection.isSample ? (
+                  <>
+                    <strong>Sample data</strong> <span className="data-bar-muted">· the made-up Initech company, in Power BI Desktop</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{reportLabel(connection.reportName)}</strong> <span className="data-bar-muted">in Power BI Desktop</span>
+                  </>
+                )}
+                {summary && (
+                  <span className="data-bar-muted">
+                    {' '}
+                    · {plural(summary.tables, 'table', 'tables')} · {plural(summary.measures, 'measure', 'measures')} ·{' '}
+                    {plural(summary.relationships, 'relationship', 'relationships')}
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p>
+                <strong>Built-in examples</strong> <span className="data-bar-muted">· explanations only, no numbers</span>
+              </p>
+            )}
+            {connection && (
+              <div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={connecting}
+                  onClick={() =>
+                    void run('disconnect', async () => {
+                      await client.disconnect();
+                      setPanelOpen(false);
+                      await refreshStatus();
+                    })
+                  }
+                >
+                  {action === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              </div>
+            )}
+          </section>
+
           {view.kind === 'unavailable' && (
-            <div className="data-panel-help">
+            <section className="data-panel-section data-panel-help">
               <p>
                 To work with your own Power BI data, start <strong>DAX Explorer</strong> (<code>DaxExplorer.exe</code>). It
                 opens this app ready to connect to the reports open in Power BI Desktop on this computer.
@@ -185,18 +218,34 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
               <p className="data-bar-muted">
                 Working from the source code? Run <code>npm run dev:connected</code> instead of <code>npm run dev</code>.
               </p>
-            </div>
+            </section>
           )}
 
           {view.kind === 'needs-token' && (
-            <p>
-              DAX Explorer is running, but this page wasn't opened by it. Close this tab and use the window DAX Explorer opened
-              (or the link it shows).
-            </p>
+            <section className="data-panel-section">
+              <p>
+                DAX Explorer is running, but this page wasn't opened by it. Close this tab and use the window DAX Explorer
+                opened (or the link it shows).
+              </p>
+            </section>
+          )}
+
+          {view.kind === 'ready' && !connection?.isSample && (
+            <section className="data-panel-section">
+              <h3 className="data-panel-title">Sample data</h3>
+              <p className="data-bar-muted">
+                Opens the made-up Initech company in Power BI Desktop and connects to it. Power BI Desktop must be installed.
+              </p>
+              <div>
+                <button type="button" className="primary-button" disabled={connecting} onClick={startSampleData}>
+                  {sampleRunning ? 'Opening sample…' : 'Use sample data'}
+                </button>
+              </div>
+            </section>
           )}
 
           {view.kind === 'ready' && (
-            <>
+            <section className="data-panel-section">
               <h3 className="data-panel-title">Reports open in Power BI Desktop</h3>
               {instances === null ? (
                 <p className="data-bar-muted">Looking for open reports…</p>
@@ -243,17 +292,17 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
                 >
                   {action === 'load' ? 'Refreshing…' : 'Refresh'}
                 </button>
-                <span className="data-bar-muted">
-                  Nothing is read from a report until you press Connect. DAX Explorer reads its tables, columns and
-                  measures; it stays on this computer.
-                </span>
               </div>
-            </>
+              <p className="data-bar-muted data-panel-note">
+                Nothing is read from a report until you press Connect. DAX Explorer reads its tables, columns and measures; it
+                stays on this computer.
+              </p>
+            </section>
           )}
+
+          {error && <p className="data-bar-error">{error}</p>}
         </div>
       )}
-
-      {error && <p className="data-bar-error">{error}</p>}
-    </section>
+    </div>
   );
 }

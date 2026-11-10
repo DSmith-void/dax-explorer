@@ -3,69 +3,99 @@
  * Light palette on :root. Dark palette applies when:
  *   - the OS prefers dark AND the user hasn't forced light, or
  *   - the user explicitly chose dark (data-theme="dark").
+ * The dark palette is neutral gray with a teal accent; the light palette mirrors it.
  */
 :root {
   color-scheme: light;
 
-  --color-bg: #f5f6f8;
+  --color-bg: #eef0f2;
   --color-surface: #ffffff;
-  --color-surface-muted: #f0f2f5;
-  --color-border: #d9dde3;
-  --color-text: #1b1f24;
-  --color-text-muted: #5b6470;
-  --color-accent: #2f5bd3;
-  --color-accent-hover: #244bb5;
+  --color-surface-muted: #f4f5f7;
+  --color-border: #d8dce1;
+  --color-text: #1c1f23;
+  --color-text-muted: #5d6670;
+  --color-accent: #0d8a7e;
+  --color-accent-hover: #0a7469;
   --color-accent-contrast: #ffffff;
-  --color-focus: #2f5bd3;
-  --color-code-bg: #f6f8fa;
+  --color-accent-soft: #d9f2ee;
+  --color-focus: #0d8a7e;
+  --color-code-bg: #fbfbfc;
+  --color-gutter: #9aa2ab;
+  --color-current: #fff1c2;
+  --color-current-line: #fffaf0;
 
   --color-notice-bg: #fff7e6;
   --color-notice-border: #e8b04a;
   --color-notice-text: #6b4a00;
 
-  --color-success-bg: #ecf8ef;
-  --color-success-border: #5bb370;
-  --color-success-text: #1d5a2c;
+  --color-success-bg: #e8f6f3;
+  --color-success-border: #4fb3a5;
+  --color-success-text: #0d5c53;
 
   --color-error-bg: #fdeeee;
   --color-error-border: #d9605f;
   --color-error-text: #8a1f1f;
+
+  /* Syntax colors */
+  --syn-keyword: #8a3fbf;
+  --syn-function: #0b7f73;
+  --syn-table: #1e62b8;
+  --syn-bracketed: #8a5a00;
+  --syn-string: #b4441c;
+  --syn-number: #2f7d32;
+  --syn-comment: #6b8f5a;
+  --syn-operator: #4a5560;
+  --syn-measure-name: #5d6670;
 
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace;
 
   --radius: 8px;
   --gap: 16px;
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.08);
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.07);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --color-bg: #0f1216;
-    --color-surface: #171b21;
-    --color-surface-muted: #1e232b;
-    --color-border: #2c333d;
-    --color-text: #e6e9ee;
-    --color-text-muted: #9aa4b2;
-    --color-accent: #6b93ff;
-    --color-accent-hover: #86a7ff;
-    --color-accent-contrast: #0b1020;
-    --color-focus: #86a7ff;
-    --color-code-bg: #12161b;
+    --color-bg: #18191c;
+    --color-surface: #202124;
+    --color-surface-muted: #27292d;
+    --color-border: #34373c;
+    --color-text: #e4e6e9;
+    --color-text-muted: #9aa1a9;
+    --color-accent: #2dd4bf;
+    --color-accent-hover: #5eead4;
+    --color-accent-contrast: #062824;
+    --color-accent-soft: #123b37;
+    --color-focus: #5eead4;
+    --color-code-bg: #1c1d20;
+    --color-gutter: #6b7178;
+    --color-current: #3b3420;
+    --color-current-line: #232220;
 
     --color-notice-bg: #2a2212;
     --color-notice-border: #8a6a24;
     --color-notice-text: #f1d18a;
 
-    --color-success-bg: #13261a;
-    --color-success-border: #2f7a45;
-    --color-success-text: #9fdcae;
+    --color-success-bg: #10302c;
+    --color-success-border: #1f7a6e;
+    --color-success-text: #8fe3d6;
 
     --color-error-bg: #2c1515;
     --color-error-border: #9a3b3b;
     --color-error-text: #f3a9a9;
+
+    --syn-keyword: #c586c0;
+    --syn-function: #4ec9b0;
+    --syn-table: #7cb7f0;
+    --syn-bracketed: #e5c07b;
+    --syn-string: #ce9178;
+    --syn-number: #b5cea8;
+    --syn-comment: #6a9955;
+    --syn-operator: #c8cdd2;
+    --syn-measure-name: #9aa1a9;
 
     --shadow: none;
   }
@@ -74,29 +104,43 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --color-bg: #0f1216;
-  --color-surface: #171b21;
-  --color-surface-muted: #1e232b;
-  --color-border: #2c333d;
-  --color-text: #e6e9ee;
-  --color-text-muted: #9aa4b2;
-  --color-accent: #6b93ff;
-  --color-accent-hover: #86a7ff;
-  --color-accent-contrast: #0b1020;
-  --color-focus: #86a7ff;
-  --color-code-bg: #12161b;
+  --color-bg: #18191c;
+  --color-surface: #202124;
+  --color-surface-muted: #27292d;
+  --color-border: #34373c;
+  --color-text: #e4e6e9;
+  --color-text-muted: #9aa1a9;
+  --color-accent: #2dd4bf;
+  --color-accent-hover: #5eead4;
+  --color-accent-contrast: #062824;
+  --color-accent-soft: #123b37;
+  --color-focus: #5eead4;
+  --color-code-bg: #1c1d20;
+  --color-gutter: #6b7178;
+  --color-current: #3b3420;
+  --color-current-line: #232220;
 
   --color-notice-bg: #2a2212;
   --color-notice-border: #8a6a24;
   --color-notice-text: #f1d18a;
 
-  --color-success-bg: #13261a;
-  --color-success-border: #2f7a45;
-  --color-success-text: #9fdcae;
+  --color-success-bg: #10302c;
+  --color-success-border: #1f7a6e;
+  --color-success-text: #8fe3d6;
 
   --color-error-bg: #2c1515;
   --color-error-border: #9a3b3b;
   --color-error-text: #f3a9a9;
+
+  --syn-keyword: #c586c0;
+  --syn-function: #4ec9b0;
+  --syn-table: #7cb7f0;
+  --syn-bracketed: #e5c07b;
+  --syn-string: #ce9178;
+  --syn-number: #b5cea8;
+  --syn-comment: #6a9955;
+  --syn-operator: #c8cdd2;
+  --syn-measure-name: #9aa1a9;
 
   --shadow: none;
 }

@@ -8,7 +8,9 @@ row context, context transition, CALCULATE modifiers, virtual tables, and more.
 > every node, the filter and row context it is evaluated in and what it changes: CALCULATE filters and
 > modifiers (REMOVEFILTERS, ALL, ALLEXCEPT, KEEPFILTERS), iterators, context transition, and when variables are
 > evaluated. Filters coming from the report are shown as **F**. Relationships and anything else not modeled is
-> labeled as such rather than guessed.
+> labeled as such rather than guessed. You can **step through** a measure in the logical order DAX defines
+> (not the order the Power BI engine physically runs a query in), with the code, filters and variables shown at
+> each step.
 
 ## Design principles
 
