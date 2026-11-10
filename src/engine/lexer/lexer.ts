@@ -7,13 +7,23 @@ const SINGLE_CHAR_OPERATORS = new Set(['+', '-', '*', '/', '^', '&', '=', '<', '
 const PUNCTUATION = new Set(['(', ')', '{', '}', ',']);
 
 /**
- * Only ordinary ASCII whitespace is skipped. Other space-like characters
- * (for example a non-breaking space pasted from a web page) are reported
- * instead of silently accepted, because we have not verified how the DAX
- * engine treats them.
+ * Whitespace skipped between tokens: everything Unicode classifies as a space
+ * (JavaScript's \s), including non-breaking spaces (U+00A0), em spaces (U+2003)
+ * and other wide/narrow spaces, line/paragraph separators, and the byte-order
+ * mark (U+FEFF).
+ *
+ * Why: measures copied out of Power BI, Word, Outlook or Teams often contain
+ * such spaces in their indentation, and Power BI accepts those measures
+ * (confirmed on 2026-11-10 with real measures containing U+00A0 and U+2003).
+ * This matches .NET's definition of whitespace, which Power BI's engine uses.
+ *
+ * Characters that are NOT spaces in Unicode, such as the zero-width space
+ * (U+200B), are still reported rather than silently skipped.
  */
+const WHITESPACE = /\s/;
+
 function isWhitespace(ch: string): boolean {
-  return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f' || ch === '\v';
+  return WHITESPACE.test(ch);
 }
 
 function isDigit(ch: string | undefined): boolean {
@@ -236,7 +246,11 @@ export function tokenize(source: string, startOffset = 0): LexResult {
     const codePoint = source.codePointAt(pos) ?? 0;
     pos += codePoint > 0xffff ? 2 : 1;
     const hex = codePoint.toString(16).toUpperCase().padStart(4, '0');
-    const description = codePoint === 0xa0 ? 'non-breaking space (often introduced by copy/paste)' : `"${slice(start, pos)}"`;
+    // Invisible characters (zero-width spaces, direction marks, ...) get a description,
+    // because quoting them shows nothing useful.
+    const description = /[\p{Cf}\p{Cc}]/u.test(slice(start, pos))
+      ? 'an invisible character (often introduced by copy/paste from web pages or chat; try retyping that part)'
+      : `"${slice(start, pos)}"`;
     pushError('unexpected-character', `Unexpected character: ${description} (U+${hex}).`, start, pos);
   }
 

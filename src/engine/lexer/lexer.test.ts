@@ -259,9 +259,26 @@ describe('errors', () => {
     expect(diagnosticCodes('a : b')).toEqual(['unexpected-character']);
   });
 
-  it('names a non-breaking space explicitly', () => {
-    const { diagnostics } = tokenize('1 + 2');
-    expect(diagnostics[0].message).toContain('non-breaking space');
+  it.each([
+    ['non-breaking space', ' '],
+    ['narrow non-breaking space', ' '],
+    ['em space', ' '],
+    ['en space', ' '],
+    ['thin space', ' '],
+    ['ideographic space', '　'],
+    ['line separator', ' '],
+    ['byte-order mark', '﻿'],
+  ])('treats a %s (common in copied measures) as whitespace', (_name, ch) => {
+    const { tokens, diagnostics } = tokenize(`${ch}1${ch}+${ch}${ch}2`);
+    expect(diagnostics).toEqual([]);
+    expect(tokens.map((t) => t.text)).toEqual(['1', '+', '2', '']);
+  });
+
+  it('still reports invisible characters that are not spaces, with a description', () => {
+    const { diagnostics } = tokenize('1​+ 2'); // zero-width space: not a space in Unicode
+    expect(diagnostics).toMatchObject([{ code: 'unexpected-character' }]);
+    expect(diagnostics[0].message).toContain('an invisible character');
+    expect(diagnostics[0].message).toContain('U+200B');
   });
 
   it('keeps surrogate-pair characters intact in error tokens', () => {

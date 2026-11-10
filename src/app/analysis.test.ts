@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_MEASURES } from '../samples/sampleMeasures';
+import { toDebugString } from '../engine/parser/ast';
 import { analyze } from './analysis';
 
 describe('analyze: measure-definition mode', () => {
@@ -55,6 +56,46 @@ describe('analyze: expression mode', () => {
 
   it('parses the expression into a tree', () => {
     expect(analyze('[Total Sales] = 0', 'expression').parse?.root).toMatchObject({ kind: 'BinaryOp', operator: '=' });
+  });
+});
+
+describe('analyze: measures copied from Power BI', () => {
+  // Synthetic equivalent of a real measure that failed: tabs, non-breaking spaces and em spaces
+  // in the indentation, a parenthesized && / NOT ... IN / || filter in CALCULATE, and two variables.
+  const nbsp = ' ';
+  const indent = ' '.repeat(4) + nbsp.repeat(4);
+  const text = [
+    'Net Movement =',
+    'VAR Inbound =',
+    '\tCALCULATE(',
+    "\t\tSUM('Stock Movements'[Cost]),",
+    `${indent}('Stock Movements'[Direction] = "+"${nbsp}${nbsp}`,
+    `${indent}&& NOT 'Stock Movements'[Movement Code]`,
+    `${indent}${nbsp}${nbsp}IN {"ADJ-OUT","WRITE-OFF"}${nbsp}${nbsp}`,
+    `${indent})`,
+    `${indent}|| 'Stock Movements'[Movement Code]`,
+    `${indent}${nbsp}${nbsp}IN {"RETURN-IN","TRANSFER-IN"}`,
+    '\t)',
+    'VAR Outbound =',
+    "\tCALCULATE(SUM('Stock Movements'[Cost]), 'Stock Movements'[Direction] = \"-\")",
+    'RETURN',
+    '\tInbound - Outbound',
+  ].join('\n');
+
+  it('analyzes without any problems', () => {
+    const result = analyze(text, 'measure-definition');
+    expect(result.diagnostics).toEqual([]);
+    expect(result.header?.name).toBe('Net Movement');
+  });
+
+  it('parses the filter as (a && NOT (b IN {...})) || (b IN {...})', () => {
+    const root = analyze(text, 'measure-definition').parse?.root;
+    if (root?.kind !== 'VarBlock') throw new Error('expected VAR block');
+    const calculate = root.declarations[0].value;
+    if (calculate.kind !== 'FunctionCall') throw new Error('expected CALCULATE');
+    expect(toDebugString(calculate.args[1])).toBe(
+      "(|| (&& (= 'Stock Movements'[Direction] \"+\") (NOT (IN 'Stock Movements'[Movement Code] {\"ADJ-OUT\" \"WRITE-OFF\"}))) (IN 'Stock Movements'[Movement Code] {\"RETURN-IN\" \"TRANSFER-IN\"}))",
+    );
   });
 });
 
