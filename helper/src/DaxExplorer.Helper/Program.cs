@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DaxExplorer.Helper;
 using DaxExplorer.Helper.Discovery;
 using DaxExplorer.Helper.Model;
 using DaxExplorer.Helper.Server;
@@ -6,8 +7,8 @@ using Microsoft.AnalysisServices.AdomdClient;
 
 // DAX Execution Explorer helper.
 //   (no arguments)        start the local helper, serve the app and open it in the browser
-//   --port <n>            listen on another loopback port (default 5092)
-//   --app <folder>        folder with the built app (default: the repository's dist folder)
+//   --port <n>            listen on this loopback port (default 5092, or a free one if 5092 is taken)
+//   --app <folder>        folder with the built app (default: "app" next to the program, else the repo's dist)
 //   --no-browser          don't open the browser
 //   describe [port]       print what the helper finds in Power BI Desktop, then exit
 
@@ -17,6 +18,7 @@ if (args is ["describe", ..])
 }
 
 var port = HelperServer.DefaultPort;
+var portChosen = false;
 string? appPath = null;
 var openBrowser = true;
 for (var i = 0; i < args.Length; i++)
@@ -25,6 +27,7 @@ for (var i = 0; i < args.Length; i++)
     {
         case "--port" when i + 1 < args.Length && int.TryParse(args[i + 1], out var p) && p is > 0 and <= 65535:
             port = p;
+            portChosen = true;
             i++;
             break;
         case "--app" when i + 1 < args.Length:
@@ -45,11 +48,17 @@ var token = Environment.GetEnvironmentVariable("DAXEXPLORER_HELPER_TOKEN") is { 
     : TokenGuard.NewToken();
 appPath ??= HelperServer.FindAppPath(AppContext.BaseDirectory);
 
+// If the usual port is taken (for example DAX Explorer is already running), let Windows pick a free one,
+// unless a port was chosen explicitly.
+if (!portChosen && !HelperServer.IsPortFree(port)) port = 0;
+
 var app = HelperServer.Build(new HelperOptions(port, appPath, token));
-var url = $"http://127.0.0.1:{port}/#token={token}";
+var url = "";
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
+    var address = app.Urls.FirstOrDefault() ?? $"http://127.0.0.1:{port}";
+    url = $"{address.TrimEnd('/')}/#token={token}";
     Console.WriteLine();
     Console.WriteLine("DAX Execution Explorer helper is running (this computer only).");
     Console.WriteLine($"Open the app: {url}");
@@ -75,8 +84,26 @@ try
 }
 catch (IOException ex) when (ex.InnerException is System.Net.Sockets.SocketException || ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine($"Port {port} is already in use. Start the helper with --port <another port>.");
-    return 3;
+    return StartupFailed($"Port {port} is already in use. Close the program using it, or start DAX Explorer with --port <another port>.", 3);
+}
+catch (Exception ex) when (ex is not OutOfMemoryException)
+{
+    return StartupFailed($"DAX Explorer could not start: {ex.Message}", 4);
+}
+
+// Shows a startup error. When DAX Explorer was double-clicked, Windows created a console window just for it,
+// and that window would close the moment the program exits; keep it open so the message can be read.
+static int StartupFailed(string message, int exitCode)
+{
+    Console.Error.WriteLine();
+    Console.Error.WriteLine(message);
+    if (ConsoleWindow.IsOwnedOnlyByThisProcess())
+    {
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("Press any key to close this window.");
+        Console.ReadKey(intercept: true);
+    }
+    return exitCode;
 }
 
 static int Describe(int? requestedPort)

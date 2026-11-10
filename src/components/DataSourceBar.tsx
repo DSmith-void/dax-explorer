@@ -14,17 +14,23 @@ type View =
   | { kind: 'ready'; status: HelperStatus };
 
 const reportLabel = (name: string | null) => name ?? 'an unnamed report';
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * Shows whether the app is connected to Power BI Desktop and lets the user connect.
- * Without the local helper the app works as before (explanations only), and this bar says so briefly.
+ * Which data the app is working with, and the way to connect to your own.
+ *
+ * The default is the built-in examples (explanations only). Connecting is always the user's choice:
+ * open Power BI Desktop reports are listed, but nothing is read until the user presses Connect.
  */
 export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
   const [view, setView] = useState<View>({ kind: 'checking' });
+  const [panelOpen, setPanelOpen] = useState(false);
   const [instances, setInstances] = useState<DesktopInstanceInfo[] | null>(null);
   const [selectedPort, setSelectedPort] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Which action is running. Tracked separately so refreshing the report list never blocks or relabels Connect/Disconnect.
+  const [action, setAction] = useState<'check' | 'load' | 'connect' | 'disconnect' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const connecting = action === 'connect' || action === 'disconnect';
 
   async function loadInstances() {
     const list = await client.instances();
@@ -44,119 +50,165 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
       onModelChange(await client.model(), availability.status.connection);
     } else {
       onModelChange(null, null);
-      await loadInstances();
     }
   }
 
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
+  async function run(kind: NonNullable<typeof action>, work: () => Promise<void>) {
+    setAction(kind);
     setError(null);
     try {
-      await action();
+      await work();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
-      setBusy(false);
+      setAction((current) => (current === kind ? null : current));
     }
   }
 
   useEffect(() => {
-    void run(refreshStatus);
+    void run('check', refreshStatus);
     // Runs once on start; the client never changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (view.kind === 'checking') return null;
-
-  if (view.kind === 'unavailable') {
-    return (
-      <div className="data-source-bar is-quiet" role="status">
-        Working without data: explanations only. To use your own Power BI data, start the DAX Explorer helper (see the
-        README).
-      </div>
-    );
+  function togglePanel() {
+    const opening = !panelOpen;
+    setPanelOpen(opening);
+    // Listing open reports reads only their names, not their data.
+    if (opening && view.kind === 'ready') void run('load', loadInstances);
   }
 
-  if (view.kind === 'needs-token') {
-    return (
-      <div className="data-source-bar is-warning" role="status">
-        The helper is running, but this page wasn't opened from it. Use the link shown in the helper's window to connect to
-        Power BI Desktop.
-      </div>
-    );
-  }
-
-  const connection = view.status.connection;
-  const summary = view.status.modelSummary;
+  const connection = view.kind === 'ready' ? view.status.connection : null;
+  const summary = view.kind === 'ready' ? view.status.modelSummary : null;
 
   return (
-    <div className={`data-source-bar${connection ? ' is-connected' : ''}`} aria-live="polite">
-      <span className="data-source-label">Power BI Desktop</span>
-      {connection ? (
-        <>
+    <section className={`data-bar${connection ? ' is-connected' : ''}`} aria-label="Data">
+      <div className="data-bar-row" aria-live="polite">
+        <span className="data-bar-label">Data</span>
+        {view.kind === 'checking' ? (
+          <span className="data-bar-muted">Checking…</span>
+        ) : connection ? (
           <span>
-            Connected to <strong>{reportLabel(connection.reportName)}</strong>
+            <strong>{reportLabel(connection.reportName)}</strong> <span className="data-bar-muted">in Power BI Desktop</span>
             {summary && (
-              <span className="data-source-summary">
+              <span className="data-bar-muted">
                 {' '}
-                · {summary.tables} {summary.tables === 1 ? 'table' : 'tables'} · {summary.measures}{' '}
-                {summary.measures === 1 ? 'measure' : 'measures'} · {summary.relationships}{' '}
-                {summary.relationships === 1 ? 'relationship' : 'relationships'}
+                · {plural(summary.tables, 'table', 'tables')} · {plural(summary.measures, 'measure', 'measures')} ·{' '}
+                {plural(summary.relationships, 'relationship', 'relationships')}
               </span>
             )}
           </span>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={() => void run(async () => {
-              await client.disconnect();
-              await refreshStatus();
-            })}
-          >
-            Disconnect
-          </button>
-        </>
-      ) : instances && instances.length === 0 ? (
-        <>
-          <span>No Power BI Desktop report is open. Open one, then refresh.</span>
-          <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(loadInstances)}>
-            Refresh
-          </button>
-        </>
-      ) : (
-        <>
-          <label className="data-source-pick">
-            <span className="visually-hidden">Report to connect to</span>
-            <select
-              value={selectedPort ?? ''}
-              disabled={busy || !instances}
-              onChange={(e) => setSelectedPort(Number(e.target.value))}
-            >
-              {(instances ?? []).map((i) => (
-                <option key={i.port} value={i.port}>
-                  {i.reportName ?? `Unnamed report (port ${i.port})`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busy || selectedPort === null}
-            onClick={() => void run(async () => {
-              await client.connect(selectedPort!);
-              await refreshStatus();
-            })}
-          >
-            {busy ? 'Connecting…' : 'Connect'}
-          </button>
-          <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(loadInstances)}>
-            Refresh
-          </button>
-        </>
+        ) : (
+          <span>
+            <strong>Built-in examples</strong> <span className="data-bar-muted">· explanations only, no numbers</span>
+          </span>
+        )}
+
+        {view.kind !== 'checking' && (
+          <span className="data-bar-actions">
+            <button type="button" className="secondary-button" aria-expanded={panelOpen} onClick={togglePanel}>
+              {connection ? 'Change' : 'Use my data'} {panelOpen ? '▴' : '▾'}
+            </button>
+            {connection && (
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={connecting}
+                onClick={() =>
+                  void run('disconnect', async () => {
+                    await client.disconnect();
+                    setPanelOpen(false);
+                    await refreshStatus();
+                  })
+                }
+              >
+                Disconnect
+              </button>
+            )}
+          </span>
+        )}
+      </div>
+
+      {panelOpen && (
+        <div className="data-panel">
+          {view.kind === 'unavailable' && (
+            <div className="data-panel-help">
+              <p>
+                To work with your own Power BI data, start <strong>DAX Explorer</strong> (<code>DaxExplorer.exe</code>). It
+                opens this app ready to connect to the reports open in Power BI Desktop on this computer.
+              </p>
+              <p className="data-bar-muted">
+                Working from the source code? Run <code>npm run dev:connected</code> instead of <code>npm run dev</code>.
+              </p>
+            </div>
+          )}
+
+          {view.kind === 'needs-token' && (
+            <p>
+              DAX Explorer is running, but this page wasn't opened by it. Close this tab and use the window DAX Explorer opened
+              (or the link it shows).
+            </p>
+          )}
+
+          {view.kind === 'ready' && (
+            <>
+              <h3 className="data-panel-title">Reports open in Power BI Desktop</h3>
+              {instances === null ? (
+                <p className="data-bar-muted">Looking for open reports…</p>
+              ) : instances.length === 0 ? (
+                <p>No report is open in Power BI Desktop. Open one, then press Refresh.</p>
+              ) : (
+                <ul className="data-panel-list" role="radiogroup" aria-label="Report to connect to">
+                  {instances.map((i) => (
+                    <li key={i.port}>
+                      <label>
+                        <input
+                          type="radio"
+                          name="desktop-report"
+                          checked={selectedPort === i.port}
+                          onChange={() => setSelectedPort(i.port)}
+                        />{' '}
+                        {i.reportName ?? `Unnamed report (port ${i.port})`}
+                        {connection?.port === i.port && <span className="data-bar-muted"> · connected</span>}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="data-panel-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={connecting || selectedPort === null || connection?.port === selectedPort}
+                  onClick={() =>
+                    void run('connect', async () => {
+                      await client.connect(selectedPort!);
+                      setPanelOpen(false);
+                      await refreshStatus();
+                    })
+                  }
+                >
+                  {action === 'connect' ? 'Connecting…' : 'Connect'}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={action === 'load'}
+                  onClick={() => void run('load', loadInstances)}
+                >
+                  {action === 'load' ? 'Refreshing…' : 'Refresh'}
+                </button>
+                <span className="data-bar-muted">
+                  Nothing is read from a report until you press Connect. DAX Explorer reads its tables, columns and
+                  measures; it stays on this computer.
+                </span>
+              </div>
+            </>
+          )}
+        </div>
       )}
-      {error && <span className="data-source-error">{error}</span>}
-    </div>
+
+      {error && <p className="data-bar-error">{error}</p>}
+    </section>
   );
 }

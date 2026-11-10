@@ -13,6 +13,22 @@ public static class HelperServer
 {
     public const int DefaultPort = 5092;
 
+    /// <summary>True if nothing is listening on the loopback port yet.</summary>
+    public static bool IsPortFree(int port)
+    {
+        try
+        {
+            var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, port);
+            probe.Start();
+            probe.Stop();
+            return true;
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Builds the helper: loopback-only, host-checked, token-protected data endpoints, and the
     /// web app's files. Tests pass <paramref name="configureTest"/> to swap services and use an
@@ -70,11 +86,14 @@ public static class HelperServer
     }
 
     /// <summary>
-    /// Finds the built web app ("dist/index.html") by walking up from the helper's folder, so a
-    /// helper run from the repository serves the repository's build.
+    /// Finds the built web app: an "app" folder next to the program (the packaged DaxExplorer.exe),
+    /// otherwise the repository's "dist" folder found by walking up (when run from source).
     /// </summary>
     public static string? FindAppPath(string startDirectory)
     {
+        var packaged = Path.Combine(startDirectory, "app");
+        if (File.Exists(Path.Combine(packaged, "index.html"))) return packaged;
+
         for (var dir = new DirectoryInfo(startDirectory); dir is not null; dir = dir.Parent)
         {
             var dist = Path.Combine(dir.FullName, "dist");

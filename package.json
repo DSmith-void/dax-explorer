@@ -9,7 +9,9 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:connected": "node scripts/dev-connected.mjs",
     "build": "tsc -b && vite build",
+    "package": "node scripts/package.mjs",
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",

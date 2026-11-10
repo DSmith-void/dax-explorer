@@ -31,18 +31,22 @@ npm install
 npm run dev       # start the local dev server
 ```
 
-## Connecting to Power BI Desktop (optional, Windows)
+## DAX Explorer with your own data (Windows)
 
-Without a connection the app explains DAX on its own. To use your own model, run the local
-**helper** (in `helper/`), which finds open Power BI Desktop reports and serves the app:
+Without a connection the app explains DAX using built-in examples. To work with your own Power BI
+model, use **DAX Explorer** (`DaxExplorer.exe`): a small local program that serves the app and
+connects to reports open in Power BI Desktop on the same computer.
+
+Build it once (requires the .NET 10 SDK; see `helper/global.json`):
 
 ```sh
-npm run build                                   # build the app the helper serves
-dotnet run --project helper/src/DaxExplorer.Helper   # requires the .NET 10 SDK (see helper/global.json)
+npm run package      # creates release/DaxExplorer/DaxExplorer.exe (+ the app next to it)
 ```
 
-The helper opens the app in your browser. Pick an open report in the **Power BI Desktop** bar and
-press **Connect**.
+Then double-click `release/DaxExplorer/DaxExplorer.exe`. It opens the app in your browser. In the
+**Data** bar choose **Use my data**, pick a report open in Power BI Desktop and press **Connect**.
+Nothing is read until you do. The packaged program is self-contained: it runs on Windows PCs without
+.NET installed.
 
 How it stays safe:
 
@@ -52,8 +56,10 @@ How it stays safe:
 - It only runs read-only DAX queries, keeps model information in memory, and logs no model details.
 - It only connects to ports that are running Power BI Desktop reports.
 
-For UI development with hot reload, start the helper with a fixed token and the dev server with the
-same one, e.g. `DAXEXPLORER_HELPER_TOKEN=<16+ characters>` for both, then `npm run dev`.
+For UI development with hot reload **and** a Power BI connection, use `npm run dev:connected`: it
+starts the helper and the dev server together with a shared random token (Ctrl+C stops both).
+`npm run dev` alone works too, without the connection.
+
 Helper tests: `dotnet test helper` (set `DAXEXPLORER_LIVE_TESTS=1` to also run the live test
 against a single open synthetic report).
 
@@ -62,6 +68,8 @@ against a single open synthetic report).
 | Script            | What it does                                           |
 | ----------------- | ------------------------------------------------------ |
 | `npm run dev`     | Start the Vite dev server with hot reload              |
+| `npm run dev:connected` | Dev server plus the local helper (Power BI Desktop connection) |
+| `npm run package` | Build `release/DaxExplorer/DaxExplorer.exe` (Windows)  |
 | `npm run build`   | Type-check (`tsc -b`) and build static files to `dist/` |
 | `npm run preview` | Serve the production build locally                     |
 | `npm run lint`    | Lint with oxlint                                       |

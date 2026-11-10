@@ -8,7 +8,19 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <RootNamespace>DaxExplorer.Helper</RootNamespace>
+    <!-- The packaged program is DaxExplorer.exe (see scripts/package.mjs). -->
+    <AssemblyName>DaxExplorer</AssemblyName>
+    <Product>DAX Execution Explorer</Product>
+    <!-- Packaging: no IIS web.config and no static-web-assets manifest (the helper serves the app itself). -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Development-only settings are not shipped. -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Microsoft's official client for Analysis Services / Power BI engines (ADOMD.NET). -->
