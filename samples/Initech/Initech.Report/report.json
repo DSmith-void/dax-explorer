@@ -1,0 +1,18 @@
+{
+  "config": "{\"version\":\"5.43\",\"themeCollection\":{}}",
+  "layoutOptimization": 0,
+  "resourcePackages": [],
+  "sections": [
+    {
+      "config": "{}",
+      "displayName": "Initech",
+      "displayOption": 1,
+      "filters": "[]",
+      "height": 720,
+      "name": "ReportSection",
+      "ordinal": 0,
+      "visualContainers": [],
+      "width": 1280
+    }
+  ]
+}

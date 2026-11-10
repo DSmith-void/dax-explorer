@@ -1,0 +1,38 @@
+table Date
+
+	column Date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		isNameInferred
+		sourceColumn: [Date]
+		summarizeBy: none
+
+	column Year
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Year]
+		summarizeBy: none
+
+	column 'Month Number'
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Month Number]
+		summarizeBy: none
+
+	column Month
+		dataType: string
+		isNameInferred
+		sourceColumn: [Month]
+		sortByColumn: 'Month Number'
+		summarizeBy: none
+
+	column 'Year Month'
+		dataType: string
+		isNameInferred
+		sourceColumn: [Year Month]
+		summarizeBy: none
+
+	partition Date = calculated
+		mode: import
+		source =
+				ADDCOLUMNS(CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31)), "Year", YEAR([Date]), "Month Number", MONTH([Date]), "Month", FORMAT([Date], "mmm"), "Year Month", FORMAT([Date], "yyyy-mm"))

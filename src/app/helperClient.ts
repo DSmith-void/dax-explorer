@@ -21,6 +21,8 @@ export interface ConnectionInfo {
   port: number;
   reportName: string | null;
   connectedAt: string;
+  /** True when connected to DAX Explorer's own sample report (Initech). */
+  isSample: boolean;
 }
 
 export interface ModelSummary {
@@ -128,6 +130,10 @@ export interface HelperClient {
   connect(port: number): Promise<void>;
   disconnect(): Promise<void>;
   model(): Promise<ModelMetadata>;
+  /** Opens the sample in Power BI Desktop unless it is already open. */
+  openSample(): Promise<'open' | 'starting'>;
+  /** Connects to the sample if Desktop has finished loading it. */
+  connectSample(): Promise<'connected' | 'waiting'>;
 }
 
 export function createHelperClient(token: string | null, fetchImpl: typeof fetch = (...args) => fetch(...args)): HelperClient {
@@ -170,7 +176,48 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
       await json('/api/disconnect', { method: 'POST' });
     },
     model: () => json<ModelMetadata>('/api/model'),
+    async openSample() {
+      return (await json<{ state: 'open' | 'starting' }>('/api/sample/open', { method: 'POST' })).state;
+    },
+    async connectSample() {
+      return (await json<{ state: 'connected' | 'waiting' }>('/api/sample/connect', { method: 'POST' })).state;
+    },
   };
+}
+
+// ---------------------------------------------------------------- the sample
+
+export type SampleProgress = 'opening' | 'loading';
+
+export interface StartSampleOptions {
+  /** How often to check whether Desktop has loaded the sample. */
+  intervalMs?: number;
+  /** How long to wait for Desktop before giving up. Starting Desktop can take a minute or more. */
+  timeoutMs?: number;
+  onProgress?: (progress: SampleProgress) => void;
+  /** Waits; replaced in tests. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Opens the sample in Power BI Desktop (if needed) and connects once Desktop has loaded it.
+ * Throws a HelperError with a plain explanation if Desktop doesn't load it in time.
+ */
+export async function startSample(client: HelperClient, options: StartSampleOptions = {}): Promise<void> {
+  const { intervalMs = 2000, timeoutMs = 180_000, onProgress, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = options;
+  onProgress?.('opening');
+  const opened = await client.openSample();
+  onProgress?.(opened === 'open' ? 'loading' : 'opening');
+  for (let waited = 0; ; waited += intervalMs) {
+    if ((await client.connectSample()) === 'connected') return;
+    if (waited >= timeoutMs) {
+      throw new HelperError(
+        'Power BI Desktop has not finished opening the sample yet. If it is still starting, wait until the report is open and press Use sample data again.',
+      );
+    }
+    await sleep(intervalMs);
+    onProgress?.('loading');
+  }
 }
 
 /** The helper's own message ({ error } or a problem title/detail), or a generic one. */

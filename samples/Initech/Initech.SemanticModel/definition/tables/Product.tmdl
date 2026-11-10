@@ -1,0 +1,31 @@
+table Product
+
+	column 'Product Key'
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Product Key]
+		summarizeBy: none
+
+	column Product
+		dataType: string
+		isNameInferred
+		sourceColumn: [Product]
+		summarizeBy: none
+
+	column Category
+		dataType: string
+		isNameInferred
+		sourceColumn: [Category]
+		summarizeBy: none
+
+	column 'List Price'
+		dataType: double
+		formatString: #,##0.00
+		isNameInferred
+		sourceColumn: [List Price]
+		summarizeBy: sum
+
+	partition Product = calculated
+		mode: import
+		source =
+				DATATABLE("Product Key", INTEGER, "Product", STRING, "Category", STRING, "List Price", DOUBLE, {{1, "Widget Basic", "Widgets", 12.5}, {2, "Widget Plus", "Widgets", 19.75}, {3, "Widget Pro", "Widgets", 29.0}, {4, "Gadget Mini", "Gadgets", 45.0}, {5, "Gadget Max", "Gadgets", 89.5}, {6, "Gadget Ultra", "Gadgets", 129.0}, {7, "Gizmo Lite", "Gizmos", 8.25}, {8, "Gizmo Classic", "Gizmos", 14.0}, {9, "Gizmo Deluxe", "Gizmos", 22.5}, {10, "Doohickey S", "Doohickeys", 3.75}, {11, "Doohickey M", "Doohickeys", 6.5}, {12, "Doohickey L", "Doohickeys", 9.99}})

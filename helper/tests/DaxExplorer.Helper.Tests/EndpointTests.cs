@@ -26,15 +26,38 @@ public sealed class EndpointTests : IAsyncLifetime
     {
         public bool Fail { get; set; }
         public List<int> PortsRead { get; } = [];
+        /// <summary>Models by port; ports not listed get the default one-table model.</summary>
+        public Dictionary<int, ModelMetadata> Models { get; } = [];
         public ModelMetadata ReadDesktopModel(int port)
         {
             PortsRead.Add(port);
             if (Fail) throw new InvalidOperationException("engine busy");
+            if (Models.TryGetValue(port, out var model)) return model;
             return new ModelMetadata("db", [new TableInfo("Sales", false, null)], [], [new MeasureInfo("Sales", "Total Sales", "SUM(Sales[Amount])", null, false, null)], []);
         }
     }
 
+    private sealed class FakeSampleLauncher : ISampleLauncher
+    {
+        public bool IsAvailable { get; set; } = true;
+        public int Opened { get; private set; }
+        public bool Fail { get; set; }
+        public void Open()
+        {
+            if (Fail) throw new System.ComponentModel.Win32Exception("no program for .pbip");
+            Opened++;
+        }
+    }
+
+    private sealed class FakeClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 11, 10, 9, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     private readonly FakeInstances _instances = new();
+    private readonly FakeSampleLauncher _launcher = new();
+    private readonly FakeClock _clock = new();
     private readonly FakeModelSource _source = new();
     private WebApplication _app = null!;
     private HttpClient _client = null!;
@@ -46,6 +69,8 @@ public sealed class EndpointTests : IAsyncLifetime
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton<IDesktopInstances>(_instances);
             builder.Services.AddSingleton<IModelSource>(_source);
+            builder.Services.AddSingleton<ISampleLauncher>(_launcher);
+            builder.Services.AddSingleton<TimeProvider>(_clock);
         });
         await _app.StartAsync();
         _client = _app.GetTestClient();
@@ -168,6 +193,99 @@ public sealed class EndpointTests : IAsyncLifetime
         var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/status")));
         Assert.Equal(JsonValueKind.Null, status.GetProperty("connection").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, (await _client.SendAsync(Request(HttpMethod.Get, "/api/model"))).StatusCode);
+    }
+
+    // ------------------------------------------------------------------ the sample
+
+    private const int SamplePort = 62000;
+
+    private static ModelMetadata SampleModel(bool withAutoDateTable = false) => new(
+        "db",
+        [
+            new TableInfo("Product", false, null), new TableInfo("Customer", false, null), new TableInfo("Plant", false, null),
+            new TableInfo("Date", false, null), new TableInfo("Sales", false, null),
+            .. withAutoDateTable ? new[] { new TableInfo("LocalDateTable_1", true, null) } : [],
+        ],
+        [], [], []);
+
+    private async Task<(HttpStatusCode Status, string? State)> Post(string path)
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Post, path));
+        var body = await Json(response);
+        return (response.StatusCode, body.TryGetProperty("state", out var s) ? s.GetString() : null);
+    }
+
+    [Fact]
+    public async Task Opening_the_sample_starts_Desktop_once_while_it_loads()
+    {
+        Assert.Equal((HttpStatusCode.OK, "starting"), await Post("/api/sample/open"));
+        Assert.Equal((HttpStatusCode.OK, "starting"), await Post("/api/sample/open")); // pressed again
+        Assert.Equal(1, _launcher.Opened);
+
+        _clock.Now += SampleLaunches.StartupAllowance; // Desktop never showed up: allow another try
+        await Post("/api/sample/open");
+        Assert.Equal(2, _launcher.Opened);
+    }
+
+    [Fact]
+    public async Task Opening_the_sample_does_nothing_when_it_is_already_open()
+    {
+        _instances.Instances.Add(new(SamplePort, "C:\\ws2", 4343, "Initech"));
+        Assert.Equal((HttpStatusCode.OK, "open"), await Post("/api/sample/open"));
+        Assert.Equal(0, _launcher.Opened);
+    }
+
+    [Fact]
+    public async Task Opening_the_sample_reports_when_it_is_missing_or_Desktop_cannot_start()
+    {
+        _launcher.Fail = true;
+        var failed = await _client.SendAsync(Request(HttpMethod.Post, "/api/sample/open"));
+        Assert.Equal(HttpStatusCode.BadGateway, failed.StatusCode);
+        Assert.Contains("Power BI Desktop is installed", await failed.Content.ReadAsStringAsync());
+
+        _launcher.Fail = false; // a failed start doesn't block the next try
+        Assert.Equal((HttpStatusCode.OK, "starting"), await Post("/api/sample/open"));
+
+        _launcher.IsAvailable = false;
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.SendAsync(Request(HttpMethod.Post, "/api/sample/open"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Connecting_to_the_sample_waits_until_Desktop_has_loaded_it()
+    {
+        Assert.Equal((HttpStatusCode.OK, "waiting"), await Post("/api/sample/connect")); // not open yet
+        Assert.DoesNotContain(61403, _source.PortsRead); // other reports are never read
+
+        _instances.Instances.Add(new(SamplePort, "C:\\ws2", 4343, "Initech"));
+        _source.Models[SamplePort] = new ModelMetadata("db", [], [], [], []);
+        Assert.Equal((HttpStatusCode.OK, "waiting"), await Post("/api/sample/connect")); // still loading: no tables yet
+
+        _source.Models[SamplePort] = SampleModel(withAutoDateTable: true);
+        Assert.Equal((HttpStatusCode.OK, "connected"), await Post("/api/sample/connect"));
+
+        var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/status")));
+        Assert.True(status.GetProperty("connection").GetProperty("isSample").GetBoolean());
+        Assert.Equal(SamplePort, status.GetProperty("connection").GetProperty("port").GetInt32());
+    }
+
+    [Fact]
+    public async Task Never_connects_to_a_different_report_that_happens_to_be_named_Initech()
+    {
+        _instances.Instances.Add(new(SamplePort, "C:\\ws2", 4343, "Initech")); // the default model: just "Sales"
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/sample/connect"));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("isn't DAX Explorer's sample", await response.Content.ReadAsStringAsync());
+
+        var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/status")));
+        Assert.Equal(JsonValueKind.Null, status.GetProperty("connection").ValueKind);
+    }
+
+    [Fact]
+    public async Task A_normal_connection_is_not_marked_as_the_sample()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/status")));
+        Assert.False(status.GetProperty("connection").GetProperty("isSample").GetBoolean());
     }
 
     [Fact]

@@ -1,0 +1,24 @@
+table Customer
+
+	column 'Customer Key'
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Customer Key]
+		summarizeBy: none
+
+	column Customer
+		dataType: string
+		isNameInferred
+		sourceColumn: [Customer]
+		summarizeBy: none
+
+	column Region
+		dataType: string
+		isNameInferred
+		sourceColumn: [Region]
+		summarizeBy: none
+
+	partition Customer = calculated
+		mode: import
+		source =
+				SELECTCOLUMNS(GENERATESERIES(1, 60, 1), "Customer Key", [Value], "Customer", "Customer " & FORMAT([Value], "00"), "Region", SWITCH(MOD([Value], 4), 0, "North", 1, "South", 2, "East", "West"))

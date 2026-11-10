@@ -3,7 +3,8 @@ using DaxExplorer.Helper.Model;
 namespace DaxExplorer.Helper.Server;
 
 /// <summary>What the app is currently connected to.</summary>
-public sealed record ConnectionInfo(string Source, int Port, string? ReportName, DateTimeOffset ConnectedAt);
+/// <param name="IsSample">True when connected to DAX Explorer's own sample report (Initech).</param>
+public sealed record ConnectionInfo(string Source, int Port, string? ReportName, DateTimeOffset ConnectedAt, bool IsSample = false);
 
 /// <summary>
 /// The current connection and its model metadata. In memory only: nothing about the

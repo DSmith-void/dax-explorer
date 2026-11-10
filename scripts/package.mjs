@@ -4,9 +4,10 @@
 //
 //   release/DaxExplorer/DaxExplorer.exe
 //   release/DaxExplorer/app/...
+//   release/DaxExplorer/sample/Initech/...   (the made-up sample report, opened by "Use sample data")
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { dotnetEnv, dotnetExecutable } from './dotnet.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -52,8 +53,12 @@ run(
   { env: dotnetEnv() },
 );
 
-// 3. The app next to it.
+// 3. The app and the sample next to it. Desktop's per-user ".pbi" folders (local settings, data cache) stay behind.
 cpSync(join(root, 'dist'), join(output, 'app'), { recursive: true });
+cpSync(join(root, 'samples', 'Initech'), join(output, 'sample', 'Initech'), {
+  recursive: true,
+  filter: (source) => basename(source).toLowerCase() !== '.pbi',
+});
 
 const exe = join(output, 'DaxExplorer.exe');
 if (!existsSync(exe)) {

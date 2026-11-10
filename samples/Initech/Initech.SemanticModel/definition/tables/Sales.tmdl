@@ -1,0 +1,183 @@
+table Sales
+
+	measure 'Total Sales' = SUM(Sales[Amount])
+		formatString: #,##0
+
+	measure 'Total Quantity' = SUM(Sales[Quantity])
+		formatString: #,##0
+
+	measure 'Order Count' = COUNTROWS(Sales)
+		formatString: #,##0
+
+	measure 'Sales Percent of Total' =
+			DIVIDE(
+			    [Total Sales],
+			    CALCULATE(
+			        [Total Sales],
+			        REMOVEFILTERS(Product[Category])
+			    )
+			)
+		formatString: 0.0%
+
+	measure 'Average Sales per Customer' =
+			AVERAGEX(
+			    VALUES(Customer[Customer Key]),
+			    [Total Sales]
+			)
+		formatString: #,##0
+
+	measure 'Plant Share' =
+			VAR CurrentPlantSales = [Total Sales]
+			VAR AllPlantSales =
+			    CALCULATE(
+			        [Total Sales],
+			        ALL(Plant)
+			    )
+			RETURN
+			    DIVIDE(CurrentPlantSales, AllPlantSales)
+		formatString: 0.0%
+
+	measure 'Top Plant by Sales' =
+			VAR TopPlant =
+			    TOPN(
+			        1,
+			        FILTER(
+			            VALUES(Plant[Plant Name]),
+			            Plant[Plant Name] <> "Unknown"
+			        ),
+			        [Total Sales], DESC
+			    )
+			RETURN
+			    CONCATENATEX(
+			        TopPlant,
+			        Plant[Plant Name] & ": " & FORMAT([Total Sales], "#,##0")
+			    )
+
+	measure 'Widget Sales' =
+			CALCULATE(
+			    [Total Sales],
+			    Product[Category] = "Widgets"
+			)
+		formatString: #,##0
+
+	measure 'Widget Sales (Keep Filters)' =
+			CALCULATE(
+			    [Total Sales],
+			    KEEPFILTERS(Product[Category] = "Widgets")
+			)
+		formatString: #,##0
+
+	measure 'Category Share (Variable Trap)' =
+			-- Looks like a share of all categories, but always shows 100%:
+			-- SalesHere is calculated once, before CALCULATE runs, so CALCULATE cannot change it.
+			VAR SalesHere = [Total Sales]
+			RETURN
+			    DIVIDE(
+			        SalesHere,
+			        CALCULATE(SalesHere, REMOVEFILTERS(Product[Category]))
+			    )
+		formatString: 0.0%
+
+	column 'Order Key'
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Order Key]
+		summarizeBy: none
+
+	column Date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		isNameInferred
+		sourceColumn: [Date]
+		summarizeBy: none
+
+	column 'Product Key'
+		dataType: int64
+		isHidden
+		isNameInferred
+		sourceColumn: [Product Key]
+		summarizeBy: none
+
+	column 'Customer Key'
+		dataType: int64
+		isHidden
+		isNameInferred
+		sourceColumn: [Customer Key]
+		summarizeBy: none
+
+	column 'Plant Key'
+		dataType: int64
+		isHidden
+		isNameInferred
+		sourceColumn: [Plant Key]
+		summarizeBy: none
+
+	column Quantity
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Quantity]
+		summarizeBy: sum
+
+	column 'Net Price'
+		dataType: double
+		formatString: #,##0.00
+		isNameInferred
+		sourceColumn: [Net Price]
+		summarizeBy: sum
+
+	column Amount
+		dataType: double
+		formatString: #,##0.00
+		isNameInferred
+		sourceColumn: [Amount]
+		summarizeBy: sum
+
+	partition Sales = calculated
+		mode: import
+		source =
+				-- 2,000 made-up orders, deliberately uneven so that filters visibly change the numbers:
+				-- Widgets sell often but cheaply, Gadgets rarely but expensively; Austin is the biggest plant;
+				-- a few customers buy far more than the rest. Every 40th order has an unknown plant.
+				SELECTCOLUMNS(
+				    ADDCOLUMNS(
+				        ADDCOLUMNS(
+				            GENERATESERIES(1, 2000, 1),
+				            "@Product",
+				                VAR Pick = MOD([Value] * 7, 20)
+				                VAR Size = MOD([Value], 3)
+				                RETURN SWITCH(TRUE(),
+				                    Pick < 8, 1 + Size,     -- Widgets: 40% of orders
+				                    Pick < 11, 4 + Size,    -- Gadgets: 15%
+				                    Pick < 17, 7 + Size,    -- Gizmos: 30%
+				                    10 + Size               -- Doohickeys: 15%
+				                ),
+				            "@Plant",
+				                VAR Pick = MOD([Value] * 3, 10)
+				                RETURN SWITCH(TRUE(),
+				                    MOD([Value], 40) = 0, 4,  -- Unknown
+				                    Pick < 5, 1,              -- Austin: 50%
+				                    Pick < 8, 2,              -- Dallas: 30%
+				                    3                         -- Houston: 20%
+				                ),
+				            "@Customer", INT(60 * POWER(MOD([Value] * 0.6180339887, 1), 2)) + 1,
+				            "@Quantity", MOD([Value] * 11, 9) + 1,
+				            "@Discount", MOD([Value], 4) * 0.05
+				        ),
+				        "@Net Price",
+				            ROUND(
+				                SWITCH([@Product],
+				                    1, 12.5, 2, 19.75, 3, 29.0, 4, 45.0, 5, 89.5, 6, 129.0,
+				                    7, 8.25, 8, 14.0, 9, 22.5, 10, 3.75, 11, 6.5, 12, 9.99
+				                ) * (1 - [@Discount]),
+				                2
+				            )
+				    ),
+				    "Order Key", [Value],
+				    "Date", DATE(2024, 1, 1) + MOD([Value] * 37, 1096),
+				    "Product Key", [@Product],
+				    "Customer Key", [@Customer],
+				    "Plant Key", [@Plant],
+				    "Quantity", [@Quantity],
+				    "Net Price", [@Net Price],
+				    "Amount", [@Quantity] * [@Net Price]
+				)

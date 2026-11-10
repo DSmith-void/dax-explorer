@@ -17,7 +17,7 @@ row context, context transition, CALCULATE modifiers, virtual tables, and more.
 - **Known vs. unavailable.** Results distinguish what is certain from what needs model metadata, query/visual
   context, or actual data.
 - **Local first.** Runs entirely in the browser. No backend, no accounts, no data leaves the page.
-- **Synthetic examples only.** All samples use a made-up model (Sales, Product, Customer, Date, Plant).
+- **Synthetic examples only.** All samples use a made-up company, Initech (Sales, Product, Customer, Date, Plant).
 
 ## Requirements
 
@@ -44,8 +44,13 @@ npm run package      # creates release/DaxExplorer/DaxExplorer.exe (+ the app ne
 ```
 
 Then double-click `release/DaxExplorer/DaxExplorer.exe`. It opens the app in your browser. In the
-**Data** bar choose **Use my data**, pick a report open in Power BI Desktop and press **Connect**.
-Nothing is read until you do. The packaged program is self-contained: it runs on Windows PCs without
+**Data** bar:
+
+- **Use sample data** opens the made-up Initech report in Power BI Desktop and connects to it once it
+  has loaded. (Power BI Desktop must be installed. DAX Explorer opens a fresh copy from your local app
+  data each time, so changes saved in Desktop never alter the original.)
+- **Use my data** lists the reports open in Power BI Desktop; pick one and press **Connect**. Nothing is
+  read until you do. The packaged program is self-contained: it runs on Windows PCs without
 .NET installed.
 
 How it stays safe:
@@ -83,6 +88,8 @@ against a single open synthetic report).
   Pure TypeScript with **no UI dependencies**; the linter enforces this.
 - `src/app/`, `src/components/`, `src/styles/` — the React user interface.
 - `src/samples/` — synthetic sample measures.
+- `samples/Initech/` — the synthetic Initech sample as a Power BI project (PBIP/TMDL). Every table is
+  calculated from DAX formulas in the project itself, so it has no data sources and nothing to refresh.
 - `helper/` — optional .NET 10 local helper that connects to Power BI Desktop (C#, ADOMD.NET).
 
 ## Tech stack

@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { ConnectionInfo, DesktopInstanceInfo, HelperClient, HelperStatus, ModelMetadata } from '../app/helperClient';
+import {
+  startSample,
+  type ConnectionInfo,
+  type DesktopInstanceInfo,
+  type HelperClient,
+  type HelperStatus,
+  type ModelMetadata,
+  type SampleProgress,
+} from '../app/helperClient';
 
 interface DataSourceBarProps {
   client: HelperClient;
@@ -21,6 +29,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  *
  * The default is the built-in examples (explanations only). Connecting is always the user's choice:
  * open Power BI Desktop reports are listed, but nothing is read until the user presses Connect.
+ * "Use sample data" opens DAX Explorer's made-up Initech report in Power BI Desktop and connects to it.
  */
 export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
   const [view, setView] = useState<View>({ kind: 'checking' });
@@ -28,9 +37,10 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
   const [instances, setInstances] = useState<DesktopInstanceInfo[] | null>(null);
   const [selectedPort, setSelectedPort] = useState<number | null>(null);
   // Which action is running. Tracked separately so refreshing the report list never blocks or relabels Connect/Disconnect.
-  const [action, setAction] = useState<'check' | 'load' | 'connect' | 'disconnect' | null>(null);
+  const [action, setAction] = useState<'check' | 'load' | 'connect' | 'disconnect' | 'sample' | null>(null);
+  const [sampleProgress, setSampleProgress] = useState<SampleProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const connecting = action === 'connect' || action === 'disconnect';
+  const connecting = action === 'connect' || action === 'disconnect' || action === 'sample';
 
   async function loadInstances() {
     const list = await client.instances();
@@ -78,6 +88,18 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
     if (opening && view.kind === 'ready') void run('load', loadInstances);
   }
 
+  function useSampleData() {
+    void run('sample', async () => {
+      setPanelOpen(false);
+      try {
+        await startSample(client, { onProgress: setSampleProgress });
+      } finally {
+        setSampleProgress(null);
+      }
+      await refreshStatus();
+    });
+  }
+
   const connection = view.kind === 'ready' ? view.status.connection : null;
   const summary = view.kind === 'ready' ? view.status.modelSummary : null;
 
@@ -87,9 +109,27 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
         <span className="data-bar-label">Data</span>
         {view.kind === 'checking' ? (
           <span className="data-bar-muted">Checking…</span>
+        ) : action === 'sample' ? (
+          <span>
+            <strong>Sample data</strong>{' '}
+            <span className="data-bar-muted">
+              ·{' '}
+              {sampleProgress === 'loading'
+                ? 'waiting for Power BI Desktop to finish loading the sample…'
+                : 'opening the sample in Power BI Desktop (this can take a minute)…'}
+            </span>
+          </span>
         ) : connection ? (
           <span>
-            <strong>{reportLabel(connection.reportName)}</strong> <span className="data-bar-muted">in Power BI Desktop</span>
+            {connection.isSample ? (
+              <>
+                <strong>Sample data</strong> <span className="data-bar-muted">· the made-up Initech company, in Power BI Desktop</span>
+              </>
+            ) : (
+              <>
+                <strong>{reportLabel(connection.reportName)}</strong> <span className="data-bar-muted">in Power BI Desktop</span>
+              </>
+            )}
             {summary && (
               <span className="data-bar-muted">
                 {' '}
@@ -106,6 +146,11 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
 
         {view.kind !== 'checking' && (
           <span className="data-bar-actions">
+            {view.kind === 'ready' && !connection?.isSample && (
+              <button type="button" className="secondary-button" disabled={connecting} onClick={useSampleData}>
+                {action === 'sample' ? 'Opening sample…' : 'Use sample data'}
+              </button>
+            )}
             <button type="button" className="secondary-button" aria-expanded={panelOpen} onClick={togglePanel}>
               {connection ? 'Change' : 'Use my data'} {panelOpen ? '▴' : '▾'}
             </button>

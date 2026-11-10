@@ -40,6 +40,14 @@ CLAUDE.local.md
 *.Report/
 *.abf
 
+# The one exception: the fully synthetic Initech sample (samples/Initech). Desktop's local
+# cache and per-user settings inside it stay ignored.
+!samples/Initech/Initech.pbip
+!samples/Initech/Initech.SemanticModel/
+!samples/Initech/Initech.Report/
+samples/Initech/**/.pbi/localSettings.json
+samples/Initech/**/.pbi/cache.abf
+
 # --- Editor / OS files ---
 .vscode/*
 !.vscode/extensions.json

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createHelperClient, TOKEN_HEADER, tokenFromHash } from './helperClient';
+import { createHelperClient, startSample, TOKEN_HEADER, tokenFromHash, type HelperClient } from './helperClient';
 
 const TOKEN = 'abcdefghijklmnopqrstuvwxyz012345';
 
@@ -80,5 +80,62 @@ describe('createHelperClient', () => {
   it('explains when the helper stops responding', async () => {
     const { impl } = fakeFetch({ 'GET /api/model': new TypeError('Failed to fetch') });
     await expect(createHelperClient(TOKEN, impl).model()).rejects.toThrow('The helper is not responding');
+  });
+});
+
+describe('startSample', () => {
+  /** A client whose sample replies come from scripted lists. */
+  function sampleClient(opened: 'open' | 'starting', connectReplies: ('connected' | 'waiting')[]) {
+    const calls: string[] = [];
+    const client = {
+      openSample: async () => {
+        calls.push('open');
+        return opened;
+      },
+      connectSample: async () => {
+        calls.push('connect');
+        return connectReplies.shift() ?? 'waiting';
+      },
+    } as unknown as HelperClient;
+    return { client, calls };
+  }
+  const noWait = async () => {};
+
+  it('opens the sample, then checks until Desktop has loaded it', async () => {
+    const { client, calls } = sampleClient('starting', ['waiting', 'waiting', 'connected']);
+    const progress: string[] = [];
+    await startSample(client, { sleep: noWait, onProgress: (p) => progress.push(p) });
+    expect(calls).toEqual(['open', 'connect', 'connect', 'connect']);
+    expect(progress).toEqual(['opening', 'opening', 'loading', 'loading']);
+  });
+
+  it('connects right away when the sample is already open', async () => {
+    const { client, calls } = sampleClient('open', ['connected']);
+    await startSample(client, { sleep: noWait });
+    expect(calls).toEqual(['open', 'connect']);
+  });
+
+  it('gives up with a plain explanation when Desktop takes too long', async () => {
+    const { client, calls } = sampleClient('starting', []);
+    await expect(startSample(client, { sleep: noWait, intervalMs: 1000, timeoutMs: 3000 })).rejects.toThrow(
+      'Power BI Desktop has not finished opening the sample yet',
+    );
+    expect(calls.filter((c) => c === 'connect')).toHaveLength(4); // at 0, 1, 2 and 3 seconds
+  });
+
+  it('posts to the sample endpoints', async () => {
+    const { impl, calls } = fakeFetch({
+      'POST /api/sample/open': json({ state: 'starting' }),
+      'POST /api/sample/connect': json({ state: 'connected' }),
+    });
+    const client = createHelperClient(TOKEN, impl);
+    expect(await client.openSample()).toBe('starting');
+    expect(await client.connectSample()).toBe('connected');
+    expect(calls.map((c) => c.path)).toEqual(['/api/sample/open', '/api/sample/connect']);
+  });
+
+  it('shows the helper message when another report is named like the sample', async () => {
+    const { impl } = fakeFetch({ 'POST /api/sample/connect': json({ error: "…isn't DAX Explorer's sample…" }, 409) });
+    await expect(createHelperClient(TOKEN, impl).connectSample()).rejects.toThrow("isn't DAX Explorer's sample");
   });
 });

@@ -1,0 +1,15 @@
+relationship b6a1f0d2-0001-4c3e-9a10-000000000001
+	fromColumn: Sales.Date
+	toColumn: Date.Date
+
+relationship b6a1f0d2-0002-4c3e-9a10-000000000002
+	fromColumn: Sales.'Product Key'
+	toColumn: Product.'Product Key'
+
+relationship b6a1f0d2-0003-4c3e-9a10-000000000003
+	fromColumn: Sales.'Customer Key'
+	toColumn: Customer.'Customer Key'
+
+relationship b6a1f0d2-0004-4c3e-9a10-000000000004
+	fromColumn: Sales.'Plant Key'
+	toColumn: Plant.'Plant Key'

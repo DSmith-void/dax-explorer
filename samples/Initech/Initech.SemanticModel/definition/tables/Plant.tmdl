@@ -1,0 +1,24 @@
+table Plant
+
+	column 'Plant Key'
+		dataType: int64
+		isNameInferred
+		sourceColumn: [Plant Key]
+		summarizeBy: none
+
+	column 'Plant Name'
+		dataType: string
+		isNameInferred
+		sourceColumn: [Plant Name]
+		summarizeBy: none
+
+	column 'Plant Code'
+		dataType: string
+		isNameInferred
+		sourceColumn: [Plant Code]
+		summarizeBy: none
+
+	partition Plant = calculated
+		mode: import
+		source =
+				DATATABLE("Plant Key", INTEGER, "Plant Name", STRING, "Plant Code", STRING, {{1, "Austin", "01"}, {2, "Dallas", "02"}, {3, "Houston", "03"}, {4, "Unknown", "00"}})
