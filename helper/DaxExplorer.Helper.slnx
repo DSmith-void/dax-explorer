@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DaxExplorer.Helper/DaxExplorer.Helper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DaxExplorer.Helper.Tests/DaxExplorer.Helper.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -5,6 +5,13 @@ dist-ssr
 coverage
 *.tsbuildinfo
 
+# --- .NET helper: build output and local IDE files ---
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+
 # --- Logs ---
 logs
 *.log
