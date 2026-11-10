@@ -20,15 +20,18 @@ const ROLE_TEXT: Record<ArgRole, string> = {
   keyword: 'an option word',
 };
 
+export type DetailLevel = 'brief' | 'detailed';
+
 interface ContextInspectorPanelProps {
   result: AnalysisResult | null;
   binding: BindResult | null;
   analysis: ContextAnalysis | null;
   selectedId: number | null;
+  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
 }
 
-export function ContextInspectorPanel({ result, binding, analysis, selectedId, onSelectNode }: ContextInspectorPanelProps) {
+export function ContextInspectorPanel({ result, binding, analysis, selectedId, detail, onSelectNode }: ContextInspectorPanelProps) {
   const root = result?.parse?.root ?? null;
   const node = selectedId !== null ? findNode(root, selectedId) : null;
 
@@ -40,6 +43,7 @@ export function ContextInspectorPanel({ result, binding, analysis, selectedId, o
           result={result}
           binding={binding}
           step={analysis?.steps.get(node.id) ?? null}
+          detail={detail}
           onSelectNode={onSelectNode}
         />
       ) : (
@@ -99,10 +103,22 @@ interface DetailsProps {
   result: AnalysisResult;
   binding: BindResult | null;
   step: Step | null;
+  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
 }
 
-function SelectedNodeDetails({ node, result, binding, step, onSelectNode }: DetailsProps) {
+/** In Brief mode: just the resulting filters, as one box. */
+function BriefFilters({ node, step, binding, source }: { node: AstNode; step: Step; binding: BindResult | null; source: string }) {
+  const showInner = step.innerContext && step.operations.length > 0;
+  return (
+    <section className="inspector-section">
+      <h3>{showInner ? innerHeading(node, binding, source) : 'Filters in effect here'}</h3>
+      {showInner ? <ContextView context={step.innerContext!} compareTo={step.context} /> : <ContextView context={step.context} />}
+    </section>
+  );
+}
+
+function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode }: DetailsProps) {
   const root = result.parse?.root ?? null;
   const presentation = presentNode(node, result.text, binding);
   const positionAt = createLineMap(result.text);
@@ -119,10 +135,14 @@ function SelectedNodeDetails({ node, result, binding, step, onSelectNode }: Deta
         <dd>
           <strong className="inspector-label">{presentation.label}</strong> <span className="ast-kind">{presentation.kind}</span>
         </dd>
-        <dt>Position</dt>
-        <dd>
-          Line {from.line}, col {from.column} → line {to.line}, col {to.column}
-        </dd>
+        {detail === 'detailed' && (
+          <>
+            <dt>Position</dt>
+            <dd>
+              Line {from.line}, col {from.column} → line {to.line}, col {to.column}
+            </dd>
+          </>
+        )}
         {resolution && (
           <>
             <dt>Type</dt>
@@ -136,6 +156,25 @@ function SelectedNodeDetails({ node, result, binding, step, onSelectNode }: Deta
       </dl>
       {text.trim() !== '' && <pre className="inspector-source">{text}</pre>}
 
+      {step?.summary && <p className="inspector-summary">{step.summary}</p>}
+
+      {detail === 'brief' ? (
+        <>
+          {step && <BriefFilters node={node} step={step} binding={binding} source={result.text} />}
+          <details className="more-details">
+            <summary>Show the full explanation</summary>
+            <div className="inspector">{renderFull()}</div>
+          </details>
+        </>
+      ) : (
+        renderFull()
+      )}
+    </div>
+  );
+
+  function renderFull() {
+    return (
+      <>
       {step && (
         <>
           <section className="inspector-section">
@@ -201,8 +240,9 @@ function SelectedNodeDetails({ node, result, binding, step, onSelectNode }: Deta
           .
         </p>
       )}
-    </div>
-  );
+      </>
+    );
+  }
 }
 
 function isCalculate(node: AstNode, binding: BindResult | null): node is FunctionCall {

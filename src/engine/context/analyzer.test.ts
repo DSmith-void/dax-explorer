@@ -271,6 +271,42 @@ describe('variables', () => {
   });
 });
 
+describe('one-line summaries (for "Brief" explanations)', () => {
+  it('summarizes each insight in one short sentence', () => {
+    const cases: [string, string][] = [
+      ['AVERAGEX(Customer, [Total Sales])', '[Total Sales] is calculated for one row of AVERAGEX at a time.'],
+      ['SUMX(Customer, CALCULATE(SUM(Sales[Amount])))', 'This CALCULATE works on one row of SUMX at a time.'],
+      ['VAR v = [Total Sales] RETURN CALCULATE(v, ALL(Product))', 'v keeps its earlier value here, even though the filters are different.'],
+      ['VAR v = [Total Sales] RETURN SUMX(Customer, v)', 'v has the same value for every row of SUMX.'],
+      ['Sales[Amount] * 2', 'Sales[Amount] has no current row to read from (an error in a measure).'],
+      ['CALCULATE([X], ALLSELECTED(Product))', "The app can't check ALLSELECTED(Product) yet."],
+      ['MYHELPER(1)', "The app doesn't know MYHELPER yet, so the parts inside it aren't checked."],
+    ];
+    for (const [source, summary] of cases) {
+      expect(run(source).analysis.insights.map((i) => i.summary), source).toEqual([summary]);
+    }
+  });
+
+  it('summarizes what a CALCULATE does, in one sentence', () => {
+    expect(run(SAMPLE_MEASURES[0].expression, CONVENTION, true).step('CALCULATE(\n        [Total Sales],\n        REMOVEFILTERS(Product[Category])\n    )').summary).toBe(
+      'CALCULATE calculates [Total Sales] without filters on Product[Category].',
+    );
+    expect(run('SUMX(Customer, CALCULATE([X], Product[Color] = "Red", REMOVEFILTERS(Plant)))').step('CALCULATE([X], Product[Color] = "Red", REMOVEFILTERS(Plant))').summary).toBe(
+      'CALCULATE calculates [X] for the current row of SUMX, without filters on table Plant, with Product[Color] = "Red".',
+    );
+    expect(run('CALCULATE([X])').step('CALCULATE([X])').summary).toBe('CALCULATE calculates [X] with the same filters (nothing changes).');
+  });
+
+  it('gives every node of every sample that has an explanation a summary too', () => {
+    for (const sample of SAMPLE_MEASURES) {
+      const { analysis } = run(sample.expression, CONVENTION, true);
+      for (const step of analysis.steps.values()) {
+        if (step.notes.length > 0) expect(step.summary, `${sample.id}: ${step.notes[0]}`).toBeTruthy();
+      }
+    }
+  });
+});
+
 describe('unknowns', () => {
   it("marks everything inside a function the app doesn't know as unknown", () => {
     const { step, analysis } = run('MYHELPER([Total Sales])');

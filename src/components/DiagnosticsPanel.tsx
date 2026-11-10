@@ -4,12 +4,14 @@ import type { ContextAnalysis, InsightKind } from '../engine/context/model';
 import type { Diagnostic } from '../engine/diagnostics';
 import { childrenOf, findNode, type AstNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
+import type { DetailLevel } from './ContextInspectorPanel';
 import { Panel } from './Panel';
 
 interface DiagnosticsPanelProps {
   result: AnalysisResult | null;
   binding: BindResult | null;
   analysis: ContextAnalysis | null;
+  detail: DetailLevel;
   inputChangedSinceAnalysis: boolean;
   onSelectNode: (node: AstNode) => void;
 }
@@ -22,7 +24,7 @@ const INSIGHT_LABEL: Record<InsightKind, string> = {
   'unknown-function': 'Unknown function',
 };
 
-export function DiagnosticsPanel({ result, binding, analysis, inputChangedSinceAnalysis, onSelectNode }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ result, binding, analysis, detail, inputChangedSinceAnalysis, onSelectNode }: DiagnosticsPanelProps) {
   const diagnostics = result
     ? [...result.diagnostics, ...(binding?.diagnostics ?? [])].sort((a, b) => a.span.start - b.span.start)
     : [];
@@ -60,7 +62,13 @@ export function DiagnosticsPanel({ result, binding, analysis, inputChangedSinceA
               </div>
             )}
             {analysis && result.parse?.root && (
-              <Explanation analysis={analysis} root={result.parse.root} source={result.text} onSelectNode={onSelectNode} />
+              <Explanation
+                analysis={analysis}
+                root={result.parse.root}
+                source={result.text}
+                detail={detail}
+                onSelectNode={onSelectNode}
+              />
             )}
             <div className="notice notice-unsupported" role="status">
               <p className="notice-title">About these explanations</p>
@@ -85,11 +93,13 @@ function Explanation({
   analysis,
   root,
   source,
+  detail,
   onSelectNode,
 }: {
   analysis: ContextAnalysis;
   root: AstNode;
   source: string;
+  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
 }) {
   if (analysis.insights.length === 0) {
@@ -118,7 +128,15 @@ function Explanation({
                   line {positionAt(node.span.start).line}
                 </button>
               )}
-              <span className="insight-message">{insight.message}</span>
+              <span className="insight-summary">{insight.summary}</span>
+              {detail === 'detailed' ? (
+                <span className="insight-message">{insight.message}</span>
+              ) : (
+                <details className="insight-more">
+                  <summary>more</summary>
+                  <span className="insight-message">{insight.message}</span>
+                </details>
+              )}
             </li>
           );
         })}

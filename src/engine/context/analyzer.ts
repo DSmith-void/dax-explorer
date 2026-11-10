@@ -2,7 +2,7 @@ import type { BindResult } from '../binder/binder';
 import type { ArgRole, FunctionSpec, ParamSpec } from '../catalog/functions';
 import { childrenOf, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall } from '../parser/ast';
 import { createLineMap } from '../source';
-import { columnText, filterSignature, removalText } from './describe';
+import { columnText, entryText, filterSignature, removalText } from './describe';
 import type {
   ColumnName,
   ContextAnalysis,
@@ -274,6 +274,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
             nodeId: declaration.id,
             context: ctx,
             operations: [],
+            summary: `${declaration.name} is calculated once, here, and reused unchanged afterwards.`,
             notes: [`Calculated once, right here, using the filters shown above. Every later use of ${declaration.name} reuses this result.`],
           });
         }
@@ -294,20 +295,24 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
     const info = variables.get(declarationId);
     const where = info ? ` (line ${info.line})` : '';
     const notes = [`Uses the result of VAR ${name}${where}. It was calculated there, once, and is not recalculated here.`];
+    let summary = `Reuses ${name}${where}; it is not recalculated here.`;
     if (info) {
       const filtersDiffer = filterSignature(info.context) !== filterSignature(ctx);
       const newRows = ctx.rows.filter((row) => !info.context.rows.includes(row));
       if (filtersDiffer) {
+        summary = `${name} keeps its earlier value here, even though the filters are different.`;
         const message = `The filters here are different from where ${name} was calculated${where}, but ${name} is not recalculated: it keeps the value it got there. This is a common surprise when a variable is used inside CALCULATE.`;
         notes.push(message);
-        insights.push({ kind: 'variable-fixed', nodeId, message });
+        insights.push({ kind: 'variable-fixed', nodeId, summary, message });
       } else if (newRows.length > 0) {
-        const message = `${name} was calculated once${where}, before ${newRows.map((r) => r.functionName).join(' and ')} started going row by row, so it has the same value for every row.`;
+        const functions = newRows.map((r) => r.functionName).join(' and ');
+        summary = `${name} has the same value for every row of ${functions}.`;
+        const message = `${name} was calculated once${where}, before ${functions} started going row by row, so it has the same value for every row.`;
         notes.push(message);
-        insights.push({ kind: 'variable-fixed', nodeId, message });
+        insights.push({ kind: 'variable-fixed', nodeId, summary, message });
       }
     }
-    record({ nodeId, context: ctx, operations: [], notes });
+    record({ nodeId, context: ctx, operations: [], summary, notes });
   }
 
   // ---------------------------------------------------------- function calls
@@ -322,8 +327,9 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       const message = !spec
         ? `${node.name} isn't in this app's list of known functions yet, so the app can't tell how the parts inside it are calculated.`
         : `${spec.name} has an unexpected number of inputs, so the app can't tell how the parts inside it are calculated.`;
-      insights.push({ kind: 'unknown-function', nodeId: node.id, message });
-      record({ nodeId: node.id, context: ctx, operations: [], notes: [message] });
+      const summary = `The app doesn't know ${node.name} yet, so the parts inside it aren't checked.`;
+      insights.push({ kind: 'unknown-function', nodeId: node.id, summary, message });
+      record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [message] });
       const unknown: EvalContext = { ...ctx, unknownReason: reason };
       for (const arg of node.args) visit(arg, unknown, null);
       return;
@@ -336,7 +342,8 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       visitIterator(node, ctx, spec, call.params);
       return;
     }
-    record({ nodeId: node.id, context: ctx, operations: [], notes: genericNotes(node, spec, role) });
+    const notes = genericNotes(node, spec, role);
+    record({ nodeId: node.id, context: ctx, operations: [], summary: notes[0], notes });
     node.args.forEach((arg, i) => visit(arg, ctx, call.params![i].role));
   }
 
@@ -387,6 +394,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       context: ctx,
       operations: [{ kind: 'row-context', row }],
       innerContext: rowCtx,
+      summary: `${spec.name} goes through ${row.table.description} one row at a time.`,
       notes: [
         `${spec.name} goes through ${row.table.description} one row at a time (row context). The inputs marked "per row" are calculated separately for each row. Going row by row does not filter anything on its own.`,
       ],
@@ -420,6 +428,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       insights.push({
         kind: 'context-transition',
         nodeId: node.id,
+        summary: `This ${spec.name} works on one row of ${ctx.rows[ctx.rows.length - 1].functionName} at a time.`,
         message: `This ${spec.name} is inside ${ctx.rows.map((r) => r.functionName).join(' and ')}, which is going row by row. So each time it runs, the current row becomes a filter (context transition) and only data for that row is included.`,
       });
     }
@@ -434,6 +443,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       }
       const step = steps.get(arg.id);
       if (step) {
+        step.summary = `Removes any filter on ${c.removals.map(removalText).join('; ')} (only inside this ${spec.name}).`;
         step.notes = [
           `Removes any filter on ${c.removals.map(removalText).join('; ')}, but only for the calculation inside this ${spec.name}.`,
         ];
@@ -443,9 +453,14 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       if (c.kind !== 'not-modeled') continue;
       fc = { ...fc, caveats: [...fc.caveats, c.description] };
       operations.push({ kind: 'not-modeled', nodeId: arg.id, description: c.description });
-      insights.push({ kind: 'not-modeled', nodeId: arg.id, message: c.description });
+      const summary = `The app can't check ${snippet(arg, 40)} yet.`;
+      const message = c.description.charAt(0).toUpperCase() + c.description.slice(1) + '.';
+      insights.push({ kind: 'not-modeled', nodeId: arg.id, summary, message });
       const step = steps.get(arg.id);
-      if (step) step.notes = [`Not modeled: ${c.description}`];
+      if (step) {
+        step.summary = summary;
+        step.notes = [message];
+      }
     }
 
     // 4. Filters.
@@ -456,6 +471,10 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       operations.push({ kind: 'add-filter', entry: c.entry, nodeId: arg.id, replaced: result.replaced, replacesIncoming: result.replacesIncoming });
       const step = steps.get(arg.id);
       if (step) {
+        step.summary =
+          c.entry.mode === 'intersect'
+            ? `Adds ${entryText(c.entry)} on top of the existing filters (only inside this ${spec.name}).`
+            : `Sets ${entryText(c.entry)} (only inside this ${spec.name}).`;
         step.notes = [
           c.entry.mode === 'intersect'
             ? `Because of KEEPFILTERS, this filter is added on top of the filters already in effect. Only rows that pass both are included.`
@@ -474,11 +493,29 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       context: ctx,
       operations,
       innerContext: inner,
+      summary: calculateSummary(spec.name, first, operations),
       // The step-by-step explanation of CALCULATE is generated by the UI from `operations`.
       notes: isRelatedTable
         ? ['RELATEDTABLE is CALCULATETABLE with no filters: in a row context, context transition selects the related rows.']
         : [],
     });
+  }
+
+  /** One sentence: what this CALCULATE calculates, and with which changes. */
+  function calculateSummary(name: string, first: Expr | undefined, operations: Operation[]): string {
+    const what = first ? snippet(first, 40) : 'its first input';
+    const parts: string[] = [];
+    const transition = operations.find((op) => op.kind === 'context-transition');
+    if (transition?.kind === 'context-transition') {
+      parts.push(`for the current row of ${transition.rows[transition.rows.length - 1].functionName}`);
+    }
+    const removed = operations.flatMap((op) => (op.kind === 'remove-filters' ? [removalText(op.removal)] : []));
+    if (removed.length > 0) parts.push(`without filters on ${removed.join(' and ')}`);
+    const added = operations.flatMap((op) => (op.kind === 'add-filter' ? [entryText(op.entry)] : []));
+    if (added.length > 0) parts.push(`with ${added.join(' and ')}`);
+    if (operations.some((op) => op.kind === 'not-modeled')) parts.push('with some changes the app can\'t check');
+    if (parts.length === 0) return `${name} calculates ${what} with the same filters (nothing changes).`;
+    return `${name} calculates ${what} ${parts.join(', ')}.`;
   }
 
   function classifyFilter(arg: Expr, calculate: FunctionCall, calculateName: string, mode: 'replace' | 'intersect'): FilterArgument {
@@ -612,6 +649,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
         nodeId: node.id,
         context: ctx,
         operations: [],
+        summary: 'The column itself is handed to the function around it.',
         notes: [`Here the column itself is handed to the function around it (for example SUM or VALUES), and that function decides what to do with it.`],
       });
       return;
@@ -621,17 +659,19 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       const measure = measureStep(node.id, label, ctx, true);
       record({ nodeId: node.id, context: ctx, ...measure });
     } else if (type === 'column') {
-      record({ nodeId: node.id, context: ctx, operations: [], notes: columnNotes(node, label, ctx, true) });
+      const column = columnNotes(node, label, ctx, true);
+      record({ nodeId: node.id, context: ctx, operations: [], summary: column.summary, notes: column.notes });
     } else {
       const measure = measureStep(node.id, label, ctx, false);
       record({
         nodeId: node.id,
         context: ctx,
         operations: [],
+        summary: `${label} could be a measure or a column; both outcomes are shown.`,
         notes: [`${label} could be a measure or a column, and that changes what happens here, so both are shown below. Choose "measure" or "column" in the tree to see just one.`],
         alternatives: {
           ifMeasure: { operations: measure.operations, innerContext: measure.innerContext, notes: measure.notes },
-          ifColumn: { notes: columnNotes(node, label, ctx, false) },
+          ifColumn: { notes: columnNotes(node, label, ctx, false).notes },
         },
       });
     }
@@ -642,21 +682,25 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       return {
         operations: [] as Operation[],
         innerContext: ctx,
+        summary: `${label} is calculated with the filters shown here; nothing is added.`,
         notes: [`This measure is calculated using the filters shown above. Nothing here is going row by row, so nothing extra is added.`],
       };
     }
     const transition = contextTransition(ctx, nodeId);
     const innermost = ctx.rows[ctx.rows.length - 1];
+    const summary = `${label} is calculated for one row of ${innermost.functionName} at a time.`;
     if (reportInsight) {
       insights.push({
         kind: 'context-transition',
         nodeId,
+        summary,
         message: `${label} is calculated once for each row that ${innermost.functionName} goes through (${innermost.table.description}). Each time, DAX first turns the current row into a filter (context transition), so only data for that row is included.`,
       });
     }
     return {
       operations: [{ kind: 'context-transition', rows: ctx.rows, added: transition.added }] as Operation[],
       innerContext: { filter: transition.fc, rows: ctx.rows, unknownReason: null },
+      summary,
       notes: [
         `${ctx.rows.map((r) => r.functionName).join(' and ')} ${ctx.rows.length === 1 ? 'is' : 'are'} going row by row, so ${label} is calculated once for each row. Before each calculation, DAX turns the current row into a filter (context transition), so the measure only includes data for that row.`,
         `(A measure used like this always behaves as if it were wrapped in CALCULATE.)`,
@@ -664,11 +708,17 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
     };
   }
 
-  function columnNotes(node: BracketRef | ColumnRef, label: string, ctx: EvalContext, reportInsight: boolean): string[] {
+  function columnNotes(
+    node: BracketRef | ColumnRef,
+    label: string,
+    ctx: EvalContext,
+    reportInsight: boolean,
+  ): { summary: string; notes: string[] } {
     if (ctx.rows.length === 0) {
+      const summary = `${label} has no current row to read from (an error in a measure).`;
       const message = `${label} is used on its own here, but nothing is going row by row, so there is no "current row" to read it from. In a measure, DAX can't pick one value out of a whole column and shows an error. Wrap it in something like SUM(${label}) or SELECTEDVALUE(${label}).`;
-      if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, message });
-      return [message];
+      if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
+      return { summary, notes: [message] };
     }
     const column: ColumnName = node.kind === 'ColumnRef' ? { table: node.table, column: node.column } : { table: '', column: node.name };
     const covering = [...ctx.rows].reverse().find((row) => {
@@ -679,16 +729,28 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
       return false;
     });
     if (covering && implicitRows.get(covering.nodeId) === covering) {
-      return [`CALCULATE checks this condition once for each value of ${label}; here ${label} is the value being checked.`];
+      return {
+        summary: `The value of ${label} being checked by the filter condition.`,
+        notes: [`CALCULATE checks this condition once for each value of ${label}; here ${label} is the value being checked.`],
+      };
     }
-    if (covering) return [`Reads ${label} from the row that ${covering.functionName} is currently on.`];
+    if (covering) {
+      const note = `Reads ${label} from the row that ${covering.functionName} is currently on.`;
+      return { summary: note, notes: [note] };
+    }
     const innermost = ctx.rows[ctx.rows.length - 1];
     if (column.table === '' || innermost.table.kind === 'unknown') {
-      return [`Reads ${label} from the row that ${innermost.functionName} is currently on (assuming ${innermost.table.description} has this column).`];
+      return {
+        summary: `Reads ${label} from the row that ${innermost.functionName} is currently on.`,
+        notes: [`Reads ${label} from the row that ${innermost.functionName} is currently on (assuming ${innermost.table.description} has this column).`],
+      };
     }
-    return [
-      `${innermost.functionName} is going row by row through ${innermost.table.description}, but ${columnText(column)} is in a different table. You would usually need RELATED(${columnText(column)}) to look it up, and whether that works depends on the data model, which this app can't see.`,
-    ];
+    return {
+      summary: `${columnText(column)} is in a different table from the one ${innermost.functionName} goes through (usually needs RELATED).`,
+      notes: [
+        `${innermost.functionName} is going row by row through ${innermost.table.description}, but ${columnText(column)} is in a different table. You would usually need RELATED(${columnText(column)}) to look it up, and whether that works depends on the data model, which this app can't see.`,
+      ],
+    };
   }
 
   visit(root, INITIAL_CONTEXT, null);

@@ -776,9 +776,42 @@ select {
   font-size: 0.8125rem;
 }
 
+.insight-summary {
+  display: block;
+  font-weight: 500;
+}
+
 .insight-message {
   display: block;
   color: var(--color-text-muted);
+}
+
+.insight-more summary,
+.more-details > summary {
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+}
+
+.more-details[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* One-line "in short" summary at the top of the inspector */
+.inspector-summary {
+  margin: 0;
+  padding: 8px 12px;
+  font-weight: 600;
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-muted);
+  border-radius: 0 6px 6px 0;
+}
+
+.header-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
 }
 
 .argument-list {

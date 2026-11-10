@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import { ContextInspectorPanel } from '../components/ContextInspectorPanel';
+import { ContextInspectorPanel, type DetailLevel } from '../components/ContextInspectorPanel';
+import { SegmentedControl } from '../components/SegmentedControl';
 import { DaxInputPanel } from '../components/DaxInputPanel';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
@@ -16,6 +17,12 @@ import { useThemePreference } from './useThemePreference';
 type Choices = Record<string, ReferenceType>;
 
 const isResolutionMode = (value: unknown): value is ResolutionMode => value === 'convention' || value === 'strict';
+const isDetailLevel = (value: unknown): value is DetailLevel => value === 'brief' || value === 'detailed';
+
+const DETAIL_OPTIONS: { value: DetailLevel; label: string; title: string }[] = [
+  { value: 'brief', label: 'Brief', title: 'One-line summaries; open the full explanation when you want it' },
+  { value: 'detailed', label: 'Detailed', title: 'Full explanations, step by step' },
+];
 const isChoices = (value: unknown): value is Choices =>
   typeof value === 'object' &&
   value !== null &&
@@ -34,6 +41,8 @@ export function App() {
     isResolutionMode,
   );
   const [userChoices, setUserChoices] = usePersistentState<Choices>('dax-explorer-reference-choices', {}, isChoices);
+  // Detailed by default: this is a learning tool. Remembered once changed.
+  const [detail, setDetail] = usePersistentState<DetailLevel>('dax-explorer-detail', 'detailed', isDetailLevel);
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
   // Binding is cheap and depends on settings that can change after Analyze, so it is derived on render.
@@ -86,7 +95,15 @@ export function App() {
           <h1>DAX Execution Explorer</h1>
           <p className="tagline">See how a DAX expression is evaluated, one context at a time.</p>
         </div>
-        <ThemeToggle value={theme} onChange={setTheme} />
+        <div className="header-settings">
+          <div className="panel-setting">
+            <span className="field-label" aria-hidden="true">
+              Explanations
+            </span>
+            <SegmentedControl label="Explanations" options={DETAIL_OPTIONS} value={detail} onChange={setDetail} />
+          </div>
+          <ThemeToggle value={theme} onChange={setTheme} />
+        </div>
       </header>
 
       <main className="workspace">
@@ -118,12 +135,14 @@ export function App() {
             binding={binding}
             analysis={contextAnalysis}
             selectedId={selectedNodeId}
+            detail={detail}
             onSelectNode={handleSelectNode}
           />
           <DiagnosticsPanel
             result={result}
             binding={binding}
             analysis={contextAnalysis}
+            detail={detail}
             inputChangedSinceAnalysis={inputChangedSinceAnalysis}
             onSelectNode={handleSelectNode}
           />

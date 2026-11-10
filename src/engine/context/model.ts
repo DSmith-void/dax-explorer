@@ -87,7 +87,9 @@ export interface Step {
   operations: Operation[];
   /** The context seen by the inner expression (CALCULATE's first argument, a measure's body). */
   innerContext?: EvalContext;
-  /** Plain-language facts about this node. */
+  /** One short sentence saying what happens at this node (for "Brief" explanations). */
+  summary?: string;
+  /** Plain-language facts about this node (the full explanation). */
   notes: string[];
   /** For a reference not yet classified: what happens in each case. */
   alternatives?: {
@@ -107,6 +109,9 @@ export type InsightKind =
 export interface Insight {
   kind: InsightKind;
   nodeId: number;
+  /** One short sentence: the headline. */
+  summary: string;
+  /** The full explanation. */
   message: string;
 }
 
