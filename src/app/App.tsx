@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContextInspectorPanel, type DetailLevel } from '../components/ContextInspectorPanel';
+import { DataSourceBar } from '../components/DataSourceBar';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { DaxInputPanel } from '../components/DaxInputPanel';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
@@ -11,6 +12,7 @@ import type { InputMode } from '../engine/definition';
 import type { AstNode } from '../engine/parser/ast';
 import { SAMPLE_MEASURES, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
+import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
 import { usePersistentState } from './usePersistentState';
 import { useThemePreference } from './useThemePreference';
 
@@ -44,6 +46,19 @@ export function App() {
   // Detailed by default: this is a learning tool. Remembered once changed.
   const [detail, setDetail] = usePersistentState<DetailLevel>('dax-explorer-detail', 'detailed', isDetailLevel);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  // The optional local helper (Power BI Desktop connection). Created once; the token is read from the address bar.
+  const [helperClient] = useState(() => createHelperClient(takeHelperToken()));
+  // If the helper's link (with "#token=...") is pasted into a tab where the app is already open, only the
+  // fragment changes and the page doesn't reload; reload so the token is picked up.
+  useEffect(() => {
+    const onHashChange = () => {
+      if (tokenFromHash(window.location.hash)) window.location.reload();
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+  // The connected model. Used in the next step to make measure/column types certain.
+  const [, setConnectedModel] = useState<{ model: ModelMetadata; connection: ConnectionInfo } | null>(null);
 
   // Binding is cheap and depends on settings that can change after Analyze, so it is derived on render.
   const binding = useMemo(
@@ -105,6 +120,11 @@ export function App() {
           <ThemeToggle value={theme} onChange={setTheme} />
         </div>
       </header>
+
+      <DataSourceBar
+        client={helperClient}
+        onModelChange={(model, connection) => setConnectedModel(model && connection ? { model, connection } : null)}
+      />
 
       <main className="workspace">
         <DaxInputPanel

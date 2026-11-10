@@ -1,0 +1,186 @@
+/**
+ * Talks to the optional local helper, which connects to Power BI Desktop.
+ *
+ * Security: the helper opens the app with a secret token in the URL fragment ("#token=...").
+ * Fragments are never sent over the network. The app moves the token into sessionStorage
+ * (this browser tab only), removes it from the address bar, and sends it with every request.
+ */
+
+export const TOKEN_HEADER = 'X-DaxExplorer-Token';
+const SESSION_KEY = 'dax-explorer-helper-token';
+
+// ---------------------------------------------------------------- types (match the helper's JSON)
+
+export interface DesktopInstanceInfo {
+  port: number;
+  reportName: string | null;
+}
+
+export interface ConnectionInfo {
+  source: string;
+  port: number;
+  reportName: string | null;
+  connectedAt: string;
+}
+
+export interface ModelSummary {
+  tables: number;
+  columns: number;
+  measures: number;
+  relationships: number;
+}
+
+export interface HelperStatus {
+  helperVersion: string;
+  connection: ConnectionInfo | null;
+  modelSummary: ModelSummary | null;
+}
+
+export interface TableInfo {
+  name: string;
+  isHidden: boolean;
+  expression: string | null;
+}
+
+export interface ColumnInfo {
+  table: string;
+  name: string;
+  dataType: string;
+  isHidden: boolean;
+  kind: string;
+  expression: string | null;
+}
+
+export interface MeasureInfo {
+  table: string;
+  name: string;
+  expression: string;
+  formatString: string | null;
+  isHidden: boolean;
+  displayFolder: string | null;
+}
+
+export interface RelationshipInfo {
+  fromTable: string;
+  fromColumn: string;
+  fromCardinality: string;
+  toTable: string;
+  toColumn: string;
+  toCardinality: string;
+  isActive: boolean;
+  crossFilteringBehavior: string;
+}
+
+export interface ModelMetadata {
+  databaseName: string;
+  tables: TableInfo[];
+  columns: ColumnInfo[];
+  measures: MeasureInfo[];
+  relationships: RelationshipInfo[];
+}
+
+// ---------------------------------------------------------------- token handling
+
+/** Pure: the token from a URL fragment such as "#token=abc", or null. */
+export function tokenFromHash(hash: string): string | null {
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const token = params.get('token');
+  return token && token.length >= 16 ? token : null;
+}
+
+/**
+ * Reads the token from the address bar (first visit) or this tab's session storage (reloads),
+ * and removes it from the address bar so it isn't bookmarked or shared by accident.
+ */
+export function takeHelperToken(): string | null {
+  const fromHash = tokenFromHash(window.location.hash);
+  if (fromHash) {
+    try {
+      sessionStorage.setItem(SESSION_KEY, fromHash);
+    } catch {
+      // Without storage the token still works until the page is reloaded.
+    }
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    return fromHash;
+  }
+  try {
+    return sessionStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------- client
+
+/** Whether the helper can be used from this page. */
+export type HelperAvailability =
+  | { kind: 'available'; status: HelperStatus }
+  /** The helper is running, but this page was not opened with its link. */
+  | { kind: 'needs-token' }
+  /** No helper (normal for the plain web app): symbolic mode only. */
+  | { kind: 'unavailable' };
+
+export class HelperError extends Error {}
+
+export interface HelperClient {
+  check(): Promise<HelperAvailability>;
+  instances(): Promise<DesktopInstanceInfo[]>;
+  connect(port: number): Promise<void>;
+  disconnect(): Promise<void>;
+  model(): Promise<ModelMetadata>;
+}
+
+export function createHelperClient(token: string | null, fetchImpl: typeof fetch = (...args) => fetch(...args)): HelperClient {
+  async function call(path: string, init: RequestInit = {}): Promise<Response> {
+    const headers = new Headers(init.headers);
+    if (token) headers.set(TOKEN_HEADER, token);
+    if (init.body) headers.set('Content-Type', 'application/json');
+    return fetchImpl(path, { ...init, headers, cache: 'no-store' });
+  }
+
+  async function json<T>(path: string, init?: RequestInit): Promise<T> {
+    let response: Response;
+    try {
+      response = await call(path, init);
+    } catch {
+      throw new HelperError('The helper is not responding. Is it still running?');
+    }
+    if (!response.ok) throw new HelperError(await errorMessage(response));
+    return (await response.json()) as T;
+  }
+
+  return {
+    async check() {
+      let response: Response;
+      try {
+        response = await call('/api/status');
+      } catch {
+        return { kind: 'unavailable' };
+      }
+      if (response.status === 401) return { kind: 'needs-token' };
+      const type = response.headers.get('Content-Type') ?? '';
+      if (!response.ok || !type.includes('application/json')) return { kind: 'unavailable' };
+      return { kind: 'available', status: (await response.json()) as HelperStatus };
+    },
+    instances: () => json<DesktopInstanceInfo[]>('/api/desktop/instances'),
+    async connect(port) {
+      await json('/api/connect', { method: 'POST', body: JSON.stringify({ port }) });
+    },
+    async disconnect() {
+      await json('/api/disconnect', { method: 'POST' });
+    },
+    model: () => json<ModelMetadata>('/api/model'),
+  };
+}
+
+/** The helper's own message ({ error } or a problem title/detail), or a generic one. */
+async function errorMessage(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: string; title?: string; detail?: string };
+    if (body.error) return body.error;
+    if (body.title) return body.detail ? `${body.title} ${body.detail}` : body.title;
+  } catch {
+    // fall through
+  }
+  return `The helper returned an error (${response.status}).`;
+}

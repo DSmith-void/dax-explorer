@@ -11,9 +11,9 @@ import { TokenTable } from './TokenTable';
 /** Static illustration shown before the first analysis. */
 const EXAMPLE_NODES: { depth: number; text: string; kind: string }[] = [
   { depth: 0, text: 'DIVIDE', kind: 'function' },
-  { depth: 1, text: '[Total Sales]', kind: 'measure · sees F' },
+  { depth: 1, text: '[Total Sales]', kind: "measure · all the report's filters" },
   { depth: 1, text: 'CALCULATE', kind: 'function · changes filters' },
-  { depth: 2, text: '[Total Sales]', kind: 'measure · sees F without Category' },
+  { depth: 2, text: '[Total Sales]', kind: 'measure · without the Category filter' },
   { depth: 2, text: 'REMOVEFILTERS', kind: 'function' },
   { depth: 3, text: 'Product[Category]', kind: 'column' },
 ];

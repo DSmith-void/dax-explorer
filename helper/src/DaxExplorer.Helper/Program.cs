@@ -1,19 +1,83 @@
+using System.Diagnostics;
 using DaxExplorer.Helper.Discovery;
 using DaxExplorer.Helper.Model;
+using DaxExplorer.Helper.Server;
 using Microsoft.AnalysisServices.AdomdClient;
 
-// C2 step 1: discovery and model reading, exercised through a "describe" command.
-// Step 2 replaces this with the local HTTP service that serves the app.
+// DAX Execution Explorer helper.
+//   (no arguments)        start the local helper, serve the app and open it in the browser
+//   --port <n>            listen on another loopback port (default 5092)
+//   --app <folder>        folder with the built app (default: the repository's dist folder)
+//   --no-browser          don't open the browser
+//   describe [port]       print what the helper finds in Power BI Desktop, then exit
 
 if (args is ["describe", ..])
 {
-    return Describe(args.Length > 1 && int.TryParse(args[1], out var port) ? port : null);
+    return Describe(args.Length > 1 && int.TryParse(args[1], out var describePort) ? describePort : null);
 }
 
-Console.WriteLine("Usage: DaxExplorer.Helper describe [port]");
-Console.WriteLine("  Lists running Power BI Desktop instances and, if exactly one is open (or a port is given),");
-Console.WriteLine("  prints that model's tables, columns, measures and relationships.");
-return 0;
+var port = HelperServer.DefaultPort;
+string? appPath = null;
+var openBrowser = true;
+for (var i = 0; i < args.Length; i++)
+{
+    switch (args[i])
+    {
+        case "--port" when i + 1 < args.Length && int.TryParse(args[i + 1], out var p) && p is > 0 and <= 65535:
+            port = p;
+            i++;
+            break;
+        case "--app" when i + 1 < args.Length:
+            appPath = Path.GetFullPath(args[++i]);
+            break;
+        case "--no-browser":
+            openBrowser = false;
+            break;
+        default:
+            Console.Error.WriteLine($"Unknown option: {args[i]}");
+            return 2;
+    }
+}
+
+// A fixed token can be supplied for development (the Vite dev server forwards it); otherwise a new random one.
+var token = Environment.GetEnvironmentVariable("DAXEXPLORER_HELPER_TOKEN") is { Length: >= 16 } devToken
+    ? devToken
+    : TokenGuard.NewToken();
+appPath ??= HelperServer.FindAppPath(AppContext.BaseDirectory);
+
+var app = HelperServer.Build(new HelperOptions(port, appPath, token));
+var url = $"http://127.0.0.1:{port}/#token={token}";
+
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    Console.WriteLine();
+    Console.WriteLine("DAX Execution Explorer helper is running (this computer only).");
+    Console.WriteLine($"Open the app: {url}");
+    Console.WriteLine(appPath is null ? "Note: the app has not been built yet; run 'npm run build' first." : $"Serving the app from: {appPath}");
+    Console.WriteLine("Press Ctrl+C to stop.");
+    if (openBrowser)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Console.WriteLine("Could not open the browser automatically; use the link above.");
+        }
+    }
+});
+
+try
+{
+    app.Run();
+    return 0;
+}
+catch (IOException ex) when (ex.InnerException is System.Net.Sockets.SocketException || ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
+{
+    Console.Error.WriteLine($"Port {port} is already in use. Start the helper with --port <another port>.");
+    return 3;
+}
 
 static int Describe(int? requestedPort)
 {
@@ -24,8 +88,8 @@ static int Describe(int? requestedPort)
         Console.WriteLine($"  port {instance.Port}  report: {instance.ReportName ?? "(unknown)"}  engine pid: {instance.EngineProcessId}");
     }
 
-    var target = requestedPort is { } p
-        ? instances.FirstOrDefault(i => i.Port == p)
+    var target = requestedPort is { } rp
+        ? instances.FirstOrDefault(i => i.Port == rp)
         : instances.Count == 1 ? instances[0] : null;
     if (target is null)
     {

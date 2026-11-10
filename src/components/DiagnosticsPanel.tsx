@@ -34,8 +34,8 @@ export function DiagnosticsPanel({ result, binding, analysis, detail, inputChang
       <div aria-live="polite" className="diagnostics-body">
         {result === null ? (
           <p className="placeholder-lead">
-            Press <strong>Analyze DAX</strong> to analyze the expression. Results will separate what is
-            known for certain from what needs model metadata, query context, or data.
+            Press <strong>Analyze DAX</strong> to analyze the expression. The results separate what the app knows for
+            certain from what depends on your data model, your report, or your data.
           </p>
         ) : (
           <>

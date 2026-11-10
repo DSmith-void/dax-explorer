@@ -31,6 +31,32 @@ npm install
 npm run dev       # start the local dev server
 ```
 
+## Connecting to Power BI Desktop (optional, Windows)
+
+Without a connection the app explains DAX on its own. To use your own model, run the local
+**helper** (in `helper/`), which finds open Power BI Desktop reports and serves the app:
+
+```sh
+npm run build                                   # build the app the helper serves
+dotnet run --project helper/src/DaxExplorer.Helper   # requires the .NET 10 SDK (see helper/global.json)
+```
+
+The helper opens the app in your browser. Pick an open report in the **Power BI Desktop** bar and
+press **Connect**.
+
+How it stays safe:
+
+- It listens on `127.0.0.1` only (this computer, never the network) and rejects other host names.
+- Each start creates a random token, passed to the page in the URL fragment (`#token=…`, never sent
+  over the network); every data request must carry it, so other websites cannot read your model.
+- It only runs read-only DAX queries, keeps model information in memory, and logs no model details.
+- It only connects to ports that are running Power BI Desktop reports.
+
+For UI development with hot reload, start the helper with a fixed token and the dev server with the
+same one, e.g. `DAXEXPLORER_HELPER_TOKEN=<16+ characters>` for both, then `npm run dev`.
+Helper tests: `dotnet test helper` (set `DAXEXPLORER_LIVE_TESTS=1` to also run the live test
+against a single open synthetic report).
+
 ## Scripts
 
 | Script            | What it does                                           |
@@ -49,6 +75,7 @@ npm run dev       # start the local dev server
   Pure TypeScript with **no UI dependencies**; the linter enforces this.
 - `src/app/`, `src/components/`, `src/styles/` — the React user interface.
 - `src/samples/` — synthetic sample measures.
+- `helper/` — optional .NET 10 local helper that connects to Power BI Desktop (C#, ADOMD.NET).
 
 ## Tech stack
 
