@@ -1,5 +1,6 @@
 using System.Reflection;
 using DaxExplorer.Helper.Model;
+using Microsoft.AnalysisServices.AdomdClient;
 
 namespace DaxExplorer.Helper.Server;
 
@@ -117,6 +118,36 @@ public static class Endpoints
                     error = $"A report named \"{Sample.ReportName}\" is open in Power BI Desktop, but it isn't DAX Explorer's sample, so DAX Explorer did not connect to it. Close that report and try again.",
                 })
                 : Results.Ok(new { state = "waiting" });
+        });
+
+        // Runs a read-only DAX query on the connected report. The app sends an expression; the statement
+        // (always EVALUATE ...) is written here. Neither the query nor its results are logged.
+        api.MapPost("/evaluate", (EvaluateRequest request, ConnectionState state, IQueryRunner runner) =>
+        {
+            var (connection, model) = state.Current;
+            if (connection is null || model is null)
+            {
+                return Results.Conflict(new { error = "Connect to a report first: values come from Power BI Desktop." });
+            }
+            var (query, maxRows, error) = QueryBuilder.Build(request);
+            if (query is null) return Results.BadRequest(new { error });
+            try
+            {
+                var result = runner.Run(connection.Port, model.DatabaseName, query, maxRows, TimeSpan.FromSeconds(60));
+                return Results.Ok(new { columns = result.Columns, rows = result.Rows, truncated = result.Truncated });
+            }
+            catch (AdomdErrorResponseException ex)
+            {
+                // The engine's own message (for example "The column ... cannot be found") helps fix the DAX.
+                return Results.UnprocessableEntity(new { error = ex.Message });
+            }
+            catch (AdomdConnectionException)
+            {
+                return Results.Problem(
+                    title: "Power BI Desktop is not responding.",
+                    detail: "The report may have been closed. Reconnect and try again.",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
         });
 
         api.MapPost("/disconnect", (ConnectionState state) =>

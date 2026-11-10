@@ -58,6 +58,19 @@ public sealed class EndpointTests : IAsyncLifetime
     private readonly FakeInstances _instances = new();
     private readonly FakeSampleLauncher _launcher = new();
     private readonly FakeClock _clock = new();
+
+    private sealed class FakeQueryRunner : IQueryRunner
+    {
+        public List<(int Port, string Database, string Query, int MaxRows)> Runs { get; } = [];
+        public QueryResult Result { get; set; } = new(["[value]"], [[42.5]], false);
+        public QueryResult Run(int port, string database, string query, int maxRows, TimeSpan timeout)
+        {
+            Runs.Add((port, database, query, maxRows));
+            return Result;
+        }
+    }
+
+    private readonly FakeQueryRunner _runner = new();
     private readonly FakeModelSource _source = new();
     private WebApplication _app = null!;
     private HttpClient _client = null!;
@@ -71,6 +84,7 @@ public sealed class EndpointTests : IAsyncLifetime
             builder.Services.AddSingleton<IModelSource>(_source);
             builder.Services.AddSingleton<ISampleLauncher>(_launcher);
             builder.Services.AddSingleton<TimeProvider>(_clock);
+            builder.Services.AddSingleton<IQueryRunner>(_runner);
         });
         await _app.StartAsync();
         _client = _app.GetTestClient();
@@ -286,6 +300,79 @@ public sealed class EndpointTests : IAsyncLifetime
         await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
         var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/status")));
         Assert.False(status.GetProperty("connection").GetProperty("isSample").GetBoolean());
+    }
+
+    // ------------------------------------------------------------------ evaluate
+
+    [Fact]
+    public async Task Evaluate_needs_a_connection()
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/evaluate", body: new { kind = "scalar", dax = "1" }));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(_runner.Runs);
+    }
+
+    [Fact]
+    public async Task Evaluate_writes_the_EVALUATE_statement_itself_on_the_connected_report()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+
+        var scalar = await _client.SendAsync(Request(HttpMethod.Post, "/api/evaluate", body: new { kind = "scalar", dax = "[Total Sales] // note" }));
+        Assert.Equal(HttpStatusCode.OK, scalar.StatusCode);
+        var body = await Json(scalar);
+        Assert.Equal(42.5, body.GetProperty("rows")[0][0].GetDouble());
+        Assert.False(body.GetProperty("truncated").GetBoolean());
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/evaluate", body: new { kind = "table", dax = "VALUES(Product[Category])", maxRows = 5000 }));
+
+        Assert.Collection(
+            _runner.Runs,
+            run =>
+            {
+                Assert.Equal((61403, "db"), (run.Port, run.Database));
+                // The comment can't hide the closing parenthesis: the expression is on its own line.
+                Assert.Equal("EVALUATE ROW(\"value\",\n[Total Sales] // note\n)", run.Query);
+                Assert.Equal(1, run.MaxRows);
+            },
+            run =>
+            {
+                Assert.StartsWith("EVALUATE\n", run.Query);
+                Assert.Equal(QueryBuilder.MaxRows, run.MaxRows); // capped
+            });
+    }
+
+    [Theory]
+    [InlineData("scalar", "")]
+    [InlineData("scalar", "   ")]
+    [InlineData("command", "1")]
+    [InlineData(null, "1")]
+    public async Task Evaluate_rejects_requests_it_cannot_turn_into_a_query(string? kind, string dax)
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/evaluate", body: new { kind, dax }));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(_runner.Runs);
+    }
+
+    [Fact]
+    public void Query_values_become_plain_JSON_values_and_dates_are_marked()
+    {
+        Assert.Null(QueryBuilder.ToJsonValue(DBNull.Value));
+        Assert.Null(QueryBuilder.ToJsonValue(double.NaN));
+        Assert.Equal(12.5m, QueryBuilder.ToJsonValue(12.5m));
+        Assert.Equal("Widgets", QueryBuilder.ToJsonValue("Widgets"));
+        var date = Assert.IsType<Dictionary<string, string>>(QueryBuilder.ToJsonValue(new DateTime(2024, 3, 7, 8, 30, 0)));
+        Assert.Equal("2024-03-07T08:30:00", date["date"]);
+    }
+
+    [Fact]
+    public void Every_statement_starts_with_EVALUATE()
+    {
+        foreach (var kind in new[] { "scalar", "table" })
+        {
+            var (query, _, _) = QueryBuilder.Build(new EvaluateRequest(kind, "{\"delete\": {}}", null));
+            Assert.StartsWith("EVALUATE", query);
+        }
     }
 
     [Fact]

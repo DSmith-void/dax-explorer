@@ -1715,3 +1715,164 @@ select {
 .data-pill-action {
   color: var(--color-accent);
 }
+
+/* Concrete report filters (F) inside a filter view */
+.report-filter-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 12px;
+  display: grid;
+  gap: 2px;
+  font-weight: 400;
+}
+
+.report-filter.is-removed code {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.report-filter.is-maybe-removed code {
+  text-decoration: underline dotted;
+}
+
+/* --- Report filters (F) panel --- */
+.data-pill-f {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.data-pill.is-filtered {
+  border-color: var(--color-accent);
+}
+
+.data-pill.is-filtered .data-pill-f {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.report-filters-panel {
+  width: min(36rem, calc(100vw - 2 * var(--gap)));
+  left: 0;
+  right: auto;
+}
+
+.filter-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+}
+
+.chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-tabs button {
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.panel-tabs button.is-active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+.stacked-field {
+  display: grid;
+  gap: 4px;
+}
+
+.text-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.query-input {
+  min-height: 8rem;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  white-space: pre;
+}
+
+.value-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 12rem;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.value-list label {
+  cursor: pointer;
+}
+
+.visual-summary {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+}
+
+.visual-summary code + code {
+  margin-left: 6px;
+}
+
+.visual-measures .link-button + .link-button {
+  margin-left: 8px;
+}
+
+.visual-rows {
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.visual-rows tr {
+  cursor: pointer;
+}
+
+.visual-rows tr.is-picked td {
+  background: var(--color-accent-soft);
+}

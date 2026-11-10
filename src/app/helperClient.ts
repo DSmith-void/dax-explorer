@@ -81,6 +81,16 @@ export interface ModelMetadata {
   relationships: RelationshipInfo[];
 }
 
+/** A value from a query. Dates arrive as { date: "yyyy-MM-ddTHH:mm:ss" }. */
+export type QueryValue = string | number | boolean | null | { date: string };
+
+export interface QueryResult {
+  columns: string[];
+  rows: QueryValue[][];
+  /** True when there were more rows than requested. */
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------- token handling
 
 /** Pure: the token from a URL fragment such as "#token=abc", or null. */
@@ -134,6 +144,11 @@ export interface HelperClient {
   openSample(): Promise<'open' | 'starting'>;
   /** Connects to the sample if Desktop has finished loading it. */
   connectSample(): Promise<'connected' | 'waiting'>;
+  /**
+   * Calculates a DAX expression on the connected report (read-only): one value ("scalar") or the
+   * rows of a table expression ("table", at most maxRows). The helper writes the EVALUATE statement.
+   */
+  evaluate(kind: 'scalar' | 'table', dax: string, maxRows?: number): Promise<QueryResult>;
 }
 
 export function createHelperClient(token: string | null, fetchImpl: typeof fetch = (...args) => fetch(...args)): HelperClient {
@@ -182,6 +197,7 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
     async connectSample() {
       return (await json<{ state: 'connected' | 'waiting' }>('/api/sample/connect', { method: 'POST' })).state;
     },
+    evaluate: (kind, dax, maxRows) => json<QueryResult>('/api/evaluate', { method: 'POST', body: JSON.stringify({ kind, dax, maxRows }) }),
   };
 }
 

@@ -7,6 +7,8 @@ import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
 import { HelpDialog } from '../components/HelpDialog';
 import { Icon } from '../components/Icons';
 import { MeasurePicker } from '../components/MeasurePicker';
+import { ReportFiltersContext } from '../components/reportFiltersContext';
+import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { TimelineBar } from '../components/StepControls';
 import { StepPanel } from '../components/StepPanel';
@@ -14,6 +16,7 @@ import { SummaryCards } from '../components/SummaryCards';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { bind, type ReferenceType, type ResolutionMode } from '../engine/binder/binder';
 import { analyzeContext } from '../engine/context/analyzer';
+import type { ReportFilter } from '../engine/context/reportFilters';
 import { buildTimeline } from '../engine/context/timeline';
 import type { InputMode } from '../engine/definition';
 import { createModelIndex } from '../engine/model';
@@ -57,6 +60,8 @@ export function App() {
   const [stepIndex, setStepIndex] = useState(0);
   const [tab, setTab] = useState<Tab>('step');
   const [helpOpen, setHelpOpen] = useState(false);
+  // The concrete stand-in for the report's filters (F). Empty: none chosen yet.
+  const [reportFilters, setReportFilters] = useState<readonly ReportFilter[]>([]);
   const [referenceMode, setReferenceMode] = usePersistentState<ResolutionMode>(
     'dax-explorer-reference-mode',
     'convention',
@@ -181,6 +186,22 @@ export function App() {
     setEditing(false);
   }
 
+  function handleModelChange(model: ModelMetadata | null, connection: ConnectionInfo | null) {
+    // Report filters belong to one model: forget them when the connection changes.
+    if (connectedModel?.model.databaseName !== model?.databaseName || connectedModel?.connection.port !== connection?.port) {
+      setReportFilters([]);
+    }
+    setConnectedModel(model && connection ? { model, connection } : null);
+  }
+
+  /** Loads a measure of the connected model by name (case-insensitive); false when there is no such measure. */
+  function handleExplainMeasure(name: string): boolean {
+    const measure = modelMeasures.find((m) => m.name.toLowerCase() === name.toLowerCase());
+    if (!measure) return false;
+    explain(measure.text, 'measure-definition');
+    return true;
+  }
+
   function handleChooseReferenceType(key: string, type: ReferenceType | null) {
     setUserChoices((previous) => {
       const next = { ...previous };
@@ -211,6 +232,7 @@ export function App() {
   ];
 
   return (
+    <ReportFiltersContext.Provider value={reportFilters}>
     <div className="app">
       <header className="toolbar">
         <div className="brand">
@@ -231,11 +253,18 @@ export function App() {
         <button type="button" className="secondary-button" onClick={handleWriteYourOwn}>
           <Icon name="edit" /> Write your own DAX
         </button>
+        <ReportFiltersPanel
+          client={helperClient}
+          model={connectedModel?.model ?? null}
+          filters={reportFilters}
+          onChange={setReportFilters}
+          onExplainMeasure={handleExplainMeasure}
+        />
         <span className="toolbar-spacer" />
         <div className="toolbar-settings">
           <DataSourceBar
             client={helperClient}
-            onModelChange={(model, connection) => setConnectedModel(model && connection ? { model, connection } : null)}
+            onModelChange={handleModelChange}
           />
           <SegmentedControl label="Explanations" options={DETAIL_OPTIONS} value={detail} onChange={setDetail} />
           <ThemeToggle value={theme} onChange={setTheme} />
@@ -351,5 +380,6 @@ export function App() {
 
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
+    </ReportFiltersContext.Provider>
   );
 }

@@ -1,5 +1,13 @@
 import { entryText, incomingText, originText, rowContextText } from '../engine/context/describe';
 import type { EvalContext } from '../engine/context/model';
+import { reportFilterStatus, reportFilterText, type ReportFilterStatus } from '../engine/context/reportFilters';
+import { useReportFilters } from './reportFiltersContext';
+
+const STATUS_TEXT: Record<ReportFilterStatus, string> = {
+  applies: 'applies',
+  removed: 'removed here',
+  'maybe-removed': 'may be removed through a relationship (not checked)',
+};
 
 interface ContextViewProps {
   context: EvalContext;
@@ -9,6 +17,7 @@ interface ContextViewProps {
 
 /** Structured rendering of a symbolic evaluation context. */
 export function ContextView({ context, compareTo }: ContextViewProps) {
+  const reportFilters = useReportFilters();
   if (context.unknownReason) {
     return (
       <ul className="context-view">
@@ -25,6 +34,18 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
     <ul className="context-view">
       <li className={`context-incoming${previousIncoming !== null && previousIncoming !== incoming ? ' is-changed' : ''}`}>
         {incoming}
+        {reportFilters.length > 0 && (
+          <ul className="report-filter-list" aria-label="The report's filters at this point">
+            {reportFilters.map((filter, i) => {
+              const status = reportFilterStatus(filter, context.filter.removals);
+              return (
+                <li key={i} className={`report-filter is-${status}`}>
+                  <code>{reportFilterText(filter)}</code> <span className="context-origin">{STATUS_TEXT[status]}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </li>
       {context.filter.entries.map((entry, i) => {
         const isNew = compareTo !== undefined && !previousEntries.has(`${entryText(entry)}|${originText(entry)}`);

@@ -48,6 +48,7 @@ public static class HelperServer
         builder.Services.AddSingleton<ConnectionState>();
         builder.Services.AddSingleton<IDesktopInstances, DesktopInstances>();
         builder.Services.AddSingleton<IModelSource, AdomdModelSource>();
+        builder.Services.AddSingleton<IQueryRunner, AdomdQueryRunner>();
         builder.Services.AddSingleton<ISampleLauncher>(new ShellSampleLauncher(Sample.FindProject(AppContext.BaseDirectory)));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SampleLaunches>();
