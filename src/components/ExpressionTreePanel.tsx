@@ -43,6 +43,8 @@ interface ExpressionTreePanelProps {
   onChooseReferenceType: (key: string, type: ReferenceType | null) => void;
   userChoiceCount: number;
   onClearChoices: () => void;
+  /** Name of the connected Power BI report, or null when not connected. */
+  connectedReport: string | null;
 }
 
 export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
@@ -85,8 +87,17 @@ export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
       {root ? (
         <>
           <p className="placeholder-lead">
-            Click any part to highlight it in the editor and see its details below. {MODE_HINTS[referenceMode]} Use the{' '}
-            <em>measure</em> / <em>column</em> buttons to set a name yourself.
+            Click any part to highlight it in the editor and see its details below.{' '}
+            {props.connectedReport ? (
+              <>
+                Names are checked against your connected report (<strong>{props.connectedReport}</strong>), so measures and
+                columns it knows are certain.
+              </>
+            ) : (
+              <>
+                {MODE_HINTS[referenceMode]} Use the <em>measure</em> / <em>column</em> buttons to set a name yourself.
+              </>
+            )}
           </p>
           <ExpressionTree
             root={root}

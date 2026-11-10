@@ -1,5 +1,6 @@
 import { lookupFunction, parametersForCall, type FunctionSpec, type ParamSpec } from '../catalog/functions';
 import type { Diagnostic } from '../diagnostics';
+import type { ModelIndex } from '../model';
 import { childrenOf, type AstNode, type BracketRef, type ColumnRef, type Expr } from '../parser/ast';
 
 /**
@@ -8,16 +9,18 @@ import { childrenOf, type AstNode, type BracketRef, type ColumnRef, type Expr } 
  *  - whether each [X] / Table[X] reference is a measure or a column, and WHY.
  *
  * Evidence, strongest first:
- *  1. function-signature  — the argument position only accepts a column. Certain; locks the choice.
- *  2. user                — the user said so.
- *  3. other-occurrence    — (convention mode only) the same name is used as a column elsewhere. Assumed.
- *  4. convention          — (convention mode only) [X] is a measure, Table[X] is a column. Assumed.
+ *  1. model               — a connected model says what the name is. Certain; locks the choice.
+ *                           (If a function needs a column but the model says measure, that is a real DAX error.)
+ *  2. function-signature  — the argument position only accepts a column. Certain; locks the choice.
+ *  3. user                — the user said so.
+ *  4. other-occurrence    — (convention mode only) the same name is used as a column elsewhere. Assumed.
+ *  5. convention          — (convention mode only) [X] is a measure, Table[X] is a column. Assumed.
  *  Otherwise the reference stays unresolved; nothing is guessed.
  */
 
 export type ReferenceType = 'measure' | 'column';
 export type ResolutionMode = 'convention' | 'strict';
-export type ResolutionSource = 'function-signature' | 'user' | 'other-occurrence' | 'convention' | 'unresolved';
+export type ResolutionSource = 'model' | 'function-signature' | 'user' | 'other-occurrence' | 'convention' | 'unresolved';
 
 export interface ReferenceResolution {
   nodeId: number;
@@ -27,8 +30,10 @@ export interface ReferenceResolution {
   source: ResolutionSource;
   /** Human-readable reason, e.g. "required by SUM (column argument)". */
   detail: string;
-  /** True when the function signature decides; the user cannot override it. */
+  /** True when the model or a function signature decides; the user cannot override it. */
   locked: boolean;
+  /** For a measure found in a connected model: its DAX definition. */
+  definition?: { table: string; name: string; expression: string };
 }
 
 export interface CallBinding {
@@ -43,6 +48,8 @@ export interface BindOptions {
   mode: ResolutionMode;
   /** Keyed by ReferenceResolution.key. */
   userChoices: Readonly<Record<string, ReferenceType>>;
+  /** A connected model, when available: the strongest evidence. */
+  model?: ModelIndex;
 }
 
 export interface BindResult {
@@ -88,6 +95,15 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
   function visit(node: AstNode, requirement: ColumnRequirement | null) {
     if (node.kind === 'BracketRef' || node.kind === 'ColumnRef') {
       occurrences.push({ node, requirement });
+      return;
+    }
+    if (node.kind === 'TableRef' && options.model && !options.model.hasTable(node.name)) {
+      result.diagnostics.push({
+        severity: 'warning',
+        code: 'table-not-in-model',
+        message: `There is no table named ${node.quoted ? `'${node.name}'` : node.name} in the connected model. Check the spelling, or that you are connected to the right report.`,
+        span: node.span,
+      });
       return;
     }
     if (node.kind !== 'FunctionCall') {
@@ -136,6 +152,29 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
     const key = referenceKey(node);
     const userChoice = options.userChoices[key];
     let resolution: ReferenceResolution;
+
+    const fromModel = options.model ? resolveFromModel(node, options.model) : null;
+    if (fromModel) {
+      resolution = { nodeId: node.id, key, ...fromModel, source: 'model', locked: true };
+      if (requirement && fromModel.type === 'measure') {
+        result.diagnostics.push({
+          severity: 'error',
+          code: 'measure-where-column-required',
+          message: `${displayName(node)} is a measure in your model, but ${requirement.functionName} only accepts a column here. DAX will report an error.`,
+          span: node.span,
+        });
+      }
+      result.references.set(node.id, resolution);
+      continue;
+    }
+    if (options.model) {
+      result.diagnostics.push({
+        severity: 'warning',
+        code: 'not-in-model',
+        message: `${displayName(node)} is not a measure or column in the connected model. Check the spelling, or that you are connected to the right report.`,
+        span: node.span,
+      });
+    }
 
     if (requirement) {
       resolution = {
@@ -195,6 +234,37 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
   }
 
   return result;
+}
+
+/** What a connected model says about a reference, or null if the model doesn't know the name. */
+function resolveFromModel(
+  node: BracketRef | ColumnRef,
+  model: ModelIndex,
+): Pick<ReferenceResolution, 'type' | 'detail' | 'definition'> | null {
+  if (node.kind === 'BracketRef') {
+    const measure = model.measure(node.name);
+    if (measure) {
+      return { type: 'measure', detail: `certain: [${measure.name}] is a measure in your model`, definition: measure };
+    }
+    const tables = model.tablesWithColumn(node.name);
+    if (tables.length > 0) {
+      const where = tables.length === 1 ? `the ${tables[0]} table` : `the tables ${tables.join(', ')}`;
+      return { type: 'column', detail: `certain: your model has a column named ${node.name} (in ${where})` };
+    }
+    return null;
+  }
+  if (model.hasColumn(node.table, node.column)) {
+    return { type: 'column', detail: `certain: ${displayName(node)} is a column in your model` };
+  }
+  const measure = model.measure(node.column);
+  if (measure) {
+    return {
+      type: 'measure',
+      detail: `certain: [${measure.name}] is a measure in your model (written here with a table name, which DAX allows)`,
+      definition: measure,
+    };
+  }
+  return null;
 }
 
 function displayName(node: BracketRef | ColumnRef): string {

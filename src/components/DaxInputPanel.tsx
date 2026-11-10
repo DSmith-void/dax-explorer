@@ -13,10 +13,14 @@ interface DaxInputPanelProps {
   onModeChange: (mode: InputMode) => void;
   samples: readonly SampleMeasure[];
   onSelectSample: (sample: SampleMeasure) => void;
+  /** Measures from a connected model, ready to load ("Name =\nexpression"). Empty when not connected. */
+  modelMeasures: readonly { name: string; text: string }[];
+  onSelectModelMeasure: (text: string) => void;
   onAnalyze: () => void;
 }
 
 const CUSTOM_OPTION = 'custom';
+const MODEL_PREFIX = 'model:';
 
 const MODE_OPTIONS: { value: InputMode; label: string; title: string }[] = [
   {
@@ -41,34 +45,55 @@ export function DaxInputPanel({
   onModeChange,
   samples,
   onSelectSample,
+  modelMeasures,
+  onSelectModelMeasure,
   onAnalyze,
 }: DaxInputPanelProps) {
-  // Derived, not stored: the picker shows a sample only while the text matches it exactly.
+  // Derived, not stored: the picker shows an entry only while the text matches it exactly.
   const matchingSample = samples.find((sample) => sample.expression === value);
+  const matchingModelMeasure = modelMeasures.find((m) => m.text === value);
+  const selected = matchingSample?.id ?? (matchingModelMeasure ? MODEL_PREFIX + matchingModelMeasure.name : CUSTOM_OPTION);
   const isEmpty = value.trim().length === 0;
 
   return (
     <Panel id="dax-input" title="DAX Expression" className="input-panel">
       <div className="input-toolbar">
         <label className="field">
-          <span className="field-label">Sample</span>
+          <span className="field-label">{modelMeasures.length > 0 ? 'Measure or sample' : 'Sample'}</span>
           <select
-            value={matchingSample?.id ?? CUSTOM_OPTION}
+            value={selected}
             onChange={(event) => {
-              const sample = samples.find((s) => s.id === event.target.value);
+              const id = event.target.value;
+              if (id.startsWith(MODEL_PREFIX)) {
+                const measure = modelMeasures.find((m) => MODEL_PREFIX + m.name === id);
+                if (measure) onSelectModelMeasure(measure.text);
+                return;
+              }
+              const sample = samples.find((s) => s.id === id);
               if (sample) onSelectSample(sample);
             }}
           >
-            {!matchingSample && (
+            {selected === CUSTOM_OPTION && (
               <option value={CUSTOM_OPTION} disabled>
                 Custom expression
               </option>
             )}
-            {samples.map((sample) => (
-              <option key={sample.id} value={sample.id}>
-                {sample.title}
-              </option>
-            ))}
+            {modelMeasures.length > 0 && (
+              <optgroup label="Measures in your model">
+                {modelMeasures.map((m) => (
+                  <option key={m.name} value={MODEL_PREFIX + m.name}>
+                    {m.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Built-in samples">
+              {samples.map((sample) => (
+                <option key={sample.id} value={sample.id}>
+                  {sample.title}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
         <div className="field field-fit">

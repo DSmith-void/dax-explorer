@@ -12,7 +12,9 @@ import type { InputMode } from '../engine/definition';
 import type { AstNode } from '../engine/parser/ast';
 import { SAMPLE_MEASURES, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
+import { createModelIndex } from '../engine/model';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
+import { measureDefinitionText, toModelSnapshot } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
 import { useThemePreference } from './useThemePreference';
 
@@ -57,13 +59,27 @@ export function App() {
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
-  // The connected model. Used in the next step to make measure/column types certain.
-  const [, setConnectedModel] = useState<{ model: ModelMetadata; connection: ConnectionInfo } | null>(null);
+  // The connected model (from Power BI Desktop), if any: makes measure/column types certain.
+  const [connectedModel, setConnectedModel] = useState<{ model: ModelMetadata; connection: ConnectionInfo } | null>(null);
+  const modelIndex = useMemo(
+    () => (connectedModel ? createModelIndex(toModelSnapshot(connectedModel.model)) : undefined),
+    [connectedModel],
+  );
+  const modelMeasures = useMemo(
+    () =>
+      connectedModel
+        ? connectedModel.model.measures
+            .filter((m) => !m.isHidden)
+            .map((m) => ({ name: m.name, text: measureDefinitionText(m.name, m.expression) }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        : [],
+    [connectedModel],
+  );
 
   // Binding is cheap and depends on settings that can change after Analyze, so it is derived on render.
   const binding = useMemo(
-    () => (result?.parse ? bind(result.parse.root, { mode: referenceMode, userChoices }) : null),
-    [result, referenceMode, userChoices],
+    () => (result?.parse ? bind(result.parse.root, { mode: referenceMode, userChoices, model: modelIndex }) : null),
+    [result, referenceMode, userChoices, modelIndex],
   );
   // Context analysis depends on the binding (a measure and a column behave differently), so it is derived too.
   const contextAnalysis = useMemo(
@@ -79,6 +95,14 @@ export function App() {
 
   function handleAnalyze() {
     setResult(analyze(daxText, inputMode));
+    setSelectedNodeId(null);
+  }
+
+  /** Loads a measure from the connected model into the editor and analyzes it right away. */
+  function handleOpenMeasure(text: string) {
+    setDaxText(text);
+    setInputMode('measure-definition');
+    setResult(analyze(text, 'measure-definition'));
     setSelectedNodeId(null);
   }
 
@@ -135,6 +159,8 @@ export function App() {
           onModeChange={setInputMode}
           samples={SAMPLE_MEASURES}
           onSelectSample={handleSelectSample}
+          modelMeasures={modelMeasures}
+          onSelectModelMeasure={handleOpenMeasure}
           onAnalyze={handleAnalyze}
         />
         <div className="analysis-column">
@@ -149,6 +175,7 @@ export function App() {
             onChooseReferenceType={handleChooseReferenceType}
             userChoiceCount={Object.keys(userChoices).length}
             onClearChoices={() => setUserChoices({})}
+            connectedReport={connectedModel ? (connectedModel.connection.reportName ?? 'an unnamed report') : null}
           />
           <ContextInspectorPanel
             result={result}
@@ -157,6 +184,7 @@ export function App() {
             selectedId={selectedNodeId}
             detail={detail}
             onSelectNode={handleSelectNode}
+            onOpenMeasure={(name, expression) => handleOpenMeasure(measureDefinitionText(name, expression))}
           />
           <DiagnosticsPanel
             result={result}
@@ -170,7 +198,7 @@ export function App() {
       </main>
 
       <footer className="app-footer">
-        Early preview. Examples use a synthetic model (Sales, Product, Customer, Date, Plant).
+        Early preview. Built-in samples use a synthetic model (Sales, Product, Customer, Date, Plant).
       </footer>
     </div>
   );

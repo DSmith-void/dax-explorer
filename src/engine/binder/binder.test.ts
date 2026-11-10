@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FUNCTION_CATALOG, arity, lookupFunction, parametersForCall } from '../catalog/functions';
 import { tokenize } from '../lexer/lexer';
+import { createModelIndex } from '../model';
 import { childrenOf, type AstNode, type Expr } from '../parser/ast';
 import { parse } from '../parser/parser';
 import { bind, referenceKey, type BindOptions, type ReferenceResolution } from './binder';
@@ -205,6 +206,76 @@ describe('reference resolution: user choices', () => {
       .filter((n) => n.kind === 'BracketRef' || n.kind === 'ColumnRef')
       .map((n) => referenceKey(n as never));
     expect(keys).toEqual(['[a]', 't[a]']);
+  });
+});
+
+describe('reference resolution: connected model', () => {
+  const model = createModelIndex({
+    tables: ['Sales', 'Product', 'Sales Order'],
+    columns: [
+      { table: 'Sales', name: 'Amount' },
+      { table: 'Product', name: 'Category' },
+      { table: 'Product', name: 'Amount' }, // same column name in two tables
+      { table: 'Sales Order', name: 'Net Price' },
+    ],
+    measures: [{ table: 'Sales', name: 'Total Sales', expression: 'SUM(Sales[Amount])' }],
+  });
+  const WITH_MODEL: BindOptions = { mode: 'strict', userChoices: {}, model };
+
+  it('makes measures and columns certain, even in strict mode', () => {
+    expect(resolutions("DIVIDE([total sales], 'Sales Order'[Net Price])", WITH_MODEL)).toEqual([
+      '[total sales] measure model locked',
+      "'Sales Order'[Net Price] column model locked",
+    ]);
+  });
+
+  it("attaches the measure's DAX definition", () => {
+    const [ref] = [...bind(rootOf('[Total Sales]'), WITH_MODEL).references.values()];
+    expect(ref.definition).toEqual({ table: 'Sales', name: 'Total Sales', expression: 'SUM(Sales[Amount])' });
+    expect(ref.detail).toBe('certain: [Total Sales] is a measure in your model');
+  });
+
+  it('recognizes a measure written with a table name', () => {
+    expect(resolutions('Sales[Total Sales]', WITH_MODEL)).toEqual(['Sales[Total Sales] measure model locked']);
+  });
+
+  it('knows an unqualified column, and names every table that has it', () => {
+    const [ref] = [...bind(rootOf('SUMX(Sales, [Amount])'), WITH_MODEL).references.values()];
+    expect(ref).toMatchObject({ type: 'column', source: 'model' });
+    expect(ref.detail).toBe('certain: your model has a column named Amount (in the tables Sales, Product)');
+  });
+
+  it('overrides your own choices and the naming convention', () => {
+    const options: BindOptions = { mode: 'convention', userChoices: { '[total sales]': 'column' }, model };
+    expect(resolutions('[Total Sales]', options)).toEqual(['[Total Sales] measure model locked']);
+  });
+
+  it('reports a measure used where a column is required as a real error', () => {
+    const result = bind(rootOf('SUM([Total Sales])'), WITH_MODEL);
+    expect(result.diagnostics).toMatchObject([{ severity: 'error', code: 'measure-where-column-required' }]);
+    expect(result.diagnostics[0].message).toBe(
+      '[Total Sales] is a measure in your model, but SUM only accepts a column here. DAX will report an error.',
+    );
+  });
+
+  it('warns about names the model does not have, and falls back to the other evidence', () => {
+    const result = bind(rootOf('[Totl Sales] + SUM(Sales[Amout])'), { ...WITH_MODEL, mode: 'convention' });
+    expect(result.diagnostics.map((d) => d.code)).toEqual(['not-in-model', 'not-in-model']);
+    expect([...result.references.values()].map((r) => `${r.type} ${r.source}`)).toEqual(['measure convention', 'column function-signature']);
+  });
+
+  it('warns about tables the model does not have', () => {
+    const result = bind(rootOf('COUNTROWS(Salse)'), WITH_MODEL);
+    expect(result.diagnostics).toMatchObject([{ code: 'table-not-in-model' }]);
+    expect(result.diagnostics[0].message).toContain('no table named Salse');
+  });
+
+  it('does not treat keyword arguments as tables', () => {
+    expect(bind(rootOf('RANKX(ALL(Product), [Total Sales], , DESC)'), WITH_MODEL).diagnostics).toEqual([]);
+  });
+
+  it('changes nothing when no model is connected', () => {
+    expect(bind(rootOf('[Anything] + COUNTROWS(Whatever)'), CONVENTION).diagnostics).toEqual([]);
   });
 });
 

@@ -68,6 +68,8 @@ function sourceText(node: AstNode, source: string, maxLength = 60): string {
 /** Short certainty tag for a resolved reference. */
 export function resolutionTag(resolution: ReferenceResolution): NonNullable<NodePresentation['tag']> {
   switch (resolution.source) {
+    case 'model':
+      return { text: 'from your model', tone: 'certain', title: resolution.detail };
     case 'function-signature':
       return { text: 'required', tone: 'certain', title: resolution.detail };
     case 'user':

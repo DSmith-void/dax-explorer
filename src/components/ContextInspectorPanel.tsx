@@ -29,9 +29,19 @@ interface ContextInspectorPanelProps {
   selectedId: number | null;
   detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
+  /** Opens a measure from the connected model in the editor. */
+  onOpenMeasure: (name: string, expression: string) => void;
 }
 
-export function ContextInspectorPanel({ result, binding, analysis, selectedId, detail, onSelectNode }: ContextInspectorPanelProps) {
+export function ContextInspectorPanel({
+  result,
+  binding,
+  analysis,
+  selectedId,
+  detail,
+  onSelectNode,
+  onOpenMeasure,
+}: ContextInspectorPanelProps) {
   const root = result?.parse?.root ?? null;
   const node = selectedId !== null ? findNode(root, selectedId) : null;
 
@@ -45,6 +55,7 @@ export function ContextInspectorPanel({ result, binding, analysis, selectedId, d
           step={analysis?.steps.get(node.id) ?? null}
           detail={detail}
           onSelectNode={onSelectNode}
+          onOpenMeasure={onOpenMeasure}
         />
       ) : (
         <p className="placeholder-lead">
@@ -105,6 +116,7 @@ interface DetailsProps {
   step: Step | null;
   detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
+  onOpenMeasure: (name: string, expression: string) => void;
 }
 
 /** In Brief mode: just the resulting filters, as one box. */
@@ -118,7 +130,7 @@ function BriefFilters({ node, step, binding, source }: { node: AstNode; step: St
   );
 }
 
-function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode }: DetailsProps) {
+function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode, onOpenMeasure }: DetailsProps) {
   const root = result.parse?.root ?? null;
   const presentation = presentNode(node, result.text, binding);
   const positionAt = createLineMap(result.text);
@@ -157,6 +169,22 @@ function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode
       {text.trim() !== '' && <pre className="inspector-source">{text}</pre>}
 
       {step?.summary && <p className="inspector-summary">{step.summary}</p>}
+
+      {resolution?.definition && (
+        <section className="inspector-section">
+          <h3>How [{resolution.definition.name}] is defined in your model</h3>
+          <pre className="inspector-source">{resolution.definition.expression.trim()}</pre>
+          <div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => onOpenMeasure(resolution.definition!.name, resolution.definition!.expression)}
+            >
+              Open [{resolution.definition.name}] in the editor
+            </button>
+          </div>
+        </section>
+      )}
 
       {detail === 'brief' ? (
         <>

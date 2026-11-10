@@ -150,6 +150,7 @@ function ReferenceSummary({ binding }: { binding: BindResult }) {
   if (all.length === 0) return null;
   const count = (predicate: (r: (typeof all)[number]) => boolean) => all.filter(predicate).length;
   const parts = [
+    { n: count((r) => r.source === 'model'), text: 'from your model' },
     { n: count((r) => r.source === 'function-signature'), text: 'required by a function' },
     { n: count((r) => r.source === 'user'), text: 'set by you' },
     { n: count((r) => r.source === 'convention' || r.source === 'other-occurrence'), text: 'assumed' },
