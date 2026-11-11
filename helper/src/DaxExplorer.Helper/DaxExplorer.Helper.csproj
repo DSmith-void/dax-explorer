@@ -25,6 +25,8 @@
   <ItemGroup>
     <!-- Microsoft's official client for Analysis Services / Power BI engines (ADOMD.NET). -->
     <PackageReference Include="Microsoft.AnalysisServices.AdomdClient" Version="19.118.3" />
+    <!-- Traces (Capture from Desktop): the same Microsoft family and version as the client above. -->
+    <PackageReference Include="Microsoft.AnalysisServices" Version="19.118.3" />
   </ItemGroup>
 
   <ItemGroup>

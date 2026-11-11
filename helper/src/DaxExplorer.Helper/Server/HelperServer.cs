@@ -49,6 +49,8 @@ public static class HelperServer
         builder.Services.AddSingleton<IDesktopInstances, DesktopInstances>();
         builder.Services.AddSingleton<IModelSource, AdomdModelSource>();
         builder.Services.AddSingleton<IQueryRunner, AdomdQueryRunner>();
+        builder.Services.AddSingleton<ICaptureSource, AmoCaptureSource>();
+        builder.Services.AddSingleton<CaptureState>();
         builder.Services.AddSingleton<ISampleLauncher>(new ShellSampleLauncher(Sample.FindProject(AppContext.BaseDirectory)));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SampleLaunches>();
@@ -56,6 +58,9 @@ public static class HelperServer
         configureTest?.Invoke(builder);
 
         var app = builder.Build();
+
+        // A capture must never outlive DAX Explorer: stop it (and remove the trace) when the helper stops.
+        app.Lifetime.ApplicationStopping.Register(() => app.Services.GetRequiredService<CaptureState>().Stop());
 
         app.Use(async (context, next) =>
         {

@@ -71,6 +71,31 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     private readonly FakeQueryRunner _runner = new();
+
+    private sealed class FakeCaptureSource : ICaptureSource
+    {
+        public Action<CapturedQueryEvent>? OnQuery { get; private set; }
+        public int? Port { get; private set; }
+        public int Started { get; private set; }
+        public int Stopped { get; private set; }
+        public bool Fail { get; set; }
+        public IDisposable Start(int port, Action<CapturedQueryEvent> onQuery)
+        {
+            if (Fail) throw new InvalidOperationException("trace refused");
+            Started++;
+            Port = port;
+            OnQuery = onQuery;
+            return new Stopper(this);
+        }
+        public void Push(string text, string subclass = "DAXQuery", string app = "Power BI Desktop0da6b7a1") =>
+            OnQuery?.Invoke(new CapturedQueryEvent(text, subclass, app));
+        private sealed class Stopper(FakeCaptureSource owner) : IDisposable
+        {
+            public void Dispose() => owner.Stopped++;
+        }
+    }
+
+    private readonly FakeCaptureSource _capture = new();
     private readonly FakeModelSource _source = new();
     private WebApplication _app = null!;
     private HttpClient _client = null!;
@@ -85,6 +110,7 @@ public sealed class EndpointTests : IAsyncLifetime
             builder.Services.AddSingleton<ISampleLauncher>(_launcher);
             builder.Services.AddSingleton<TimeProvider>(_clock);
             builder.Services.AddSingleton<IQueryRunner>(_runner);
+            builder.Services.AddSingleton<ICaptureSource>(_capture);
         });
         await _app.StartAsync();
         _client = _app.GetTestClient();
@@ -373,6 +399,96 @@ public sealed class EndpointTests : IAsyncLifetime
             var (query, _, _) = QueryBuilder.Build(new EvaluateRequest(kind, "{\"delete\": {}}", null));
             Assert.StartsWith("EVALUATE", query);
         }
+    }
+
+    // ------------------------------------------------------------------ capture from Desktop
+
+    private const string VisualQuery = "DEFINE VAR __DS0Core = SUMMARIZECOLUMNS('Plant'[Plant Name], \"S\", [Total Sales]) EVALUATE __DS0Core";
+
+    private async Task<JsonElement> Captured(int after = 0) =>
+        await Json(await _client.SendAsync(Request(HttpMethod.Get, $"/api/capture?after={after}")));
+
+    [Fact]
+    public async Task Capture_needs_a_connection()
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(0, _capture.Started);
+    }
+
+    [Fact]
+    public async Task Capture_listens_to_the_connected_report_and_keeps_only_visual_queries()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        var start = await Json(await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start")));
+        Assert.True(start.GetProperty("listening").GetBoolean());
+        Assert.Equal(61403, _capture.Port);
+
+        _capture.Push(VisualQuery);
+        _capture.Push("EVALUATE ROW(\"x\", 1)");                                   // not a visual's table of values
+        _capture.Push(VisualQuery, subclass: "MDXQuery");                          // not DAX
+        _capture.Push(VisualQuery, app: "DAX Explorer");                           // not Power BI Desktop
+        _capture.Push(VisualQuery.Replace("Plant Name", "Plant Code"));
+
+        var body = await Captured();
+        Assert.True(body.GetProperty("listening").GetBoolean());
+        var queries = body.GetProperty("queries").EnumerateArray().ToList();
+        Assert.Equal(2, queries.Count);
+        Assert.Equal(VisualQuery, queries[0].GetProperty("text").GetString());
+
+        // Only the new ones after a given id.
+        var lastId = queries[1].GetProperty("id").GetInt32();
+        _capture.Push(VisualQuery);
+        Assert.Single((await Captured(lastId)).GetProperty("queries").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Capture_keeps_only_the_latest_queries()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        for (var i = 0; i < CaptureState.MaxQueries + 5; i++) _capture.Push(VisualQuery);
+        var queries = (await Captured()).GetProperty("queries").EnumerateArray().ToList();
+        Assert.Equal(CaptureState.MaxQueries, queries.Count);
+        Assert.Equal(6, queries[0].GetProperty("id").GetInt32()); // the oldest 5 were dropped
+    }
+
+    [Fact]
+    public async Task Capture_stops_by_itself_after_five_minutes_and_on_stop_disconnect_or_a_new_connection()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        _clock.Now += CaptureState.Duration;
+        Assert.False((await Captured()).GetProperty("listening").GetBoolean());
+        Assert.Equal(1, _capture.Stopped);
+        _capture.Push(VisualQuery); // after stopping, nothing more is kept
+        Assert.Empty((await Captured()).GetProperty("queries").EnumerateArray());
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/stop"));
+        Assert.Equal(2, _capture.Stopped);
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/disconnect"));
+        Assert.Equal(3, _capture.Stopped);
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        Assert.Equal(4, _capture.Stopped);
+    }
+
+    [Fact]
+    public async Task Capture_reports_a_friendly_error_when_the_trace_cannot_start()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        _capture.Fail = true;
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start"));
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Could not listen to Power BI Desktop", text);
+        Assert.DoesNotContain("trace refused", text);
+        Assert.False((await Captured()).GetProperty("listening").GetBoolean());
     }
 
     [Fact]

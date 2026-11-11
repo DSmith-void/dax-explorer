@@ -91,6 +91,22 @@ export interface QueryResult {
   truncated: boolean;
 }
 
+/** A visual's query captured from Power BI Desktop. */
+export interface CapturedQuery {
+  id: number;
+  /** When it was captured (ISO time). */
+  at: string;
+  text: string;
+}
+
+export interface CaptureStatus {
+  listening: boolean;
+  /** When listening stops by itself (ISO time), or null. */
+  stopsAt: string | null;
+  /** Queries captured after the id that was asked for. */
+  queries: CapturedQuery[];
+}
+
 // ---------------------------------------------------------------- token handling
 
 /** Pure: the token from a URL fragment such as "#token=abc", or null. */
@@ -149,6 +165,11 @@ export interface HelperClient {
    * rows of a table expression ("table", at most maxRows). The helper writes the EVALUATE statement.
    */
   evaluate(kind: 'scalar' | 'table', dax: string, maxRows?: number): Promise<QueryResult>;
+  /** Starts listening to the queries the connected report's visuals send (Capture from Desktop). */
+  startCapture(): Promise<void>;
+  stopCapture(): Promise<void>;
+  /** Whether it is listening, and the queries captured after `after` (an id; 0 for all). */
+  captured(after: number): Promise<CaptureStatus>;
 }
 
 export function createHelperClient(token: string | null, fetchImpl: typeof fetch = (...args) => fetch(...args)): HelperClient {
@@ -197,6 +218,13 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
     async connectSample() {
       return (await json<{ state: 'connected' | 'waiting' }>('/api/sample/connect', { method: 'POST' })).state;
     },
+    async startCapture() {
+      await json('/api/capture/start', { method: 'POST' });
+    },
+    async stopCapture() {
+      await json('/api/capture/stop', { method: 'POST' });
+    },
+    captured: (after) => json<CaptureStatus>(`/api/capture?after=${after}`),
     evaluate: (kind, dax, maxRows) => json<QueryResult>('/api/evaluate', { method: 'POST', body: JSON.stringify({ kind, dax, maxRows }) }),
   };
 }

@@ -29,7 +29,7 @@ public static class Endpoints
         api.MapGet("/desktop/instances", (IDesktopInstances instances) =>
             Results.Ok(instances.Find().Select(i => new { port = i.Port, reportName = i.ReportName })));
 
-        api.MapPost("/connect", (ConnectRequest request, IDesktopInstances instances, IModelSource source, ConnectionState state, ILogger<ConnectionState> log) =>
+        api.MapPost("/connect", (ConnectRequest request, IDesktopInstances instances, IModelSource source, ConnectionState state, CaptureState capture, ILogger<ConnectionState> log) =>
         {
             // Only connect to a port that discovery reports as a running Desktop engine:
             // the API cannot be used to make the helper connect to arbitrary ports.
@@ -41,6 +41,7 @@ public static class Endpoints
             try
             {
                 var model = source.ReadDesktopModel(instance.Port);
+                capture.Stop(); // a capture belongs to one connection
                 state.Set(new ConnectionInfo("Power BI Desktop", instance.Port, instance.ReportName, DateTimeOffset.Now), model);
                 log.LogInformation("Connected to a Power BI Desktop report on port {Port}", instance.Port); // no model details in logs
                 return Results.Ok(new { connected = true });
@@ -87,7 +88,7 @@ public static class Endpoints
             }
         });
 
-        api.MapPost("/sample/connect", (IDesktopInstances instances, IModelSource source, ConnectionState state, SampleLaunches launches, ILogger<ConnectionState> log) =>
+        api.MapPost("/sample/connect", (IDesktopInstances instances, IModelSource source, ConnectionState state, SampleLaunches launches, CaptureState capture, ILogger<ConnectionState> log) =>
         {
             var foundOtherReport = false;
             foreach (var instance in instances.Find().Where(IsNamedLikeSample))
@@ -107,6 +108,7 @@ public static class Endpoints
                     foundOtherReport = true;
                     continue;
                 }
+                capture.Stop();
                 state.Set(new ConnectionInfo("Power BI Desktop", instance.Port, instance.ReportName, DateTimeOffset.Now, IsSample: true), model);
                 launches.Reset();
                 log.LogInformation("Connected to the sample on port {Port}", instance.Port);
@@ -150,8 +152,45 @@ public static class Endpoints
             }
         });
 
-        api.MapPost("/disconnect", (ConnectionState state) =>
+        // Capture from Desktop: the queries visuals send, while the user is listening (see CaptureState).
+        api.MapPost("/capture/start", (ConnectionState state, CaptureState capture, ILogger<CaptureState> log) =>
         {
+            var (connection, _) = state.Current;
+            if (connection is null)
+            {
+                return Results.Conflict(new { error = "Connect to a report first: the capture listens to that report in Power BI Desktop." });
+            }
+            try
+            {
+                capture.Start(connection.Port);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                log.LogWarning("Could not start the capture: {Error}", ex.GetType().Name);
+                return Results.Problem(
+                    title: "Could not listen to Power BI Desktop.",
+                    detail: "Make sure the report is still open, then try again. Copying the query from Performance analyzer still works.",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+            var (listening, stopsAt, _) = capture.Read(int.MaxValue);
+            return Results.Ok(new { listening, stopsAt });
+        });
+
+        api.MapPost("/capture/stop", (CaptureState capture) =>
+        {
+            capture.Stop();
+            return Results.Ok(new { listening = false });
+        });
+
+        api.MapGet("/capture", (CaptureState capture, int? after) =>
+        {
+            var (listening, stopsAt, queries) = capture.Read(after ?? 0);
+            return Results.Ok(new { listening, stopsAt, queries, seen = capture.Seen });
+        });
+
+        api.MapPost("/disconnect", (ConnectionState state, CaptureState capture) =>
+        {
+            capture.Stop();
             state.Clear();
             return Results.Ok(new { connected = false });
         });

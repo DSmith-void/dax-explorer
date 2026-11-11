@@ -6,7 +6,7 @@
 //   release/DaxExplorer/app/...
 //   release/DaxExplorer/sample/Initech/...   (the made-up sample report, opened by "Use sample data")
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { dotnetEnv, dotnetExecutable } from './dotnet.mjs';
 
@@ -36,7 +36,10 @@ if (!process.env.npm_execpath) {
 run(process.execPath, [process.env.npm_execpath, 'run', 'build']);
 
 // 2. The helper as one self-contained executable.
-rmSync(output, { recursive: true, force: true });
+// Empty the output folder rather than deleting it: a window open on the folder (Explorer, or the terminal
+// DaxExplorer.exe was started from) would make deleting the folder itself fail.
+mkdirSync(output, { recursive: true });
+for (const entry of readdirSync(output)) rmSync(join(output, entry), { recursive: true, force: true });
 run(
   dotnetExecutable(),
   [

@@ -139,3 +139,24 @@ describe('startSample', () => {
     await expect(createHelperClient(TOKEN, impl).connectSample()).rejects.toThrow("isn't DAX Explorer's sample");
   });
 });
+
+describe('capture from Desktop', () => {
+  it('starts, reads only new queries, and stops', async () => {
+    const { impl, calls } = fakeFetch({
+      'POST /api/capture/start': json({ listening: true, stopsAt: '2026-11-10T21:05:00Z' }),
+      'GET /api/capture?after=3': json({ listening: true, stopsAt: '2026-11-10T21:05:00Z', queries: [{ id: 4, at: '2026-11-10T21:01:00Z', text: 'EVALUATE …' }] }),
+      'POST /api/capture/stop': json({ listening: false }),
+    });
+    const client = createHelperClient(TOKEN, impl);
+    await client.startCapture();
+    const status = await client.captured(3);
+    expect(status.queries.map((q) => q.id)).toEqual([4]);
+    await client.stopCapture();
+    expect(calls.map((c) => `${c.init.method ?? 'GET'} ${c.path}`)).toEqual(['POST /api/capture/start', 'GET /api/capture?after=3', 'POST /api/capture/stop']);
+  });
+
+  it("shows the helper's message when it can't listen", async () => {
+    const { impl } = fakeFetch({ 'POST /api/capture/start': json({ error: 'Connect to a report first.' }, 409) });
+    await expect(createHelperClient(TOKEN, impl).startCapture()).rejects.toThrow('Connect to a report first.');
+  });
+});

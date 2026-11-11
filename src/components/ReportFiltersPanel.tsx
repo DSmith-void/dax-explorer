@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import type { HelperClient, ModelMetadata, QueryValue } from '../app/helperClient';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CapturedQuery, HelperClient, ModelMetadata, QueryValue } from '../app/helperClient';
+import { captureLabel } from './captureLabel';
 import { columnText } from '../engine/context/describe';
 import type { ColumnName } from '../engine/context/model';
 import { columnDax, reportFilterText, valueText, type FilterValue, type ReportFilter } from '../engine/context/reportFilters';
@@ -237,12 +238,12 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
 
-  async function read() {
+  async function read(source: string = text) {
     setError(null);
     setVisual(null);
     setRows(null);
     setPicked(null);
-    const result = readVisualQuery(text);
+    const result = readVisualQuery(source);
     if (!result.ok) {
       setError(result.error);
       return;
@@ -269,6 +270,14 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
 
   return (
     <section className="data-panel-section">
+      <CaptureFromDesktop
+        client={client}
+        onPick={(query) => {
+          setText(query);
+          void read(query);
+        }}
+      />
+      <h4 className="paste-heading">Or paste a query</h4>
       <p className="data-bar-muted">
         In Power BI Desktop: <strong>Optimize → Performance analyzer → Start recording</strong>, refresh or click the visual, open
         its entry and choose <strong>Copy query</strong>. Paste it here.
@@ -447,5 +456,131 @@ ${rowsDax}`).then(() => setCopied(true));
         {copied ? 'Copied' : 'Copy this query'}
       </button>
     </details>
+  );
+}
+
+const timeText = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/**
+ * Capture from Desktop: listens to the queries the connected report's visuals send, while the user
+ * clicks or refreshes visuals in Power BI Desktop. Stops when the panel closes (or by itself after a few minutes).
+ */
+function CaptureFromDesktop({ client, onPick }: { client: HelperClient; onPick: (query: string) => void }) {
+  const [listening, setListening] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [stopsAt, setStopsAt] = useState<string | null>(null);
+  const [queries, setQueries] = useState<CapturedQuery[]>([]);
+  const [pickedId, setPickedId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const lastId = useRef(0);
+  const listeningRef = useRef(false);
+
+  useEffect(() => {
+    listeningRef.current = listening;
+  }, [listening]);
+
+  // Stop listening when the panel closes or the tab changes.
+  useEffect(
+    () => () => {
+      if (listeningRef.current) void client.stopCapture().catch(() => {});
+    },
+    [client],
+  );
+
+  // While listening: ask for new queries every second.
+  useEffect(() => {
+    if (!listening) return;
+    const timer = window.setInterval(() => {
+      void client
+        .captured(lastId.current)
+        .then((status) => {
+          setStopsAt(status.stopsAt);
+          if (status.queries.length > 0) {
+            lastId.current = status.queries[status.queries.length - 1].id;
+            setQueries((previous) => [...[...status.queries].reverse(), ...previous].slice(0, 50));
+          }
+          if (!status.listening) setListening(false);
+        })
+        .catch((e: unknown) => {
+          setError(e instanceof Error ? e.message : 'Lost contact with DAX Explorer.');
+          setListening(false);
+        });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [listening, client]);
+
+  async function start() {
+    setError(null);
+    setStarting(true);
+    try {
+      await client.startCapture();
+      lastId.current = 0;
+      setQueries([]);
+      setPickedId(null);
+      setListening(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not listen to Power BI Desktop.');
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function stop() {
+    setListening(false);
+    await client.stopCapture().catch(() => {});
+  }
+
+  return (
+    <div className="capture">
+      {listening ? (
+        <div className="capture-status" aria-live="polite">
+          <span className="capture-dot" aria-hidden="true" />
+          <span>
+            <strong>Listening…</strong> in Power BI Desktop, refresh the visuals (Optimize → Performance analyzer → Refresh
+            visuals) or change a slicer.
+            {stopsAt && <span className="data-bar-muted"> Stops by itself at {timeText(stopsAt)}.</span>}
+          </span>
+          <button type="button" className="secondary-button" onClick={() => void stop()}>
+            Stop
+          </button>
+        </div>
+      ) : (
+        <div className="capture-start">
+          <button type="button" className="primary-button" disabled={starting} onClick={() => void start()}>
+            {starting ? 'Starting…' : 'Capture from Desktop'}
+          </button>
+          <span className="data-bar-muted">
+            Then refresh the visuals in Power BI Desktop (or change a slicer); their queries appear here. Just clicking a visual
+            often sends no new query.
+          </span>
+        </div>
+      )}
+      {queries.length > 0 && (
+        <ul className="capture-list" aria-label="Captured visuals, newest first">
+          {queries.map((q) => {
+            const label = captureLabel(q.text);
+            return (
+              <li key={q.id}>
+                <button
+                  type="button"
+                  className={pickedId === q.id ? 'is-picked' : undefined}
+                  disabled={!label.ok}
+                  title={label.ok ? 'Use this visual' : label.error}
+                  onClick={() => {
+                    setPickedId(q.id);
+                    onPick(q.text);
+                  }}
+                >
+                  <span className="capture-time">{timeText(q.at)}</span>
+                  <span>{label.ok ? label.label : `Not usable: ${label.error}`}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {listening && queries.length === 0 && <p className="data-bar-muted">Nothing yet.</p>}
+      {error && <p className="data-bar-error">{error}</p>}
+    </div>
   );
 }
