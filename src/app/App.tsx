@@ -8,6 +8,9 @@ import { HelpDialog } from '../components/HelpDialog';
 import { Icon } from '../components/Icons';
 import { MeasurePicker } from '../components/MeasurePicker';
 import { ReportFiltersContext } from '../components/reportFiltersContext';
+import { RelationshipContext } from '../components/relationshipContext';
+import { relationshipFromInfo, type RelationshipModel } from '../engine/context/relationships';
+import { INITECH_MODEL } from '../samples/initechModel';
 import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { TimelineBar } from '../components/StepControls';
@@ -104,7 +107,24 @@ export function App() {
 
   // Binding, context analysis and the timeline depend on settings that can change after Explain, so
   // they are derived on render: one "frame" for the measure, plus one per measure stepped into.
-  const bindOptions = useMemo(() => ({ mode: referenceMode, userChoices, model: modelIndex }), [referenceMode, userChoices, modelIndex]);
+  // The relationships between tables: the connected report's; offline, the built-in example model, but only
+  // for the built-in examples (someone's own DAX may use the same table names in a different model).
+  const isBuiltInExample = result !== null && SAMPLE_MEASURES.some((s) => s.expression === result.text);
+  const relationships = useMemo((): RelationshipModel | null => {
+    if (connectedModel) {
+      return {
+        source: 'report',
+        // Power BI's automatic date tables (one hidden table per date column) are left out of the drawing.
+        tables: connectedModel.model.tables.filter((t) => !/^(LocalDateTable|DateTableTemplate)_/.test(t.name)).map((t) => t.name),
+        relationships: connectedModel.model.relationships.map(relationshipFromInfo),
+      };
+    }
+    return isBuiltInExample ? INITECH_MODEL : null;
+  }, [connectedModel, isBuiltInExample]);
+  const bindOptions = useMemo(
+    () => ({ mode: referenceMode, userChoices, model: modelIndex, relationships }),
+    [referenceMode, userChoices, modelIndex, relationships],
+  );
   const rootFrame = useMemo(() => (result ? buildFrame(result, bindOptions) : null), [result, bindOptions]);
   // Measures stepped into, by frame key. Their code comes from the connected model, or else from the built-in examples.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -280,6 +300,7 @@ export function App() {
 
   return (
     <ReportFiltersContext.Provider value={reportFilters}>
+    <RelationshipContext.Provider value={relationships}>
     <div className="app">
       <header className="toolbar">
         <div className="brand">
@@ -439,6 +460,7 @@ export function App() {
 
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
+    </RelationshipContext.Provider>
     </ReportFiltersContext.Provider>
   );
 }

@@ -1,4 +1,5 @@
 import type { ColumnName, EvalContext, FilterEntry, FilterTarget, Removal, RowContext } from './model';
+import { expandedTables, type RelationshipModel } from './relationships';
 
 /**
  * Plain-language rendering of symbolic contexts. Used by the UI and by tests.
@@ -55,11 +56,19 @@ export function originText(entry: FilterEntry): string {
     : `added by ${origin.functionName}`;
 }
 
-/** One line describing what is left of the report's filters. */
-export function incomingText(removals: readonly Removal[]): string {
+/**
+ * One line describing what is left of the report's filters. With the relationships known, a removal from a
+ * whole table names the tables it looks up too (its expanded table), since their filters go as well.
+ */
+export function incomingText(removals: readonly Removal[], model?: RelationshipModel | null): string {
   if (removals.some((r) => r.kind === 'all')) return "None of the report's filters (all removed)";
   if (removals.length === 0) return "All of the report's filters";
-  return `The report's filters, except any filter on ${removals.map(removalText).join('; ')}`;
+  const text = (removal: Removal) => {
+    if (removal.kind !== 'table' || !model) return removalText(removal);
+    const looksUp = expandedTables(model, removal.table).slice(1);
+    return looksUp.length === 0 ? removalText(removal) : `${removalText(removal)} and the tables it looks up (${looksUp.map(tableText).join(', ')})`;
+  };
+  return `The report's filters, except any filter on ${removals.map(text).join('; ')}`;
 }
 
 export function rowContextText(row: RowContext): string {

@@ -73,6 +73,12 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             <dd>Whether a function such as SUMX or FILTER is going through a table one row at a time (row context).</dd>
             <dt>Context transitions</dt>
             <dd>How often a current row has been turned into a filter so far (it happens when a measure or CALCULATE is used row by row).</dd>
+            <dt>Tables reached</dt>
+            <dd>
+              A small map of the model&apos;s tables, under the filters. A dot marks a table with a filter on it; tinted tables
+              are filtered through a relationship, and the arrows show which way filters can travel (from the 1 side to the
+              * side). A minus badge means filters are removed from that table at this step. Click a table to see why.
+            </dd>
             <dt>Variables</dt>
             <dd>How many VARs have been stored so far. A stored variable keeps its value, even inside a later CALCULATE.</dd>
           </dl>

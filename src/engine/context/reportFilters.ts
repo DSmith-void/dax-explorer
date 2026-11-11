@@ -7,6 +7,7 @@
  */
 import { columnText } from './describe';
 import type { ColumnName, Removal } from './model';
+import { expandedCovers, type RelationshipModel } from './relationships';
 
 /** A value a column can be filtered to. `null` is BLANK; dates are ISO strings ("2024-01-31" or "2024-01-31T08:00:00"). */
 export type FilterValue = string | number | boolean | null | { date: string };
@@ -82,7 +83,11 @@ export function reportFilterColumns(filter: ReportFilter): ColumnName[] {
  * filters on related tables (through relationships); that isn't checked here, so filters on other
  * tables are then "maybe-removed" rather than guessed either way.
  */
-export function reportFilterStatus(filter: ReportFilter, removals: readonly Removal[]): ReportFilterStatus {
+/**
+ * @param model when known, a removal from a whole table is certain to cover (or not) a filter on another
+ *   table: it covers the tables in its expanded table. Without it, that stays "maybe".
+ */
+export function reportFilterStatus(filter: ReportFilter, removals: readonly Removal[], model?: RelationshipModel | null): ReportFilterStatus {
   const columns = reportFilterColumns(filter);
   let maybe = false;
   for (const removal of removals) {
@@ -94,6 +99,8 @@ export function reportFilterStatus(filter: ReportFilter, removals: readonly Remo
     const inTable = columns.filter((c) => same(c.table, removal.table));
     if (inTable.length > 0) {
       if (inTable.every((c) => !removal.except.some((kept) => sameColumn(kept, c)))) return 'removed';
+    } else if (model) {
+      if (columns.some((c) => c.table !== '' && expandedCovers(model, removal.table, c.table))) return 'removed';
     } else {
       maybe = true;
     }

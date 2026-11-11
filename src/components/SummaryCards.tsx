@@ -1,6 +1,7 @@
 import type { EvalContext } from '../engine/context/model';
 import type { TimelineEntry } from '../engine/context/timeline';
 import { Icon, type IconName } from './Icons';
+import { useFilterReach } from './relationshipContext';
 
 interface SummaryCardsProps {
   entries: readonly TimelineEntry[];
@@ -25,6 +26,8 @@ export function SummaryCards({ entries, index, onStep }: SummaryCardsProps) {
   const context = effectiveContext(current);
   const soFar = entries.slice(0, index + 1);
 
+  const found = useFilterReach(context);
+  const reached = found?.reach.tables.filter((t) => t.state !== 'not-reached').map((t) => t.table) ?? [];
   const changes = context ? context.filter.entries.length + context.filter.removals.length : 0;
   const rows = context?.rows ?? [];
   const transitions = soFar.filter(hasTransition).length;
@@ -40,7 +43,7 @@ export function SummaryCards({ entries, index, onStep }: SummaryCardsProps) {
       label: 'Filters',
       icon: 'filter',
       value: context?.unknownReason ? 'Unknown' : changes === 0 ? "Report's filters" : `F + ${plural(changes, 'change', 'changes')}`,
-      detail: 'in effect at this step',
+      detail: found ? (reached.length === 0 ? 'no table filtered' : `reaches ${reached.join(', ')}`) : 'in effect at this step',
       target: nextWhere((e) => e.kind === 'calculate' || e.kind === 'filter-input'),
       jump: 'Go to the next step that changes the filters',
     },

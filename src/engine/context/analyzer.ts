@@ -18,6 +18,7 @@ import type {
   TableShape,
 } from './model';
 import { INITIAL_CONTEXT } from './model';
+import { expandedCovers, type RelationshipModel } from './relationships';
 
 /**
  * Symbolic context analysis.
@@ -42,7 +43,14 @@ import { INITIAL_CONTEXT } from './model';
  * @param initial the context the expression starts in: the report's filters F by default, or, for a measure
  *   called by another measure, the filters that caller passes in.
  */
-export function analyzeContext(root: Expr | null, binding: BindResult, source: string, initial: EvalContext = INITIAL_CONTEXT): ContextAnalysis {
+export function analyzeContext(
+  root: Expr | null,
+  binding: BindResult,
+  source: string,
+  initial: EvalContext = INITIAL_CONTEXT,
+  /** The relationships between tables, when known: a whole-table removal then covers its expanded table for certain. */
+  model: RelationshipModel | null = null,
+): ContextAnalysis {
   const steps = new Map<number, Step>();
   const insights: Insight[] = [];
   const variables = new Map<number, { name: string; line: number; context: EvalContext; shape: TableShape | null }>();
@@ -93,9 +101,10 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
     if (removal.kind === 'column') {
       return target.kind === 'columns' && target.columns.some((c) => sameColumn(c, removal.column));
     }
-    // table removal
-    if (target.kind === 'table') return same(target.table, removal.table);
-    return target.columns.some((c) => inTable(c, removal.table) && !removal.except.some((e) => sameColumn(e, c)));
+    // table removal: with the relationships known, it covers the whole expanded table
+    const covers = (table: string) => same(table, removal.table) || (model !== null && table !== '' && expandedCovers(model, removal.table, table));
+    if (target.kind === 'table') return covers(target.table);
+    return target.columns.some((c) => covers(c.table) && !removal.except.some((e) => sameColumn(e, c)));
   }
 
   function removalAlreadyImplied(existing: readonly Removal[], removal: Removal): boolean {
@@ -119,7 +128,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
           ? fc.removals
           : [...fc.removals, removal];
     const caveats = [...fc.caveats];
-    if (removal.kind === 'table') {
+    if (removal.kind === 'table' && !model) {
       caveats.push(
         `removing filters from the whole ${removal.table} table can also remove filters on tables related to it; that depends on the data model, which this app can't see`,
       );
@@ -156,7 +165,7 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
     }
     const replaced = fc.entries.filter((e) => newRemovals.some((r) => removalCovers(r, e.target)));
     const caveats = [...fc.caveats];
-    if (target.kind === 'table') {
+    if (target.kind === 'table' && !model) {
       caveats.push(
         `filtering the whole ${target.table} table can also filter tables related to it; that depends on the data model, which this app can't see`,
       );

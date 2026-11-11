@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { scrollWithin } from './scrollWithin';
-import { frameTint, type FlatEntry, type StepInto } from '../app/frames';
+import { frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
+import { TablesReached } from './TablesReached';
+import { useFilterReach } from './relationshipContext';
+import { pathText } from '../engine/context/relationships';
 import type { ValueState } from '../app/useStepValues';
 import { evaluateText, rowKey, type RowChoice, type StepQuery } from '../engine/context/stepQuery';
 import { technicalContext, technicalOperation } from '../engine/context/technical';
@@ -161,6 +164,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         ) : (
           <ContextView context={current.context} />
         )}
+        <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={detail === 'brief'} />
       </Box>
 
       {detail !== 'brief' && <TechnicalBox entry={current} query={query} />}
@@ -265,6 +269,8 @@ function StepIntoControl({ target, isExpanded, onExpand }: { target: StepInto; i
 /** For experienced users: the context in DAX's own terms, and the exact query behind the value. */
 function TechnicalBox({ entry, query }: { entry: FlatEntry; query: StepQuery }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const reach = useFilterReach(entry.innerContext ?? entry.context)?.reach;
+  const reached = reach?.tables.filter((t) => t.state === 'reached') ?? [];
   // The filter context the inside sees (after CALCULATE or context transition); the row context where the step runs.
   const context = { filter: technicalContext(entry.innerContext ?? entry.context).filter, rows: technicalContext(entry.context).rows };
   const noQuery =
@@ -309,6 +315,24 @@ function TechnicalBox({ entry, query }: { entry: FlatEntry; query: StepQuery }) 
             </ul>
           )}
         </dd>
+        {reach && (
+          <>
+            <dt>Filter propagation</dt>
+            <dd>
+              {reached.length === 0 ? (
+                <span className="muted">no relationship carries a filter here</span>
+              ) : (
+                <ul>
+                  {reached.map((t) => (
+                    <li key={t.table}>
+                      <code>{pathText(t)}</code>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </>
+        )}
         {entry.operations.length > 0 && (
           <>
             <dt>Operations</dt>

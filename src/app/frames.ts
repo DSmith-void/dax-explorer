@@ -6,9 +6,10 @@
 import { bind, type BindOptions, type BindResult } from '../engine/binder/binder';
 import { analyzeContext } from '../engine/context/analyzer';
 import type { ContextAnalysis, EvalContext } from '../engine/context/model';
+import type { RelationshipModel } from '../engine/context/relationships';
 import type { CallerFrame } from '../engine/context/stepQuery';
 import { buildTimeline, type TimelineEntry } from '../engine/context/timeline';
-import { findNode } from '../engine/parser/ast';
+import { childrenOf, findNode, type AstNode } from '../engine/parser/ast';
 import { analyze, type AnalysisResult } from './analysis';
 import { measureDefinitionText } from './modelConversion';
 
@@ -33,6 +34,9 @@ export interface FlatEntry extends TimelineEntry {
   localIndex: number;
 }
 
+/** How to bind and analyze each measure: the binder's settings, plus the model's relationships when known. */
+export type FrameOptions = BindOptions & { relationships?: RelationshipModel | null };
+
 export interface MeasureDefinition {
   name: string;
   expression: string;
@@ -51,12 +55,12 @@ function callerContext(frame: Frame, callNodeId: number): EvalContext | null {
   return { ...(step.innerContext ?? step.context), rows: [] };
 }
 
-export function buildFrame(result: AnalysisResult, bindOptions: BindOptions, caller: Frame['caller'] = null): Frame {
+export function buildFrame(result: AnalysisResult, bindOptions: FrameOptions, caller: Frame['caller'] = null): Frame {
   const root = result.parse?.root ?? null;
   const binding = root ? bind(root, bindOptions) : null;
   const name = frameName(result);
   const start = caller ? callerContext(caller.frame, caller.callNodeId) : null;
-  const analysis = root && binding ? analyzeContext(root, binding, result.text, start ?? undefined) : null;
+  const analysis = root && binding ? analyzeContext(root, binding, result.text, start ?? undefined, bindOptions.relationships ?? null) : null;
   const timeline =
     root && binding && analysis
       ? buildTimeline(root, binding, analysis, result.text, caller && start ? { measure: name, caller: caller.frame.name, context: start } : undefined)
@@ -109,7 +113,7 @@ export function flattenTimeline(
   root: Frame,
   expanded: ReadonlySet<string>,
   lookup: (name: string) => MeasureDefinition | undefined,
-  bindOptions: BindOptions,
+  bindOptions: FrameOptions,
 ): FlatEntry[] {
   const flat: FlatEntry[] = [];
   const visit = (frame: Frame, depthOffset: number) => {
@@ -139,6 +143,19 @@ export function callersOf(frame: Frame): CallerFrame[] {
     callers.push({ key: c.key, root, binding: c.binding, source: c.result.text, callNodeId });
   }
   return callers;
+}
+
+/** The tables a measure's code names (Table[Column] and table references), in order of appearance. */
+export function frameTables(frame: Frame): string[] {
+  const tables: string[] = [];
+  const visit = (node: AstNode) => {
+    const name = node.kind === 'ColumnRef' ? node.table : node.kind === 'TableRef' ? node.name : '';
+    if (name && !tables.some((t) => t.toLowerCase() === name.toLowerCase())) tables.push(name);
+    for (const child of childrenOf(node)) visit(child.node);
+  };
+  const root = frame.result.parse?.root;
+  if (root) visit(root);
+  return tables;
 }
 
 /** The frames from the measure being explained down to `frame`, for the breadcrumb. */

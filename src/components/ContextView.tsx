@@ -1,6 +1,7 @@
 import { entryText, incomingText, originText, rowContextText } from '../engine/context/describe';
 import type { EvalContext } from '../engine/context/model';
 import { reportFilterStatus, reportFilterText, type ReportFilterStatus } from '../engine/context/reportFilters';
+import { useRelationships } from './relationshipContext';
 import { useReportFilters } from './reportFiltersContext';
 
 const STATUS_TEXT: Record<ReportFilterStatus, string> = {
@@ -18,6 +19,7 @@ interface ContextViewProps {
 /** Structured rendering of a symbolic evaluation context. */
 export function ContextView({ context, compareTo }: ContextViewProps) {
   const reportFilters = useReportFilters();
+  const model = useRelationships();
   if (context.unknownReason) {
     return (
       <ul className="context-view">
@@ -26,9 +28,9 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
     );
   }
   const previousEntries = new Set(compareTo?.filter.entries.map((e) => `${entryText(e)}|${originText(e)}`) ?? []);
-  const previousIncoming = compareTo ? incomingText(compareTo.filter.removals) : null;
+  const previousIncoming = compareTo ? incomingText(compareTo.filter.removals, model) : null;
   const previousRows = new Set(compareTo?.rows.map((r) => r.nodeId) ?? []);
-  const incoming = incomingText(context.filter.removals);
+  const incoming = incomingText(context.filter.removals, model);
 
   return (
     <ul className="context-view">
@@ -37,7 +39,7 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
         {reportFilters.length > 0 && (
           <ul className="report-filter-list" aria-label="The report's filters at this point">
             {reportFilters.map((filter, i) => {
-              const status = reportFilterStatus(filter, context.filter.removals);
+              const status = reportFilterStatus(filter, context.filter.removals, model);
               return (
                 <li key={i} className={`report-filter is-${status}`}>
                   <code>{reportFilterText(filter)}</code> <span className="context-origin">{STATUS_TEXT[status]}</span>
