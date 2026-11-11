@@ -1,4 +1,4 @@
-import { entryText, incomingText, originText, rowContextText } from '../engine/context/describe';
+import { entryText, incomingText, originText, rowContextText, relationshipChangeText } from '../engine/context/describe';
 import type { EvalContext } from '../engine/context/model';
 import { reportFilterStatus, reportFilterText, type ReportFilterStatus } from '../engine/context/reportFilters';
 import { useRelationships } from './relationshipContext';
@@ -54,6 +54,14 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
         return (
           <li key={i} className={`context-filter${isNew ? ' is-changed' : ''}`}>
             <code>{entryText(entry)}</code> <span className="context-origin">{originText(entry)}</span>
+          </li>
+        );
+      })}
+      {context.filter.relationships.map((change, i) => {
+        const isNew = compareTo !== undefined && !compareTo.filter.relationships.includes(change);
+        return (
+          <li key={`rel${i}`} className={`context-relationship${isNew ? ' is-changed' : ''}`}>
+            {relationshipChangeText(change)} <span className="context-origin">{change.functionName}</span>
           </li>
         );
       })}

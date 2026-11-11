@@ -13,3 +13,8 @@ relationship b6a1f0d2-0003-4c3e-9a10-000000000003
 relationship b6a1f0d2-0004-4c3e-9a10-000000000004
 	fromColumn: Sales.'Plant Key'
 	toColumn: Plant.'Plant Key'
+
+relationship b6a1f0d2-0005-4c3e-9a10-000000000005
+	isActive: false
+	fromColumn: Sales.'Ship Date'
+	toColumn: Date.Date

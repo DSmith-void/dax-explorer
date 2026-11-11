@@ -275,6 +275,13 @@ const SPECS: FunctionSpec[] = [
     summary: 'Inside CALCULATE: changes the direction in which a relationship passes filters between two tables.',
     overloads: [[p('column 1', 'column'), p('column 2', 'column'), p('direction', 'keyword', { keywords: ['NONE', 'ONEWAY', 'BOTH', 'ONEWAY_LEFTFILTERSRIGHT', 'ONEWAY_RIGHTFILTERSLEFT'] })]],
   },
+  {
+    name: 'TREATAS',
+    category: 'relationship',
+    returns: 'table',
+    summary: 'Applies the values of a table as a filter on other columns, as if through a relationship.',
+    overloads: [[p('table', 'table'), p('column', 'column', { repeating: true })]],
+  },
 
   // --- Logical and math ---
   {

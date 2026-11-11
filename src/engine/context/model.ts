@@ -33,6 +33,19 @@ export interface FilterEntry {
   origin: FilterOrigin;
   /** replace: overwrites existing filters on the same columns. intersect: KEEPFILTERS. */
   mode: 'replace' | 'intersect';
+  /** For TREATAS: the tables its values come from (it filters as if through a relationship from them). */
+  treatAsFrom?: string[];
+}
+
+/** USERELATIONSHIP or CROSSFILTER inside CALCULATE: which relationship is used, or which way it filters. */
+export interface RelationshipChange {
+  kind: 'use' | 'crossfilter';
+  /** The two columns named, in the order written. */
+  columns: [ColumnName, ColumnName];
+  /** CROSSFILTER only. */
+  direction?: 'none' | 'oneway' | 'both' | 'left-filters-right' | 'right-filters-left';
+  nodeId: number;
+  functionName: string;
 }
 
 /** A part of the incoming filters F that has been removed. */
@@ -46,8 +59,10 @@ export interface FilterContext {
   removals: Removal[];
   /** Filters added by the expression, in the order they were applied. */
   entries: FilterEntry[];
-  /** Effects that apply here but are not modeled (e.g. relationship changes). */
+  /** Effects that apply here but are not modeled. */
   caveats: string[];
+  /** Relationship changes in effect here (USERELATIONSHIP, CROSSFILTER), in the order applied. */
+  relationships: RelationshipChange[];
 }
 
 /** The shape of a table being iterated, as far as it can be known without a model. */
@@ -76,6 +91,7 @@ export type Operation =
   | { kind: 'remove-filters'; removal: Removal; nodeId: number; functionName: string; removedEntries: FilterEntry[] }
   | { kind: 'add-filter'; entry: FilterEntry; nodeId: number; replaced: FilterEntry[]; replacesIncoming: boolean }
   | { kind: 'row-context'; row: RowContext }
+  | { kind: 'relationship'; change: RelationshipChange; nodeId: number }
   | { kind: 'not-modeled'; nodeId: number; description: string };
 
 /** What happens at one node of the tree. */
@@ -120,5 +136,5 @@ export interface ContextAnalysis {
   insights: Insight[];
 }
 
-export const EMPTY_FILTER_CONTEXT: FilterContext = { removals: [], entries: [], caveats: [] };
+export const EMPTY_FILTER_CONTEXT: FilterContext = { removals: [], entries: [], caveats: [], relationships: [] };
 export const INITIAL_CONTEXT: EvalContext = { filter: EMPTY_FILTER_CONTEXT, rows: [], unknownReason: null };

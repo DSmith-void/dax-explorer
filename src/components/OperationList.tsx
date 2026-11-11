@@ -1,4 +1,4 @@
-import { entryText, removalText, rowContextText } from '../engine/context/describe';
+import { entryText, removalText, rowContextText, relationshipChangeText } from '../engine/context/describe';
 import type { Operation } from '../engine/context/model';
 import { findNode, type AstNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
@@ -51,6 +51,12 @@ export function OperationList({ operations, root, source, onSelectNode }: Operat
                 {op.entry.mode === 'replace' && (op.replacesIncoming || op.replaced.length > 0) && (
                   <span className="op-detail"> It replaces any filter already on that column.</span>
                 )}
+              </li>
+            );
+          case 'relationship':
+            return (
+              <li key={i} className="op-relationship">
+                {link(op.nodeId, op.change.functionName)}: {relationshipChangeText(op.change).replace(/^./, (c) => c.toLowerCase())}.
               </li>
             );
           case 'row-context':

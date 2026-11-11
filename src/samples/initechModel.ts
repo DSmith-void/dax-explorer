@@ -13,5 +13,6 @@ export const INITECH_MODEL: RelationshipModel = {
     { fromTable: 'Sales', fromColumn: 'Product Key', toTable: 'Product', toColumn: 'Product Key', fromMany: true, toMany: false, active: true, bothDirections: false },
     { fromTable: 'Sales', fromColumn: 'Customer Key', toTable: 'Customer', toColumn: 'Customer Key', fromMany: true, toMany: false, active: true, bothDirections: false },
     { fromTable: 'Sales', fromColumn: 'Plant Key', toTable: 'Plant', toColumn: 'Plant Key', fromMany: true, toMany: false, active: true, bothDirections: false },
+    { fromTable: 'Sales', fromColumn: 'Ship Date', toTable: 'Date', toColumn: 'Date', fromMany: true, toMany: false, active: false, bothDirections: false },
   ],
 };

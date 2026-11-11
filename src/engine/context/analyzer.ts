@@ -2,7 +2,7 @@ import type { BindResult } from '../binder/binder';
 import type { ArgRole, FunctionSpec, ParamSpec } from '../catalog/functions';
 import { childrenOf, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall } from '../parser/ast';
 import { createLineMap } from '../source';
-import { columnText, entryText, filterSignature, removalText } from './describe';
+import { columnText, entryText, filterSignature, relationshipChangeText, removalText } from './describe';
 import type {
   ColumnName,
   ContextAnalysis,
@@ -13,12 +13,13 @@ import type {
   Insight,
   Operation,
   Removal,
+  RelationshipChange,
   RowContext,
   Step,
   TableShape,
 } from './model';
 import { INITIAL_CONTEXT } from './model';
-import { expandedCovers, type RelationshipModel } from './relationships';
+import { crossfilterError, expandedCovers, findRelationship, type RelationshipModel } from './relationships';
 
 /**
  * Symbolic context analysis.
@@ -133,7 +134,7 @@ export function analyzeContext(
         `removing filters from the whole ${removal.table} table can also remove filters on tables related to it; that depends on the data model, which this app can't see`,
       );
     }
-    return { fc: { removals, entries: fc.entries.filter((e) => !removedEntries.includes(e)), caveats }, removedEntries };
+    return { fc: { ...fc, removals, entries: fc.entries.filter((e) => !removedEntries.includes(e)), caveats }, removedEntries };
   }
 
   function addFilter(fc: FilterContext, entry: FilterEntry): { fc: FilterContext; replaced: FilterEntry[]; replacesIncoming: boolean } {
@@ -170,7 +171,7 @@ export function analyzeContext(
         `filtering the whole ${target.table} table can also filter tables related to it; that depends on the data model, which this app can't see`,
       );
     }
-    return { fc: { removals, entries: [...fc.entries.filter((e) => !replaced.includes(e)), entry], caveats }, replaced, replacesIncoming };
+    return { fc: { ...fc, removals, entries: [...fc.entries.filter((e) => !replaced.includes(e)), entry], caveats }, replaced, replacesIncoming };
   }
 
   function targetOfShape(shape: TableShape): FilterTarget {
@@ -222,6 +223,12 @@ export function analyzeContext(
               return { kind: 'columns', columns, description };
             }
             if (args.length === 1 && args[0].kind === 'TableRef') return { kind: 'table', table: args[0].name, description };
+            return { kind: 'unknown', description };
+          }
+          case 'TREATAS': {
+            // Its result has the lineage of the columns it names.
+            const columns = args.slice(1).map(columnOf);
+            if (columns.length > 0 && columns.every((c): c is ColumnName => c !== null)) return { kind: 'columns', columns, description };
             return { kind: 'unknown', description };
           }
           // Wrappers keep the shape of the table they wrap; described structurally ("TOPN over FILTER over ...").
@@ -418,6 +425,7 @@ export function analyzeContext(
 
   type FilterArgument =
     | { kind: 'remove'; removals: Removal[]; functionName: string }
+    | { kind: 'relationship'; change: RelationshipChange }
     | { kind: 'filter'; entry: FilterEntry }
     | { kind: 'not-modeled'; description: string }
     | { kind: 'none' };
@@ -460,6 +468,19 @@ export function analyzeContext(
         step.notes = [
           `Removes any filter on ${c.removals.map(removalText).join('; ')}, but only for the calculation inside this ${spec.name}.`,
         ];
+      }
+    }
+    for (const { arg, c } of classified) {
+      if (c.kind !== 'relationship') continue;
+      fc = { ...fc, relationships: [...fc.relationships, c.change] };
+      operations.push({ kind: 'relationship', change: c.change, nodeId: arg.id });
+      const text = relationshipChangeText(c.change);
+      const step = steps.get(arg.id);
+      if (step) {
+        const detail = relationshipChangeDetail(c.change);
+        // When the model says DAX rejects it, the one-line summary says so too.
+        step.summary = detail.includes('shows an error') ? `${text}: ${detail.replace(/^But /, '').replace(/^[A-Z](?=[a-z])/, (x) => x.toLowerCase())}` : `${text} (only inside this ${spec.name}).`;
+        step.notes = [`${text}, but only for the calculation inside this ${spec.name}. ${detail}`.trim()];
       }
     }
     for (const { arg, c } of classified) {
@@ -526,9 +547,29 @@ export function analyzeContext(
     if (removed.length > 0) parts.push(`without filters on ${removed.join(' and ')}`);
     const added = operations.flatMap((op) => (op.kind === 'add-filter' ? [entryText(op.entry)] : []));
     if (added.length > 0) parts.push(`with ${added.join(' and ')}`);
+    const changes = operations.flatMap((op) => (op.kind === 'relationship' ? [relationshipChangeText(op.change, true)] : []));
+    if (changes.length > 0) parts.push(changes.join(' and '));
     if (operations.some((op) => op.kind === 'not-modeled')) parts.push('with some changes the app can\'t check');
     if (parts.length === 0) return `${name} calculates ${what} with the same filters (nothing changes).`;
     return `${name} calculates ${what} ${parts.join(', ')}.`;
+  }
+
+  /** What the model says about a relationship change (only with the relationships known). */
+  function relationshipChangeDetail(change: RelationshipChange): string {
+    if (!model) return 'Which relationship that is depends on the data model; connect to a report to check it.';
+    const [a, b] = change.columns;
+    const r = findRelationship(model, a, b);
+    if (!r) return `But this model has no relationship between ${columnText(a)} and ${columnText(b)}, so DAX shows an error here.`;
+    if (change.kind === 'use') {
+      const other = model.relationships.find(
+        (x) => x !== r && x.active && ((same(x.fromTable, r.fromTable) && same(x.toTable, r.toTable)) || (same(x.fromTable, r.toTable) && same(x.toTable, r.fromTable))),
+      );
+      const was = r.active ? 'It is already the active relationship, so nothing changes.' : 'It is normally inactive.';
+      return other ? `${was} The usual one, ${other.fromTable}[${other.fromColumn}] – ${other.toTable}[${other.toColumn}], is switched off meanwhile.` : was;
+    }
+    const error = crossfilterError(r, change);
+    if (error) return `But ${error}.`;
+    return r.bothDirections ? 'Normally it filters both ways.' : 'Normally it filters one way, from the one side to the many side.';
   }
 
   function classifyFilter(arg: Expr, calculate: FunctionCall, calculateName: string, mode: 'replace' | 'intersect'): FilterArgument {
@@ -571,11 +612,37 @@ export function analyzeContext(
               description: 'ALLSELECTED brings back the filters chosen outside this visual (for example, slicers); the app can\'t work this out yet',
             };
           case 'USERELATIONSHIP':
-          case 'CROSSFILTER':
+          case 'CROSSFILTER': {
+            const [a, b] = [arg.args[0], arg.args[1]].map((x) => (x ? columnOf(x) : null));
+            if (!a || !b || a.table === '' || b.table === '') {
+              return { kind: 'not-modeled', description: `the app can't tell which relationship ${snippet(arg)} means (it needs two Table[Column] references)` };
+            }
+            if (spec.name === 'USERELATIONSHIP') return { kind: 'relationship', change: { kind: 'use', columns: [a, b], nodeId: arg.id, functionName: spec.name } };
+            const keyword = arg.args[2] ? snippet(arg.args[2]).toUpperCase() : '';
+            const directions: Record<string, RelationshipChange['direction']> = { NONE: 'none', ONEWAY: 'oneway', BOTH: 'both', ONEWAY_LEFTFILTERSRIGHT: 'left-filters-right', ONEWAY_RIGHTFILTERSLEFT: 'right-filters-left' };
+            const direction = directions[keyword];
+            if (!direction) return { kind: 'not-modeled', description: `the app doesn't know the direction ${keyword || '(missing)'} in ${snippet(arg)}` };
+            return { kind: 'relationship', change: { kind: 'crossfilter', columns: [a, b], direction, nodeId: arg.id, functionName: spec.name } };
+          }
+          case 'TREATAS': {
+            const [values, ...targets] = arg.args;
+            const columns = targets.map(columnOf);
+            if (!values || columns.length === 0 || !columns.every((c): c is ColumnName => c !== null && c.table !== '')) {
+              return { kind: 'not-modeled', description: `the app can't work out ${snippet(arg)} (it needs a table and Table[Column] references)` };
+            }
+            const shape = shapeOf(values);
+            const from = shape.kind === 'columns' ? [...new Set(shape.columns.map((c) => c.table).filter((t) => t !== ''))] : shape.kind === 'table' ? [shape.table] : [];
             return {
-              kind: 'not-modeled',
-              description: `${spec.name} switches which relationship between tables is used (or its direction); that depends on the data model, which this app can't see`,
+              kind: 'filter',
+              entry: {
+                target: { kind: 'columns', columns },
+                condition: values.kind === 'TableConstructor' ? `in ${snippet(values, 60)}` : `= the values of ${snippet(values, 60)}`,
+                origin,
+                mode,
+                treatAsFrom: from,
+              },
             };
+          }
           case 'KEEPFILTERS': {
             const inner = arg.args[0];
             return inner ? classifyFilter(inner, calculate, calculateName, 'intersect') : { kind: 'none' };

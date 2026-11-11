@@ -81,6 +81,27 @@ table Sales
 	measure 'Average Order Value' = DIVIDE([Total Sales], [Order Count])
 		formatString: #,##0.00
 
+	measure 'Sales by Ship Date' =
+			CALCULATE(
+			    [Total Sales],
+			    USERELATIONSHIP(Sales[Ship Date], 'Date'[Date])
+			)
+		formatString: #,##0
+
+	measure 'Customers Who Bought' =
+			CALCULATE(
+			    COUNTROWS(Customer),
+			    CROSSFILTER(Sales[Customer Key], Customer[Customer Key], BOTH)
+			)
+		formatString: #,##0
+
+	measure 'Featured Category Sales' =
+			CALCULATE(
+			    [Total Sales],
+			    TREATAS({"Widgets", "Gadgets"}, Product[Category])
+			)
+		formatString: #,##0
+
 	measure 'Best Plant Order Value' =
 			MAXX(
 			    VALUES(Plant[Plant Name]),
@@ -99,6 +120,13 @@ table Sales
 		formatString: yyyy-mm-dd
 		isNameInferred
 		sourceColumn: [Date]
+		summarizeBy: none
+
+	column 'Ship Date'
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		isNameInferred
+		sourceColumn: [Ship Date]
 		summarizeBy: none
 
 	column 'Product Key'
@@ -184,6 +212,8 @@ table Sales
 				    ),
 				    "Order Key", [Value],
 				    "Date", DATE(2024, 1, 1) + MOD([Value] * 37, 1096),
+				    -- Shipped 1 to 9 days after the order (never after the last date in the Date table).
+				    "Ship Date", MIN(DATE(2024, 1, 1) + MOD([Value] * 37, 1096) + 1 + MOD([Value] * 13, 9), DATE(2026, 12, 31)),
 				    "Product Key", [@Product],
 				    "Customer Key", [@Customer],
 				    "Plant Key", [@Plant],

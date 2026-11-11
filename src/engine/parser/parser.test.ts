@@ -249,6 +249,9 @@ describe('built-in samples', () => {
     'top-plant':
       '(VAR (TopPlant (TOPN 1 (FILTER (VALUES Plant[Plant Name]) (<> Plant[Plant Name] "Unknown")) [Total Sales] DESC)) RETURN (CONCATENATEX var:TopPlant (& (& Plant[Plant Name] ": ") (FORMAT [Total Sales] "#,##0"))))',
     'best-plant-order-value': '(MAXX (VALUES Plant[Plant Name]) [Average Order Value])',
+    'sales-by-ship-date': "(CALCULATE [Total Sales] (USERELATIONSHIP Sales[Ship Date] 'Date'[Date]))",
+    'customers-who-bought': '(CALCULATE (COUNTROWS Customer) (CROSSFILTER Sales[Customer Key] Customer[Customer Key] BOTH))',
+    'featured-category-sales': '(CALCULATE [Total Sales] (TREATAS {"Widgets" "Gadgets"} Product[Category]))',
   };
 
   it.each(SAMPLE_MEASURES.map((s) => [s.id, s.expression]))('parses sample "%s" into the expected tree', (sampleId, text) => {

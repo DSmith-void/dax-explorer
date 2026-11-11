@@ -48,7 +48,8 @@ export function TablesReached({ context, usedTables, folded }: TablesReachedProp
       ? 'No table is filtered here.'
       : `Filters reach ${touched.length} of ${reach.tables.length} tables: ${touched.map((t) => t.table).join(', ')}.`) +
     (cleared.length === 0 ? '' : ` Filters removed here: ${cleared.map(removedText).join('; ')}.`);
-  const layout = placeTables(model, reach, usedTables, context);
+  // Drawn as the relationships are at this point (after USERELATIONSHIP and CROSSFILTER).
+  const layout = placeTables(reach.model, reach, usedTables, context);
   const chosen = selected ? reach.tables.find((t) => same(t.table, selected)) : undefined;
 
   return (
@@ -69,28 +70,56 @@ export function TablesReached({ context, usedTables, folded }: TablesReachedProp
             <path d="M0 0 L10 5 L0 10 z" className="idle-arrow-head" />
           </marker>
         </defs>
-        {layout.edges.map(({ r, a, b }, i) => {
+        {layout.edges.map(({ r, a, b, offset }, i) => {
           const flowing = reach.flowing.includes(r);
-          const [x1, y1] = edgePoint(a, b);
-          const [x2, y2] = edgePoint(b, a);
+          const [ex1, ey1] = edgePoint(a, b);
+          const [ex2, ey2] = edgePoint(b, a);
+          // Two relationships between the same tables are drawn side by side.
+          const length = Math.hypot(ex2 - ex1, ey2 - ey1) || 1;
+          const [nx, ny] = [-(ey2 - ey1) / length, (ex2 - ex1) / length];
+          const [x1, y1, x2, y2] = [ex1 + nx * offset, ey1 + ny * offset, ex2 + nx * offset, ey2 + ny * offset];
           // Arrow heads point the way a filter can travel: from the one side to the many side (both ways if set so).
           // A filter on a whole table goes the other way, to the tables it looks up (a is the "to" end).
           const againstFlow = reach.against.includes(r);
-          const towardB = !againstFlow && flowFrom({ ...r, active: true }, a.reach.table).kind === 'flows';
-          const towardA = againstFlow || flowFrom({ ...r, active: true }, b.reach.table).kind === 'flows';
+          const towardB = !againstFlow && !r.cut && flowFrom({ ...r, active: true }, a.reach.table).kind === 'flows';
+          const towardA = againstFlow || (!r.cut && flowFrom({ ...r, active: true }, b.reach.table).kind === 'flows');
+          const [mx, my] = [(x1 + x2) / 2, (y1 + y2) / 2];
           const marker = `url(#${flowing ? 'flow' : 'idle'}-arrow)`;
           // a is the relationship's "to" table, b its "from" table.
           const endA = r.toMany ? '*' : '1';
           const endB = r.fromMany ? '*' : '1';
           return (
-            <g key={i} className={['map-edge', flowing ? 'is-flowing' : '', r.active ? '' : 'is-inactive'].filter(Boolean).join(' ')}>
-              <title>{`${r.fromTable}[${r.fromColumn}] → ${r.toTable}[${r.toColumn}]${r.active ? '' : ' (inactive)'}${r.bothDirections ? ', filters both ways' : ''}`}</title>
+            <g key={i} className={['map-edge', flowing ? 'is-flowing' : '', r.active ? '' : 'is-inactive', r.changedBy ? 'is-changed' : '', r.cut ? 'is-cut' : ''].filter(Boolean).join(' ')}>
+              <title>{`${r.fromTable}[${r.fromColumn}] → ${r.toTable}[${r.toColumn}]${r.active ? '' : ' (inactive)'}${r.bothDirections ? ', filters both ways' : ''}${r.cut ? ', carries no filter here' : ''}${r.changedBy ? ` — changed here by ${r.changedBy}` : ''}${r.switchedOffBy ? ` — switched off here, because ${r.switchedOffBy} uses another relationship` : ''}`}</title>
               <line x1={x1} y1={y1} x2={x2} y2={y2} markerEnd={r.active && towardB ? marker : undefined} markerStart={r.active && towardA ? marker : undefined} />
               <text className="map-cardinality" x={label(x1, y1, x2, y2, r.active && towardA)[0]} y={label(x1, y1, x2, y2, r.active && towardA)[1]} textAnchor="middle">
                 {endA}
               </text>
               <text className="map-cardinality" x={label(x2, y2, x1, y1, r.active && towardB)[0]} y={label(x2, y2, x1, y1, r.active && towardB)[1]} textAnchor="middle">
                 {endB}
+              </text>
+              {r.changedBy && (
+                // Away from the 1 / * labels; for side-by-side relationships, on the outer side of its own lane.
+                <text className="map-change" x={mx + nx * 12 * (offset > 0 ? 1 : -1)} y={my + ny * 12 * (offset > 0 ? 1 : -1) + 3.5} textAnchor="middle">
+                  {r.cut ? '✕ ' : ''}
+                  {r.changedBy}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {reach.treatAs.map(({ from, to }, i) => {
+          const a = layout.boxes.find((b) => same(b.reach.table, from));
+          const b = layout.boxes.find((x) => same(x.reach.table, to));
+          if (!a || !b || a === b) return null;
+          const [x1, y1] = edgePoint(a, b);
+          const [x2, y2] = edgePoint(b, a);
+          return (
+            <g key={`t${i}`} className="map-treatas">
+              <title>{`TREATAS: the values from ${from} filter ${to}, as if through a relationship`}</title>
+              <line x1={x1} y1={y1} x2={x2} y2={y2} markerEnd="url(#flow-arrow)" />
+              <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 5} textAnchor="middle">
+                TREATAS
               </text>
             </g>
           );
@@ -137,6 +166,11 @@ export function TablesReached({ context, usedTables, folded }: TablesReachedProp
       <p className="tables-reached-detail">{chosen ? explain(chosen, touched.length) : `${summary} Click a table to see how.`}</p>
       {layout.hidden > 0 && <p className="value-note">+ {layout.hidden} other tables, not drawn (none of them is filtered or used here).</p>}
       {reach.unknown.length > 0 && <p className="value-note">Not checked: which tables {reach.unknown.join('; ')} filters.</p>}
+      {reach.problems.map((p, i) => (
+        <p key={i} className="value-note map-problem">
+          {p.charAt(0).toUpperCase() + p.slice(1)}.
+        </p>
+      ))}
       {reach.unchecked.length > 0 && (
         <p className="value-note">
           Not checked: which way filters flow through the many-to-many relationship{reach.unchecked.length > 1 ? 's' : ''}{' '}
@@ -224,7 +258,15 @@ function placeTables(model: RelationshipModel, reach: FilterReach, usedTables: r
     b.y = Math.min(Math.max(b.y, BOX_HEIGHT / 2 + 4), height - BOX_HEIGHT / 2 - 14);
   }
   const at = (name: string) => boxes.find((b) => same(b.reach.table, name))!;
-  const edges = edges0.map((r: Relationship) => ({ r, a: at(r.toTable), b: at(r.fromTable) }));
+  // Relationships between the same two tables get their own lane (offset sideways), so they don't overlap.
+  const lanes = new Map<string, number>();
+  const edges = edges0.map((r: Relationship) => {
+    const pair = [r.fromTable.toLowerCase(), r.toTable.toLowerCase()].sort().join('|');
+    const count = edges0.filter((x) => [x.fromTable.toLowerCase(), x.toTable.toLowerCase()].sort().join('|') === pair).length;
+    const lane = lanes.get(pair) ?? 0;
+    lanes.set(pair, lane + 1);
+    return { r, a: at(r.toTable), b: at(r.fromTable), offset: count === 1 ? 0 : (lane - (count - 1) / 2) * 12 };
+  });
   return { width, height, boxes, edges, hidden };
 }
 

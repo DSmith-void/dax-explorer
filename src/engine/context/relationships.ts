@@ -12,7 +12,7 @@
  *    (and one-to-one) active relationships, repeatedly. Removing filters from a whole table
  *    (ALL(Sales), REMOVEFILTERS(Sales)) removes them from its expanded table too.
  */
-import type { ColumnName, EvalContext } from './model';
+import type { ColumnName, EvalContext, RelationshipChange } from './model';
 
 export interface Relationship {
   fromTable: string;
@@ -25,6 +25,14 @@ export interface Relationship {
   toMany: boolean;
   active: boolean;
   bothDirections: boolean;
+  /** CROSSFILTER(…, NONE): the relationship carries no filter here. */
+  cut?: boolean;
+  /** CROSSFILTER(…, ONEWAY_LEFTFILTERSRIGHT / RIGHTFILTERSLEFT): filters flow only from this table. */
+  filtersFrom?: string;
+  /** Changed at this point by USERELATIONSHIP or CROSSFILTER (the function's name), for the drawing. */
+  changedBy?: string;
+  /** Switched off at this point because USERELATIONSHIP uses another relationship between the same tables. */
+  switchedOffBy?: string;
 }
 
 export interface RelationshipModel {
@@ -78,13 +86,79 @@ export type Flow =
 /** Whether a filter on `table` travels through relationship `r` (only active relationships carry filters). */
 export function flowFrom(r: Relationship, table: string): Flow {
   const to = otherEnd(r, table);
-  if (to === null || !r.active) return { kind: 'blocked' };
+  if (to === null || !r.active || r.cut) return { kind: 'blocked' };
+  if (r.filtersFrom) return same(r.filtersFrom, table) ? { kind: 'flows', to } : { kind: 'blocked' };
   if (r.bothDirections || (!r.fromMany && !r.toMany)) return { kind: 'flows', to };
   if (r.fromMany && r.toMany) return { kind: 'unknown' };
   // One-to-many: from the one side to the many side.
   const fromIsOne = !r.fromMany;
   const tableIsFrom = same(r.fromTable, table);
   return tableIsFrom === fromIsOne ? { kind: 'flows', to } : { kind: 'blocked' };
+}
+
+/**
+ * CROSSFILTER can't make only the many side of a one-to-many relationship filter the one side; DAX shows
+ * an error (checked live: "cannot be used to enable only the many-side ... to filter the one-side").
+ * Returns that problem in plain words, or null.
+ */
+export function crossfilterError(r: Relationship, change: RelationshipChange): string | null {
+  if (change.kind !== 'crossfilter' || (change.direction !== 'left-filters-right' && change.direction !== 'right-filters-left')) return null;
+  if (r.fromMany === r.toMany) return null; // one-to-one or many-to-many: either way is allowed
+  const filtersFrom = change.direction === 'left-filters-right' ? change.columns[0].table : change.columns[1].table;
+  const manyTable = r.fromMany ? r.fromTable : r.toTable;
+  const oneTable = r.fromMany ? r.toTable : r.fromTable;
+  if (!same(filtersFrom, manyTable)) return null;
+  return `CROSSFILTER can't make only the many side (${manyTable}) filter the one side (${oneTable}), so DAX shows an error here`;
+}
+
+/** The relationship between two columns (in either order), if the model has one. */
+export function findRelationship(model: RelationshipModel, a: ColumnName, b: ColumnName): Relationship | undefined {
+  const is = (r: Relationship, x: ColumnName, y: ColumnName) =>
+    same(r.fromTable, x.table) && same(r.fromColumn, x.column) && same(r.toTable, y.table) && same(r.toColumn, y.column);
+  return model.relationships.find((r) => is(r, a, b) || is(r, b, a));
+}
+
+const columnName = (c: ColumnName) => `${c.table}[${c.column}]`;
+
+/**
+ * The relationships as USERELATIONSHIP and CROSSFILTER change them at this point, with a plain note for each
+ * change the model can't take (no such relationship: DAX shows an error there).
+ *  - USERELATIONSHIP makes the named relationship active, and the relationship that was active between
+ *    the same two tables inactive.
+ *  - CROSSFILTER sets the direction: BOTH, ONEWAY (from the one side), NONE (no filter at all), or one
+ *    named way.
+ */
+export function applyChanges(model: RelationshipModel, changes: readonly RelationshipChange[]): { model: RelationshipModel; problems: string[] } {
+  if (changes.length === 0) return { model, problems: [] };
+  let relationships = model.relationships.map((r) => ({ ...r }));
+  const problems: string[] = [];
+  for (const change of changes) {
+    const [a, b] = change.columns;
+    const target = findRelationship({ ...model, relationships }, a, b);
+    if (!target) {
+      problems.push(`there is no relationship between ${columnName(a)} and ${columnName(b)} in this model, so ${change.functionName} shows an error here`);
+      continue;
+    }
+    if (change.kind === 'use') {
+      const pair = (r: Relationship) =>
+        (same(r.fromTable, target.fromTable) && same(r.toTable, target.toTable)) || (same(r.fromTable, target.toTable) && same(r.toTable, target.fromTable));
+      relationships = relationships.map((r) =>
+        r === target ? { ...r, active: true, changedBy: change.functionName } : pair(r) && r.active ? { ...r, active: false, switchedOffBy: change.functionName } : r,
+      );
+      continue;
+    }
+    const direction = change.direction ?? 'oneway';
+    const manySideOnly = crossfilterError(target, change);
+    if (manySideOnly) {
+      problems.push(manySideOnly);
+      continue;
+    }
+    const updated: Relationship = { ...target, changedBy: change.functionName, cut: direction === 'none', filtersFrom: undefined, bothDirections: direction === 'both' };
+    if (direction === 'left-filters-right') updated.filtersFrom = a.table;
+    if (direction === 'right-filters-left') updated.filtersFrom = b.table;
+    relationships = relationships.map((r) => (r === target ? updated : r));
+  }
+  return { model: { ...model, relationships }, problems };
 }
 
 /** The tables in `table`'s expanded table (itself first), following active many-to-one and one-to-one relationships. */
@@ -148,6 +222,12 @@ export interface FilterReach {
   unknown: string[];
   /** Relationships whose direction isn't checked. */
   unchecked: Relationship[];
+  /** The relationships as they are at this point (after USERELATIONSHIP and CROSSFILTER). */
+  model: RelationshipModel;
+  /** Relationship changes the model can't take, in plain words. */
+  problems: string[];
+  /** TREATAS filters: from the tables their values come from, to the table they filter. */
+  treatAs: { from: string; to: string }[];
 }
 
 /**
@@ -157,8 +237,9 @@ export interface FilterReach {
 export function filterReach(
   context: EvalContext,
   reportFilters: readonly { columns: readonly ColumnName[]; text: string; applies: boolean }[],
-  model: RelationshipModel,
+  baseModel: RelationshipModel,
 ): FilterReach {
+  const { model, problems } = applyChanges(baseModel, context.unknownReason ? [] : (context.filter.relationships ?? []));
   const reach = new Map<string, TableReach>();
   const tableName = (name: string) => model.tables.find((t) => same(t, name)) ?? name;
   for (const t of model.tables) reach.set(key(t), { table: t, state: 'not-reached', filters: [], path: [], source: null, removed: [], expanded: false });
@@ -245,7 +326,14 @@ export function filterReach(
       queue.push(target.table);
     }
   }
-  return { tables: [...reach.values()], flowing: [...flowing], against: [...against], unknown, unchecked: [...unchecked] };
+  const treatAs = context.unknownReason
+    ? []
+    : context.filter.entries.flatMap((e) =>
+        e.treatAsFrom && e.target.kind === 'columns'
+          ? e.treatAsFrom.flatMap((from) => (e.target.kind === 'columns' ? e.target.columns.map((c) => ({ from: tableName(from), to: tableName(c.table) })) : []))
+          : [],
+      );
+  return { tables: [...reach.values()], flowing: [...flowing], against: [...against], unknown, unchecked: [...unchecked], model, problems, treatAs };
 }
 
 /** "Product → Sales (through Sales[Product Key] → Product[Product Key])" for a reached table. */

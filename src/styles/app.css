@@ -2490,3 +2490,39 @@ select {
 .map-key .map-key-inactive {
   border-top: 2px dashed var(--color-gutter);
 }
+
+.context-relationship {
+  font-size: 0.8125rem;
+  color: var(--color-frame-1);
+}
+
+.map-edge.is-changed line {
+  stroke-width: 2.4;
+}
+
+.map-edge.is-cut line {
+  stroke: var(--color-notice-border);
+  stroke-dasharray: 2 4;
+}
+
+.map-change {
+  font-size: 9.5px;
+  font-weight: 700;
+  fill: var(--color-frame-1);
+  paint-order: stroke;
+  stroke: var(--color-surface);
+  stroke-width: 3px;
+}
+
+.map-treatas line {
+  stroke: var(--color-frame-1);
+  stroke-width: 1.8;
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+
+.map-treatas text {
+  font-size: 9.5px;
+  font-weight: 700;
+  fill: var(--color-frame-1);
+}

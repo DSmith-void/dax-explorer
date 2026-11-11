@@ -71,6 +71,36 @@ RETURN
     )`,
   },
   {
+    id: 'sales-by-ship-date',
+    title: 'Sales by Ship Date',
+    concept: 'USERELATIONSHIP switches Sales to Date from the order date to the (normally inactive) ship date, just inside this CALCULATE.',
+    expression: `Sales by Ship Date =
+CALCULATE(
+    [Total Sales],
+    USERELATIONSHIP(Sales[Ship Date], 'Date'[Date])
+)`,
+  },
+  {
+    id: 'customers-who-bought',
+    title: 'Customers Who Bought',
+    concept: 'CROSSFILTER BOTH lets filters on products flow back through Sales to Customer, so only customers who bought them are counted.',
+    expression: `Customers Who Bought =
+CALCULATE(
+    COUNTROWS(Customer),
+    CROSSFILTER(Sales[Customer Key], Customer[Customer Key], BOTH)
+)`,
+  },
+  {
+    id: 'featured-category-sales',
+    title: 'Featured Category Sales',
+    concept: 'TREATAS applies a list of values as a filter on Product[Category], as if it came through a relationship.',
+    expression: `Featured Category Sales =
+CALCULATE(
+    [Total Sales],
+    TREATAS({"Widgets", "Gadgets"}, Product[Category])
+)`,
+  },
+  {
     id: 'best-plant-order-value',
     title: 'Best Plant Order Value',
     concept: 'A measure that calls a measure that calls measures: step into [Average Order Value] to see what it does for one plant.',

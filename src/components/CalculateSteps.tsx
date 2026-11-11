@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { entryText, incomingText, removalText } from '../engine/context/describe';
+import { entryText, incomingText, removalText, relationshipChangeText } from '../engine/context/describe';
 import type { EvalContext, Step } from '../engine/context/model';
 import { findNode, type AstNode, type FunctionCall } from '../engine/parser/ast';
 
@@ -92,6 +92,12 @@ export function CalculateSteps({ node, step, source, onSelectNode }: CalculateSt
             {replaces ? '. It replaces any filter already on that column' : ''}.
           </>
         ),
+      );
+    } else if (op.kind === 'relationship') {
+      items.push(
+        <>
+          {code(argNode, op.change.functionName)}: {relationshipChangeText(op.change).replace(/^./, (c) => c.toLowerCase())}, for the calculation inside.
+        </>,
       );
     } else if (op.kind === 'not-modeled') {
       items.push(

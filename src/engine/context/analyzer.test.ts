@@ -179,7 +179,6 @@ describe('CALCULATE filters', () => {
 
   it.each([
     ['CALCULATE([X], ALLSELECTED(Product))', /^ALLSELECTED brings back the filters chosen outside this visual/],
-    ['CALCULATE([X], USERELATIONSHIP(Sales[Ship Date], Date[Date]))', /^USERELATIONSHIP switches which relationship between tables is used/],
     ['CALCULATE([X], [Y] > 0)', /compares a measure \(\[Y\]\)/],
     ['CALCULATE([X], Product[Color] = Plant[Code])', /uses columns from more than one table/],
   ])('says what it cannot check: %s', (source, pattern) => {

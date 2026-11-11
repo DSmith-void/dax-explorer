@@ -1,4 +1,4 @@
-import type { ColumnName, EvalContext, FilterEntry, FilterTarget, Removal, RowContext } from './model';
+import type { ColumnName, EvalContext, FilterEntry, FilterTarget, RelationshipChange, Removal, RowContext } from './model';
 import { expandedTables, type RelationshipModel } from './relationships';
 
 /**
@@ -71,6 +71,20 @@ export function incomingText(removals: readonly Removal[], model?: RelationshipM
   return `The report's filters, except any filter on ${removals.map(text).join('; ')}`;
 }
 
+/** "Uses the relationship Sales[Ship Date] – 'Date'[Date]" (or, mid-sentence, "using …"). */
+export function relationshipChangeText(change: RelationshipChange, midSentence = false): string {
+  const [a, b] = change.columns.map(columnText);
+  if (change.kind === 'use') return `${midSentence ? 'using' : 'Uses'} the relationship ${a} – ${b}`;
+  const how = {
+    none: 'carrying no filter at all',
+    oneway: 'filtering one way (from the one side)',
+    both: 'filtering both ways',
+    'left-filters-right': `filtering only from ${change.columns[0].table} to ${change.columns[1].table}`,
+    'right-filters-left': `filtering only from ${change.columns[1].table} to ${change.columns[0].table}`,
+  }[change.direction ?? 'oneway'];
+  return `${midSentence ? 'with' : 'Sets'} the relationship ${a} – ${b} ${how}`;
+}
+
 export function rowContextText(row: RowContext): string {
   return `${row.functionName} is going through ${row.table.description} one row at a time`;
 }
@@ -80,6 +94,7 @@ export function describeContext(context: EvalContext): string[] {
   if (context.unknownReason) return [`Unknown: ${context.unknownReason}`];
   const lines = [incomingText(context.filter.removals)];
   for (const entry of context.filter.entries) lines.push(`${entryText(entry)}  (${originText(entry)})`);
+  for (const change of context.filter.relationships) lines.push(`${relationshipChangeText(change)}  (${change.functionName})`);
   for (const caveat of context.filter.caveats) lines.push(`Not checked: ${caveat}`);
   for (const row of context.rows) lines.push(rowContextText(row));
   return lines;

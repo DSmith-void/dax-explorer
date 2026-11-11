@@ -131,3 +131,66 @@ describe('with the relationships known, whole-table removals are certain', () =>
     expect(describeContext(withModel)).toEqual(["The report's filters, except any filter on Product[Color]; table Sales"]);
   });
 });
+
+describe('USERELATIONSHIP, CROSSFILTER and TREATAS', () => {
+  const DATE_2025: ReportFilter = { kind: 'values', column: { table: 'Date', column: 'Year' }, values: [2025] };
+  const inside = (text: string) => analysis(text, INITECH_MODEL).find((e) => e.kind === 'calculate')!.innerContext!;
+
+  it('USERELATIONSHIP: the ship date relationship carries the Date filter; the order date one is switched off', () => {
+    const context = inside("M = CALCULATE([Total Sales], USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))");
+    expect(describeContext(context)).toContain('Uses the relationship Sales[Ship Date] – Date[Date]  (USERELATIONSHIP)');
+    const { result, state } = reach(INITECH_MODEL, context, [DATE_2025]);
+    expect(state.Sales).toBe('reached');
+    const ship = result.model.relationships.find((r) => r.fromColumn === 'Ship Date')!;
+    const order = result.model.relationships.find((r) => r.fromColumn === 'Date')!;
+    expect([ship.active, order.active, ship.changedBy, order.switchedOffBy]).toEqual([true, false, 'USERELATIONSHIP', 'USERELATIONSHIP']);
+    expect(result.flowing).toEqual([ship]);
+    expect(pathText(result.tables.find((t) => t.table === 'Sales')!)).toBe('Date → Sales (through Sales[Ship Date] → Date[Date])');
+  });
+
+  it('CROSSFILTER BOTH: a Product filter reaches Customer through Sales', () => {
+    const context = inside('M = CALCULATE(COUNTROWS(Customer), CROSSFILTER(Sales[Customer Key], Customer[Customer Key], BOTH))');
+    expect(reach(INITECH_MODEL, context, [CATEGORY]).state).toEqual({ Sales: 'reached', Product: 'filtered', Customer: 'reached', Plant: 'not-reached', Date: 'not-reached' });
+    expect(reach(INITECH_MODEL, INITIAL_CONTEXT, [CATEGORY]).state.Customer).toBe('not-reached');
+  });
+
+  it('CROSSFILTER NONE cuts a relationship; a named direction filters only that way', () => {
+    const none = inside('M = CALCULATE([Total Sales], CROSSFILTER(Sales[Product Key], Product[Product Key], NONE))');
+    expect(reach(INITECH_MODEL, none, [CATEGORY]).state.Sales).toBe('not-reached');
+    const productToSales = inside('M = CALCULATE([Total Sales], CROSSFILTER(Sales[Product Key], Product[Product Key], ONEWAY_RIGHTFILTERSLEFT))');
+    expect(reach(INITECH_MODEL, productToSales, [CATEGORY]).state.Sales).toBe('reached');
+  });
+
+  it('CROSSFILTER letting only the many side filter the one side is a DAX error (checked live), not a direction', () => {
+    const text = 'M = CALCULATE([Total Sales], CROSSFILTER(Sales[Product Key], Product[Product Key], ONEWAY_LEFTFILTERSRIGHT))';
+    const result = reach(INITECH_MODEL, inside(text), [CATEGORY]).result;
+    expect(result.problems).toEqual(["CROSSFILTER can't make only the many side (Sales) filter the one side (Product), so DAX shows an error here"]);
+    expect(result.model.relationships.some((r) => r.changedBy)).toBe(false);
+    // Also checked live: the same direction with the columns swapped, and on another relationship, error too;
+    // the allowed direction with swapped columns works.
+    const problems = (t: string) => reach(INITECH_MODEL, inside(t), [CATEGORY]).result.problems.length;
+    expect(problems('M = CALCULATE([Total Sales], CROSSFILTER(Product[Product Key], Sales[Product Key], ONEWAY_RIGHTFILTERSLEFT))')).toBe(1);
+    expect(problems('M = CALCULATE([Total Sales], CROSSFILTER(Sales[Customer Key], Customer[Customer Key], ONEWAY_LEFTFILTERSRIGHT))')).toBe(1);
+    const allowed = inside('M = CALCULATE([Total Sales], CROSSFILTER(Product[Product Key], Sales[Product Key], ONEWAY_LEFTFILTERSRIGHT))');
+    expect(reach(INITECH_MODEL, allowed, [CATEGORY]).state).toMatchObject({ Sales: 'reached', Product: 'filtered', Customer: 'not-reached' });
+    const step = analysis(text, INITECH_MODEL).find((e) => e.kind === 'filter-input')!;
+    expect(step.summary).toBe("Sets the relationship Sales[Product Key] – Product[Product Key] filtering only from Sales to Product: CROSSFILTER can't make only the many side (Sales) filter the one side (Product), so DAX shows an error here.");
+  });
+
+  it('says when the model has no such relationship', () => {
+    const context = inside('M = CALCULATE([Total Sales], USERELATIONSHIP(Sales[Quantity], Product[Category]))');
+    expect(reach(INITECH_MODEL, context).result.problems).toEqual([
+      'there is no relationship between Sales[Quantity] and Product[Category] in this model, so USERELATIONSHIP shows an error here',
+    ]);
+    const step = analysis('M = CALCULATE([Total Sales], USERELATIONSHIP(Sales[Quantity], Product[Category]))', INITECH_MODEL).find((e) => e.kind === 'filter-input')!;
+    expect(step.summary).toBe('Uses the relationship Sales[Quantity] – Product[Category]: this model has no relationship between Sales[Quantity] and Product[Category], so DAX shows an error here.');
+  });
+
+  it('TREATAS filters the named columns, and remembers where its values come from', () => {
+    const literal = inside('M = CALCULATE([Total Sales], TREATAS({"Widgets", "Gadgets"}, Product[Category]))');
+    expect(describeContext(literal)).toContain('Product[Category] in {"Widgets", "Gadgets"}  (added by CALCULATE)');
+    expect(reach(INITECH_MODEL, literal).state).toMatchObject({ Product: 'filtered', Sales: 'reached' });
+    const lineage = inside('M = CALCULATE([Total Sales], TREATAS(VALUES(Customer[Customer Key]), Plant[Plant Key]))');
+    expect(reach(INITECH_MODEL, lineage).result.treatAs).toEqual([{ from: 'Customer', to: 'Plant' }]);
+  });
+});
