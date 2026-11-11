@@ -53,6 +53,8 @@ export interface ColumnInfo {
   isHidden: boolean;
   kind: string;
   expression: string | null;
+  /** The column (of the same table) this one is sorted by in Power BI, e.g. Month by "Month Number". */
+  sortByColumn?: string | null;
 }
 
 export interface MeasureInfo {

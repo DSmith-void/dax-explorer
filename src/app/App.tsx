@@ -15,6 +15,7 @@ import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { TimelineBar } from '../components/StepControls';
 import { StepPanel, StoryList } from '../components/StepPanel';
+import { HintsPanel } from '../components/HintsPanel';
 import { SummaryCards } from '../components/SummaryCards';
 import { ThemeToggle } from '../components/ThemeToggle';
 import type { ReferenceType, ResolutionMode } from '../engine/binder/binder';
@@ -22,6 +23,7 @@ import type { ReportFilter } from '../engine/context/reportFilters';
 import type { InputMode } from '../engine/definition';
 import { createModelIndex } from '../engine/model';
 import { findNode, type AstNode } from '../engine/parser/ast';
+import { findHints } from '../engine/patterns/hints';
 import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
 import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
@@ -34,7 +36,7 @@ import { useDesktopVisuals } from './useDesktopVisuals';
 import { useThemePreference } from './useThemePreference';
 
 type Choices = Record<string, ReferenceType>;
-type Tab = 'step' | 'part' | 'tree' | 'problems';
+type Tab = 'step' | 'hints' | 'part' | 'tree' | 'problems';
 
 const isResolutionMode = (value: unknown): value is ResolutionMode => value === 'convention' || value === 'strict';
 const isDetailLevel = (value: unknown): value is DetailLevel => value === 'brief' || value === 'detailed';
@@ -123,6 +125,9 @@ export function App() {
         relationships: connectedModel.model.relationships.map(relationshipFromInfo),
         dateColumns: connectedModel.model.columns.filter((c) => /^date/i.test(c.dataType)).map((c) => ({ table: c.table, column: c.name })),
         dateTables: connectedModel.model.tables.filter((t) => t.dataCategory?.toLowerCase() === 'time').map((t) => t.name),
+        sortBy: connectedModel.model.columns.flatMap((c) =>
+          c.sortByColumn ? [{ column: { table: c.table, column: c.name }, by: { table: c.table, column: c.sortByColumn } }] : [],
+        ),
       };
     }
     return isBuiltInExample ? INITECH_MODEL : null;
@@ -150,6 +155,14 @@ export function App() {
   const root = activeResult?.parse?.root ?? null;
   const selectedNode = selectedNodeId !== null ? findNode(root, selectedNodeId) : null;
   const highlightNode = selectedNode ?? (current?.nodeId !== null && current ? findNode(root, current.nodeId) : null);
+  // Pattern checks for the measure the current step is in.
+  const hints = useMemo(
+    () =>
+      activeResult
+        ? findHints({ root, binding, analysis: contextAnalysis, source: activeResult.text, reportFilters, model: relationships })
+        : [],
+    [activeResult, root, binding, contextAnalysis, reportFilters, relationships],
+  );
   const problemCount = (activeResult?.diagnostics.length ?? 0) + (binding?.diagnostics.length ?? 0);
   const matchingSample = result && activeFrame?.level === 0 ? SAMPLE_MEASURES.find((s) => s.expression === result.text) : undefined;
 
@@ -299,6 +312,8 @@ export function App() {
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'step', label: 'Step by step' },
+    // The count leaves out what DAX does silently: those are explanations, not things to fix.
+    { id: 'hints', label: 'Hints', count: hints.filter((h) => h.kind !== 'silent').length },
     { id: 'part', label: 'Selected part' },
     { id: 'tree', label: 'Expression tree' },
     { id: 'problems', label: 'Problems', count: problemCount },
@@ -436,6 +451,17 @@ export function App() {
                 stepInto={(entry) => stepIntoTarget(entry.frame, entry, lookup)}
                 isExpanded={(key) => expanded.has(key)}
                 onExpand={handleExpand}
+                hintsAt={(entry) => (entry.frame === activeFrame && entry.nodeId !== null ? hints.filter((h) => h.nodeId === entry.nodeId) : [])}
+                onShowHints={() => setTab('hints')}
+              />
+            )}
+            {tab === 'hints' && (
+              <HintsPanel
+                hints={hints}
+                root={root}
+                measureName={activeFrame && activeFrame.level > 0 ? activeFrame.name : null}
+                detail={detail}
+                onSelectNode={handleSelectNode}
               />
             )}
             {tab === 'part' && (

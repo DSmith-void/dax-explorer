@@ -2641,3 +2641,157 @@ select {
 .newer-tab-box p {
   margin: 0;
 }
+
+/* --- Hints (pattern checks) --- */
+.hints-body {
+  display: grid;
+  gap: 16px;
+}
+
+.hint-group {
+  display: grid;
+  gap: 8px;
+}
+
+.hint-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.hint-kind {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hint-kind-warning {
+  color: var(--color-notice-text);
+  background: var(--color-notice-bg);
+  box-shadow: inset 0 0 0 1px var(--color-notice-border);
+}
+
+.hint-kind-cost {
+  color: var(--color-error-text);
+  background: var(--color-error-bg);
+  box-shadow: inset 0 0 0 1px var(--color-error-border);
+}
+
+.hint-kind-note {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.hint-kind-silent {
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.hint-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hint {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.hint-warning {
+  border-left-color: var(--color-notice-border);
+}
+
+.hint-cost {
+  border-left-color: var(--color-error-border);
+}
+
+.hint-note {
+  border-left-color: var(--color-accent);
+}
+
+.hint-title {
+  justify-self: start;
+  font-family: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+}
+
+.hint-title:hover {
+  text-decoration: underline;
+}
+
+.hint-why {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.hint-suggestion {
+  display: grid;
+  gap: 4px;
+}
+
+.hint-suggestion .field-label {
+  margin: 0;
+}
+
+.hint-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hint-code-row code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+/* On the Step tab: the hints about this step's code. */
+.step-hints {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hint-chip {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hint-chip:hover {
+  border-color: var(--color-accent);
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
+import { HINT_KIND_LABEL, type Hint } from '../engine/patterns/hints';
 import { scrollWithin } from './scrollWithin';
 import { frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
 import { TablesReached } from './TablesReached';
@@ -32,6 +33,9 @@ interface StepPanelProps {
   stepInto: (entry: FlatEntry) => StepInto | null;
   isExpanded: (key: string) => boolean;
   onExpand: (key: string, expanded: boolean) => void;
+  /** Pattern checks about this step's code. */
+  hintsAt: (entry: FlatEntry) => readonly Hint[];
+  onShowHints: () => void;
 }
 
 /** What StepPanel needs from useStepValues. */
@@ -79,7 +83,7 @@ function Box({ title, icon, count, className, children }: { title: string; icon:
 }
 
 /** The "Step" tab: what happens at the current step, the filters, the variables, and the story so far. */
-export function StepPanel({ entries, index, onStep, detail, onSelectNode, values, connected, stepInto, isExpanded, onExpand }: StepPanelProps) {
+export function StepPanel({ entries, index, onStep, detail, onSelectNode, values, connected, stepInto, isExpanded, onExpand, hintsAt, onShowHints }: StepPanelProps) {
   const current = entries[index];
   if (!current) {
     return <p className="empty-note">Nothing to step through yet. Pick a measure, or write your own DAX and press Explain.</p>;
@@ -112,6 +116,17 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         </p>
         <h4 className="step-title">{current.title}</h4>
         <p className="step-summary">{current.summary}</p>
+        {hintsAt(current).length > 0 && (
+          <ul className="step-hints">
+            {hintsAt(current).map((hint, i) => (
+              <li key={i}>
+                <button type="button" className={`hint-chip hint-chip-${hint.kind}`} onClick={onShowHints} title="Open the Hints tab">
+                  <span className={`hint-kind hint-kind-${hint.kind}`}>{HINT_KIND_LABEL[hint.kind]}</span> {hint.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <StepValue
           entry={current}
           query={query}

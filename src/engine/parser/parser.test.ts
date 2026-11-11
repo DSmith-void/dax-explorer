@@ -256,6 +256,8 @@ describe('built-in samples', () => {
     'sales-growth': '(VAR (ThisYear [Total Sales]) (LastYear [Sales Last Year]) RETURN (DIVIDE (- var:ThisYear var:LastYear) var:LastYear))',
     'share-of-selected': '(DIVIDE [Total Sales] (CALCULATE [Total Sales] (ALLSELECTED Product[Category])))',
     'featured-category-sales': '(CALCULATE [Total Sales] (TREATAS {"Widgets" "Gadgets"} Product[Category]))',
+    'total-sales-row-by-row': '(SUMX Sales [Total Sales])',
+    'january-sales': `(CALCULATE [Total Sales] (= 'Date'[Month] "Jan"))`,
   };
 
   it.each(SAMPLE_MEASURES.map((s) => [s.id, s.expression]))('parses sample "%s" into the expected tree', (sampleId, text) => {

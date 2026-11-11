@@ -133,6 +133,24 @@ table Sales
 			)
 		formatString: #,##0.00
 
+	measure 'Total Sales (Row by Row)' =
+			-- Order 1000 is in Sales twice (two identical rows). For each of them, [Total Sales] turns the row
+			-- into filters (context transition), which match BOTH rows: so order 1000 is counted four times here.
+			SUMX(
+			    Sales,
+			    [Total Sales]
+			)
+		formatString: #,##0.00
+
+	measure 'January Sales' =
+			-- Month is sorted by Month Number, so a visual by Month also filters Month Number:
+			-- only the January row keeps a value. Adding REMOVEFILTERS('Date'[Month Number]) fixes it.
+			CALCULATE(
+			    [Total Sales],
+			    'Date'[Month] = "Jan"
+			)
+		formatString: #,##0.00
+
 	column 'Order Key'
 		dataType: int64
 		isNameInferred
@@ -197,9 +215,11 @@ table Sales
 	partition Sales = calculated
 		mode: import
 		source =
-				-- 2,000 made-up orders, deliberately uneven so that filters visibly change the numbers:
+				-- 2,000 made-up orders (plus one entered twice, below), deliberately uneven so that filters visibly change the numbers:
 				-- Widgets sell often but cheaply, Gadgets rarely but expensively; Austin is the biggest plant;
 				-- a few customers buy far more than the rest. Every 40th order has an unknown plant.
+				-- Order 1000 was entered twice (two identical rows, on purpose): see 'Total Sales (Row by Row)'.
+				VAR Orders =
 				SELECTCOLUMNS(
 				    ADDCOLUMNS(
 				        ADDCOLUMNS(
@@ -245,3 +265,5 @@ table Sales
 				    "Net Price", [@Net Price],
 				    "Amount", [@Quantity] * [@Net Price]
 				)
+				RETURN
+				    UNION(Orders, FILTER(Orders, [Order Key] = 1000))

@@ -54,7 +54,8 @@ public static class ModelBuilder
                     r.Text("DataType") ?? "Unknown",
                     r.Flag("IsHidden"),
                     r.Text("Type") ?? "Data",
-                    r.Text("Expression")))
+                    r.Text("Expression"),
+                    r.Text("SortByColumn")))
                 .ToList(),
             measures
                 .Select(r => new MeasureInfo(

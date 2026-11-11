@@ -14,6 +14,8 @@ export const INITECH_MODEL: RelationshipModel = {
     { table: 'Sales', column: 'Ship Date' },
   ],
   dateTables: [],
+  // Date.tmdl: Month has sortByColumn 'Month Number'.
+  sortBy: [{ column: { table: 'Date', column: 'Month' }, by: { table: 'Date', column: 'Month Number' } }],
   relationships: [
     { fromTable: 'Sales', fromColumn: 'Date', toTable: 'Date', toColumn: 'Date', fromMany: true, toMany: false, active: true, bothDirections: false },
     { fromTable: 'Sales', fromColumn: 'Product Key', toTable: 'Product', toColumn: 'Product Key', fromMany: true, toMany: false, active: true, bothDirections: false },

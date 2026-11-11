@@ -12,7 +12,8 @@ public sealed record ModelMetadata(
 public sealed record TableInfo(string Name, bool IsHidden, string? Expression, string? DataCategory = null);
 
 /// <param name="Kind">How the column is defined: Data, Calculated, or CalculatedTableColumn.</param>
-public sealed record ColumnInfo(string Table, string Name, string DataType, bool IsHidden, string Kind, string? Expression);
+/// <param name="SortByColumn">The column (of the same table) this one is sorted by, e.g. Month by "Month Number"; null when none.</param>
+public sealed record ColumnInfo(string Table, string Name, string DataType, bool IsHidden, string Kind, string? Expression, string? SortByColumn = null);
 
 public sealed record MeasureInfo(string Table, string Name, string Expression, string? FormatString, bool IsHidden, string? DisplayFolder);
 

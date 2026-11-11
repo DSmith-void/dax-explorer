@@ -44,6 +44,11 @@ export interface RelationshipModel {
   dateColumns?: readonly ColumnName[];
   /** Tables marked as date tables. */
   dateTables?: readonly string[];
+  /**
+   * Columns sorted by another column in Power BI (Month by Month Number). A visual that shows such a column
+   * groups by both, so it filters both.
+   */
+  sortBy?: readonly { column: ColumnName; by: ColumnName }[];
 }
 
 const key = (name: string) => name.toLowerCase();

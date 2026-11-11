@@ -39,6 +39,20 @@ public class ModelBuilderTests
     }
 
     [Fact]
+    public void Reads_the_column_a_column_is_sorted_by()
+    {
+        var model = ModelBuilder.Build(
+            "db",
+            [],
+            [
+                R(("Table", "Date"), ("Name", "Month"), ("DataType", "Text"), ("IsHidden", false), ("Type", "Data"), ("SortByColumn", "Month Number")),
+                R(("Table", "Date"), ("Name", "Year"), ("DataType", "Integer"), ("IsHidden", false), ("Type", "Data"), ("SortByColumn", DBNull.Value)),
+            ],
+            [], []);
+        Assert.Equal(["Month Number", null], model.Columns.Select(c => c.SortByColumn));
+    }
+
+    [Fact]
     public void Builds_tables_measures_and_relationships()
     {
         var model = BuildSample();

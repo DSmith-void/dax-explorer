@@ -147,6 +147,26 @@ MAXX(
     [Average Order Value]
 )`,
   },
+  {
+    id: 'total-sales-row-by-row',
+    title: 'Total Sales (Row by Row)',
+    concept: 'A measure inside SUMX over Sales: one calculation per row, and order 1000 (entered twice) is counted four times. See Hints.',
+    expression: `Total Sales (Row by Row) =
+SUMX(
+    Sales,
+    [Total Sales]
+)`,
+  },
+  {
+    id: 'january-sales',
+    title: 'January Sales',
+    concept: 'Month is sorted by Month Number, so a visual by Month also filters Month Number: only the January row keeps a value. See Hints.',
+    expression: `January Sales =
+CALCULATE(
+    [Total Sales],
+    'Date'[Month] = "Jan"
+)`,
+  },
 ];
 
 /**
