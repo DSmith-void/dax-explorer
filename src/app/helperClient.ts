@@ -6,6 +6,8 @@
  * (this browser tab only), removes it from the address bar, and sends it with every request.
  */
 
+import type { TimingResult } from './timings';
+
 export const TOKEN_HEADER = 'X-DaxExplorer-Token';
 const SESSION_KEY = 'dax-explorer-helper-token';
 
@@ -175,6 +177,8 @@ export interface HelperClient {
    * rows of a table expression ("table", at most maxRows). The helper writes the EVALUATE statement.
    */
   evaluate(kind: 'scalar' | 'table', dax: string, maxRows?: number): Promise<QueryResult>;
+  /** Runs the same query while tracing it: where its time goes (optionally clearing the report's cache first). */
+  timings(kind: 'scalar' | 'table', dax: string, clearCache: boolean): Promise<TimingResult>;
   /**
    * Starts listening to the queries the connected report's visuals send: for a few minutes, or until the
    * report is disconnected (`untilDisconnect`, the "listen while connected" setting).
@@ -254,6 +258,7 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
     },
     captured: (after) => json<CaptureStatus>(`/api/capture?after=${after}`),
     evaluate: (kind, dax, maxRows) => json<QueryResult>('/api/evaluate', { method: 'POST', body: JSON.stringify({ kind, dax, maxRows }) }),
+    timings: (kind, dax, clearCache) => json<TimingResult>('/api/timings', { method: 'POST', body: JSON.stringify({ kind, dax, clearCache }) }),
   };
 }
 

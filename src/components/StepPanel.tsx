@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
+import { summarizeTimings, timingRequest, type TimingResult } from '../app/timings';
 import { HINT_KIND_LABEL, type Hint } from '../engine/patterns/hints';
 import { scrollWithin } from './scrollWithin';
 import { frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
@@ -36,6 +37,8 @@ interface StepPanelProps {
   /** Pattern checks about this step's code. */
   hintsAt: (entry: FlatEntry) => readonly Hint[];
   onShowHints: () => void;
+  /** "Run with timings" on the connected report; null when not connected. */
+  runTimings: ((kind: 'scalar' | 'table', dax: string, clearCache: boolean) => Promise<TimingResult>) | null;
 }
 
 /** What StepPanel needs from useStepValues. */
@@ -83,7 +86,7 @@ function Box({ title, icon, count, className, children }: { title: string; icon:
 }
 
 /** The "Step" tab: what happens at the current step, the filters, the variables, and the story so far. */
-export function StepPanel({ entries, index, onStep, detail, onSelectNode, values, connected, stepInto, isExpanded, onExpand, hintsAt, onShowHints }: StepPanelProps) {
+export function StepPanel({ entries, index, onStep, detail, onSelectNode, values, connected, stepInto, isExpanded, onExpand, hintsAt, onShowHints, runTimings }: StepPanelProps) {
   const current = entries[index];
   if (!current) {
     return <p className="empty-note">Nothing to step through yet. Pick a measure, or write your own DAX and press Explain.</p>;
@@ -186,7 +189,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={detail === 'brief'} />
       </Box>
 
-      {detail !== 'brief' && <TechnicalBox entry={current} query={query} />}
+      {detail !== 'brief' && <TechnicalBox entry={current} query={query} runTimings={runTimings} />}
 
       <Box title={frame.level > 0 ? `Variables in ${frame.name}` : 'Variables'} icon="variable" count={variables.length}>
         {variables.length === 0 ? (
@@ -286,7 +289,7 @@ function StepIntoControl({ target, isExpanded, onExpand }: { target: StepInto; i
 }
 
 /** For experienced users: the context in DAX's own terms, and the exact query behind the value. */
-function TechnicalBox({ entry, query }: { entry: FlatEntry; query: StepQuery }) {
+function TechnicalBox({ entry, query, runTimings }: { entry: FlatEntry; query: StepQuery; runTimings: StepPanelProps['runTimings'] }) {
   const [copied, setCopied] = useState<string | null>(null);
   const reach = useFilterReach(entry.innerContext ?? entry.context)?.reach;
   const reached = reach?.tables.filter((t) => t.state === 'reached') ?? [];
@@ -383,8 +386,93 @@ function TechnicalBox({ entry, query }: { entry: FlatEntry; query: StepQuery }) 
             <span className="muted">{noQuery}</span>
           )}
         </dd>
+        {dax && (
+          <>
+            <dt>Timings</dt>
+            <dd>
+              <Timings key={dax} query={query} runTimings={runTimings} />
+            </dd>
+          </>
+        )}
       </dl>
     </Box>
+  );
+}
+
+/** "Run with timings": where the time of this step's query goes, as the engine reports it. */
+function Timings({ query, runTimings }: { query: StepQuery; runTimings: StepPanelProps['runTimings'] }) {
+  const [clearCache, setClearCache] = useState(false);
+  const [state, setState] = useState<{ status: 'idle' } | { status: 'running' } | { status: 'done'; result: TimingResult } | { status: 'error'; message: string }>({
+    status: 'idle',
+  });
+  const request = timingRequest(query);
+  if (!request) return null;
+  if (!runTimings) return <span className="muted">Connect to a report to time this query.</span>;
+  const run = async () => {
+    setState({ status: 'running' });
+    try {
+      setState({ status: 'done', result: await runTimings(request.kind, request.dax, clearCache) });
+    } catch (e) {
+      setState({ status: 'error', message: e instanceof Error ? e.message : 'The timings could not be collected.' });
+    }
+  };
+  const summary = state.status === 'done' ? summarizeTimings(state.result) : null;
+  return (
+    <div className="timings">
+      <p className="technical-copy">
+        <button type="button" className="secondary-button" onClick={() => void run()} disabled={state.status === 'running'}>
+          {state.status === 'running' ? 'Running…' : 'Run with timings'}
+        </button>
+        <label className="timings-cold">
+          <input type="checkbox" checked={clearCache} onChange={(e) => setClearCache(e.target.checked)} /> Clear cache first
+        </label>
+      </p>
+      {state.status === 'running' && <p className="muted">Timing takes a few seconds: the engine reports its timings a moment after the query ends.</p>}
+      {state.status === 'error' && <p className="data-bar-error">{state.message}</p>}
+      {summary && state.status === 'done' && (
+        <>
+          <p className="timings-total">
+            <strong>{summary.totalMs} ms</strong> in total{state.result.clearedCache ? ', from a cold start' : ''}
+          </p>
+          {summary.totalMs > 0 && (
+            <div className="timings-bar" aria-hidden="true">
+              <span className="timings-bar-storage" style={{ width: `${(summary.storageMs / summary.totalMs) * 100}%` }} />
+              <span className="timings-bar-formula" style={{ width: `${(summary.formulaMs / summary.totalMs) * 100}%` }} />
+            </div>
+          )}
+          <ul className="timings-split">
+            <li>
+              <span className="timings-key timings-key-storage" /> Reading data (storage engine): <strong>{summary.storageMs} ms</strong>, {summary.scans}{' '}
+              {summary.scans === 1 ? 'scan' : 'scans'}
+              {summary.cacheHits > 0 ? `, ${summary.cacheHits} from memory` : ''}
+            </li>
+            <li>
+              <span className="timings-key timings-key-formula" /> Calculating (formula engine): <strong>{summary.formulaMs} ms</strong>{' '}
+              <span className="muted">(the rest of the total)</span>
+            </li>
+          </ul>
+          <p>{summary.verdict}</p>
+          {summary.notes.map((note, i) => (
+            <p key={i} className="muted">
+              {note}
+            </p>
+          ))}
+          {state.result.scans.length > 0 && (
+            <details className="technical-details">
+              <summary>Show the scans ({state.result.scans.length})</summary>
+              <ol className="timings-scans">
+                {state.result.scans.map((s, i) => (
+                  <li key={i}>
+                    <span className="muted">{s.fromCache ? 'from memory' : `${s.durationMs ?? '?'} ms`}</span>
+                    <pre className="technical-query">{s.text.trim()}</pre>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

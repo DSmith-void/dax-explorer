@@ -2795,3 +2795,61 @@ select {
 .hint-chip:hover {
   border-color: var(--color-accent);
 }
+
+/* --- Run with timings (Technical box) --- */
+.timings {
+  display: grid;
+  gap: 6px;
+}
+
+.timings p {
+  margin: 0;
+}
+
+.timings-cold {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.timings-bar {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+}
+
+.timings-bar-storage,
+.timings-key-storage {
+  background: var(--color-accent);
+}
+
+.timings-bar-formula,
+.timings-key-formula {
+  background: var(--color-notice-border);
+}
+
+.timings-split {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timings-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.timings-scans {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

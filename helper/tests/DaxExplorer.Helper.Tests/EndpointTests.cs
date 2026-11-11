@@ -125,6 +125,19 @@ public sealed class EndpointTests : IAsyncLifetime
     private const string ToolExe = @"C:ToolsDaxExplorerDaxExplorer.exe";
     private FakeElevation _elevation = null!;
     private readonly FakeModelSource _source = new();
+    private readonly FakeTimings _timings = new();
+
+    private sealed class FakeTimings : ITimingSource
+    {
+        public List<(int Port, string Database, string Query, bool ClearCache)> Runs { get; } = [];
+        public Exception? Throw { get; set; }
+        public TimingResult Measure(int port, string database, string query, bool clearCache, TimeSpan timeout)
+        {
+            Runs.Add((port, database, query, clearCache));
+            if (Throw is not null) throw Throw;
+            return new TimingResult(12, 9, [new TimingScan("SELECT SUM(...) FROM Sales", 3, 2, 1.5, 4.5, false), new TimingScan("SELECT ...", null, null, null, null, true)], 1, clearCache);
+        }
+    }
     private WebApplication _app = null!;
     private HttpClient _client = null!;
 
@@ -138,6 +151,7 @@ public sealed class EndpointTests : IAsyncLifetime
             builder.Services.AddSingleton<ISampleLauncher>(_launcher);
             builder.Services.AddSingleton<TimeProvider>(_clock);
             builder.Services.AddSingleton<IQueryRunner>(_runner);
+            builder.Services.AddSingleton<ITimingSource>(_timings);
             builder.Services.AddSingleton<ICaptureSource>(_capture);
             builder.Services.AddSingleton<ISessionCommands>(_sessions);
             _elevation = new FakeElevation(_toolFolder, ToolExe);
@@ -359,6 +373,41 @@ public sealed class EndpointTests : IAsyncLifetime
         await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
         var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/status")));
         Assert.False(status.GetProperty("connection").GetProperty("isSample").GetBoolean());
+    }
+
+    // ------------------------------------------------------------------ timings
+
+    [Fact]
+    public async Task Timings_need_a_connection()
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/timings", body: new { kind = "scalar", dax = "1" }));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Empty(_timings.Runs);
+    }
+
+    [Fact]
+    public async Task Timings_run_the_same_EVALUATE_statement_and_return_what_the_engine_reported()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/timings", body: new { kind = "scalar", dax = "[Total Sales]", clearCache = true }));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await Json(response);
+        Assert.Equal(12, body.GetProperty("totalMs").GetInt64());
+        Assert.Equal(2, body.GetProperty("scans").GetArrayLength());
+        Assert.True(body.GetProperty("scans")[1].GetProperty("fromCache").GetBoolean());
+        Assert.True(body.GetProperty("clearedCache").GetBoolean());
+        Assert.Equal((61403, "db", "EVALUATE ROW(\"value\",\n[Total Sales]\n)", true), Assert.Single(_timings.Runs));
+    }
+
+    [Fact]
+    public async Task Timings_that_cannot_be_collected_say_so()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        _timings.Throw = new TimingUnavailableException("Power BI Desktop did not allow a timing trace.");
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/timings", body: new { kind = "table", dax = "VALUES(Product[Category])" }));
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Contains("did not allow a timing trace", await response.Content.ReadAsStringAsync());
+        Assert.False(Assert.Single(_timings.Runs).ClearCache);
     }
 
     // ------------------------------------------------------------------ evaluate

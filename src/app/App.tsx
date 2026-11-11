@@ -453,6 +453,7 @@ export function App() {
                 onExpand={handleExpand}
                 hintsAt={(entry) => (entry.frame === activeFrame && entry.nodeId !== null ? hints.filter((h) => h.nodeId === entry.nodeId) : [])}
                 onShowHints={() => setTab('hints')}
+                runTimings={connectedModel ? (kind, dax, clearCache) => helperClient.timings(kind, dax, clearCache) : null}
               />
             )}
             {tab === 'hints' && (

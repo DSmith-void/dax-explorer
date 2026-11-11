@@ -49,6 +49,7 @@ public static class HelperServer
         builder.Services.AddSingleton<IDesktopInstances, DesktopInstances>();
         builder.Services.AddSingleton<IModelSource, AdomdModelSource>();
         builder.Services.AddSingleton<IQueryRunner, AdomdQueryRunner>();
+        builder.Services.AddSingleton<ITimingSource, AmoTimingSource>();
         builder.Services.AddSingleton<ICaptureSource, AmoCaptureSource>();
         builder.Services.AddSingleton<CaptureState>();
         builder.Services.AddSingleton<ISessionCommands, AdomdSessionCommands>();

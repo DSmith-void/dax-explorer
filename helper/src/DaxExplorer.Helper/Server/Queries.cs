@@ -9,6 +9,9 @@ namespace DaxExplorer.Helper.Server;
 /// <param name="MaxRows">At most this many rows are returned (1–1000, default 100).</param>
 public sealed record EvaluateRequest(string? Kind, string? Dax, int? MaxRows);
 
+/// <param name="ClearCache">Clear the report's cache first, so the run starts "cold".</param>
+public sealed record TimingsRequest(string? Kind, string? Dax, bool? ClearCache);
+
 public sealed record QueryResult(IReadOnlyList<string> Columns, IReadOnlyList<object?[]> Rows, bool Truncated);
 
 /// <summary>Runs a read-only DAX query against a Power BI Desktop engine. Abstracted for tests.</summary>

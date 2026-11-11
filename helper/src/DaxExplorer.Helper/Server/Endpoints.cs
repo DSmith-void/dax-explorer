@@ -152,6 +152,39 @@ public static class Endpoints
             }
         });
 
+        // "Run with timings": the same query as /evaluate, traced to see where its time goes (see AmoTimingSource).
+        // Optionally clears the report's cache first (a "cold" run); that changes no data and no model.
+        api.MapPost("/timings", (TimingsRequest request, ConnectionState state, ITimingSource timings) =>
+        {
+            var (connection, model) = state.Current;
+            if (connection is null || model is null)
+            {
+                return Results.Conflict(new { error = "Connect to a report first: timings come from Power BI Desktop." });
+            }
+            var (query, _, error) = QueryBuilder.Build(new EvaluateRequest(request.Kind, request.Dax, null));
+            if (query is null) return Results.BadRequest(new { error });
+            try
+            {
+                var result = timings.Measure(connection.Port, model.DatabaseName, query, request.ClearCache ?? false, TimeSpan.FromSeconds(60));
+                return Results.Ok(result);
+            }
+            catch (TimingUnavailableException ex)
+            {
+                return Results.Problem(title: ex.Message, detail: "Try again; if it keeps happening, the timings aren't available for this report.", statusCode: StatusCodes.Status502BadGateway);
+            }
+            catch (AdomdErrorResponseException ex)
+            {
+                return Results.UnprocessableEntity(new { error = ex.Message });
+            }
+            catch (AdomdConnectionException)
+            {
+                return Results.Problem(
+                    title: "Power BI Desktop is not responding.",
+                    detail: "The report may have been closed. Reconnect and try again.",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+        });
+
         // Capture from Desktop: the queries visuals send, while the user is listening (see CaptureState).
         // ?untilDisconnect=true: listen until the report is disconnected (the "listen while connected" setting).
         api.MapPost("/capture/start", (bool? untilDisconnect, ConnectionState state, CaptureState capture, ILogger<CaptureState> log) =>
