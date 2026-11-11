@@ -56,7 +56,7 @@ export function entryText(entry: FilterEntry): string {
 
 export function originText(entry: FilterEntry): string {
   const origin = entry.origin;
-  if (origin.kind === 'context-transition') return `the current row of ${origin.iteratorName}, turned into a filter`;
+  if (origin.kind === 'context-transition') return 'context transition';
   return entry.mode === 'intersect'
     ? `added by ${origin.functionName}, on top of existing filters (KEEPFILTERS)`
     : `added by ${origin.functionName}`;

@@ -39,6 +39,6 @@ describe('technical wording', () => {
     const measure = steps.find((e) => e.kind === 'measure')!;
     expect(technicalContext(measure.context).rows).toEqual(['VALUES(Plant[Plant Name])  [SUMX]']);
     expect(measure.operations.map(technicalOperation)).toEqual(['Context transition: the row context of SUMX becomes filter context (Plant[Plant Name])']);
-    expect(technicalContext(measure.innerContext!).filter).toEqual(['F − filters on Plant[Plant Name]', "Plant[Plant Name] = the current row's value  [context transition from SUMX]"]);
+    expect(technicalContext(measure.innerContext!).filter).toEqual(['F − filters on Plant[Plant Name]', 'Plant[Plant Name] = the current row of SUMX  [context transition]']);
   });
 });

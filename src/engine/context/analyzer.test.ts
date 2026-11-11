@@ -56,11 +56,11 @@ describe('samples', () => {
     expect(measure.operations.map((o) => o.kind)).toEqual(['context-transition']);
     expect(describeContext(measure.innerContext!)).toEqual([
       "The report's filters, except any filter on Customer[Customer Key]",
-      "Customer[Customer Key] = the current row's value  (the current row of AVERAGEX, turned into a filter)",
+      "Customer[Customer Key] = the current row of AVERAGEX  (context transition)",
       'AVERAGEX is going through VALUES(Customer[Customer Key]) one row at a time',
     ]);
     expect(analysis.insights.map((i) => i.message)).toEqual([
-      '[Total Sales] is calculated once for each row that AVERAGEX goes through (VALUES(Customer[Customer Key])). Each time, DAX first turns the current row into a filter (context transition), so only data for that row is included.',
+      "[Total Sales] is calculated for each row of AVERAGEX (VALUES(Customer[Customer Key])). Each time, the current row becomes a filter (context transition), so only that row's data counts.",
     ]);
   });
 
@@ -76,16 +76,16 @@ describe('samples', () => {
   it('top plant: TOPN and CONCATENATEX each go row by row, and each row becomes a filter', () => {
     const { step, analysis } = run(SAMPLE_MEASURES[3].expression, CONVENTION, true);
     expect(describeContext(step('[Total Sales]', 0).innerContext!)).toContain(
-      "Plant[Plant Name] = the current row's value  (the current row of TOPN, turned into a filter)",
+      "Plant[Plant Name] = the current row of TOPN  (context transition)",
     );
     expect(describeContext(step('[Total Sales]', 1).innerContext!)).toContain(
-      "Plant[Plant Name] = the current row's value  (the current row of CONCATENATEX, turned into a filter)",
+      "Plant[Plant Name] = the current row of CONCATENATEX  (context transition)",
     );
     expect(step('Plant[Plant Name]', 1).notes[0]).toBe('Reads Plant[Plant Name] from the row that FILTER is currently on.');
     expect(step('Plant[Plant Name]', 2).notes[0]).toBe('Reads Plant[Plant Name] from the row that CONCATENATEX is currently on.');
     expect(analysis.insights.map((i) => i.message)).toEqual([
-      '[Total Sales] is calculated once for each row that TOPN goes through (FILTER over VALUES(Plant[Plant Name])). Each time, DAX first turns the current row into a filter (context transition), so only data for that row is included.',
-      '[Total Sales] is calculated once for each row that CONCATENATEX goes through (VAR TopPlant (TOPN over FILTER over VALUES(Plant[Plant Name]))). Each time, DAX first turns the current row into a filter (context transition), so only data for that row is included.',
+      "[Total Sales] is calculated for each row of TOPN (FILTER over VALUES(Plant[Plant Name])). Each time, the current row becomes a filter (context transition), so only that row's data counts.",
+      "[Total Sales] is calculated for each row of CONCATENATEX (TopPlant). Each time, the current row becomes a filter (context transition), so only that row's data counts.",
     ]);
   });
 
@@ -194,7 +194,7 @@ describe('going row by row, and rows becoming filters', () => {
     const calc = step('CALCULATE(SUM(Sales[Amount]))');
     expect(calc.operations[0].kind).toBe('context-transition');
     expect(describeContext(calc.innerContext!)).toContain(
-      'table Customer limited to the current row  (the current row of SUMX, turned into a filter)',
+      'table Customer limited to the current row of SUMX  (context transition)',
     );
   });
 
@@ -209,7 +209,7 @@ describe('going row by row, and rows becoming filters', () => {
     const { step } = run('[Total Sales] * 2');
     expect(step('[Total Sales]').operations).toEqual([]);
     expect(step('[Total Sales]').notes[0]).toBe(
-      'This measure is calculated using the filters shown above. Nothing here is going row by row, so nothing extra is added.',
+      'Nothing goes row by row here, so no filter is added.',
     );
   });
 
@@ -240,8 +240,8 @@ describe('going row by row, and rows becoming filters', () => {
     const { step } = run('SUMX(Customer, SUMX(Product, [Total Sales]))');
     expect(describeContext(step('[Total Sales]').innerContext!)).toEqual([
       "The report's filters, except any filter on table Customer; table Product",
-      'table Customer limited to the current row  (the current row of SUMX, turned into a filter)',
-      'table Product limited to the current row  (the current row of SUMX, turned into a filter)',
+      'table Customer limited to the current row of SUMX  (context transition)',
+      'table Product limited to the current row of SUMX  (context transition)',
       expect.stringMatching(/^Not checked: filtering the whole Customer table/),
       expect.stringMatching(/^Not checked: filtering the whole Product table/),
       'SUMX is going through Customer one row at a time',
@@ -267,14 +267,14 @@ describe('variables', () => {
 
   it('says where a variable is calculated', () => {
     const { step } = run('VAR v = 1 RETURN v');
-    expect(step('VAR v = 1').notes[0]).toBe('Calculated once, right here, using the filters shown above. Every later use of v reuses this result.');
+    expect(step('VAR v = 1').notes[0]).toBe('With the filters shown above. Every later use of v reuses this value.');
   });
 });
 
 describe('one-line summaries (for "Brief" explanations)', () => {
   it('summarizes each insight in one short sentence', () => {
     const cases: [string, string][] = [
-      ['AVERAGEX(Customer, [Total Sales])', '[Total Sales] is calculated for one row of AVERAGEX at a time.'],
+      ['AVERAGEX(Customer, [Total Sales])', '[Total Sales] for the current row of AVERAGEX.'],
       ['SUMX(Customer, CALCULATE(SUM(Sales[Amount])))', 'This CALCULATE works on one row of SUMX at a time.'],
       ['VAR v = [Total Sales] RETURN CALCULATE(v, ALL(Product))', 'v keeps its earlier value here, even though the filters are different.'],
       ['VAR v = [Total Sales] RETURN SUMX(Customer, v)', 'v has the same value for every row of SUMX.'],

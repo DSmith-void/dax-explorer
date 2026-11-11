@@ -206,7 +206,7 @@ export function analyzeContext(
       const target = targetOfShape(row.table);
       const entry: FilterEntry = {
         target,
-        condition: target.kind === 'columns' ? `= the current row's value` : 'limited to the current row',
+        condition: target.kind === 'columns' ? `= the current row of ${row.functionName}` : `limited to the current row of ${row.functionName}`,
         origin: { kind: 'context-transition', nodeId: atNodeId, iteratorNodeId: row.nodeId, iteratorName: row.functionName },
         mode: 'replace',
       };
@@ -225,7 +225,7 @@ export function analyzeContext(
         return { kind: 'table', table: expr.name, description };
       case 'VariableRef': {
         const info = variables.get(expr.declarationId);
-        if (info?.shape) return { ...info.shape, description: `VAR ${info.name} (${info.shape.description})` } as TableShape;
+        if (info?.shape) return { ...info.shape, description: info.name } as TableShape;
         return { kind: 'unknown', description: `VAR ${expr.name}` };
       }
       case 'FunctionCall': {
@@ -334,8 +334,8 @@ export function analyzeContext(
             nodeId: declaration.id,
             context: ctx,
             operations: [],
-            summary: `${declaration.name} is calculated once, here, and reused unchanged afterwards.`,
-            notes: [`Calculated once, right here, using the filters shown above. Every later use of ${declaration.name} reuses this result.`],
+            summary: `${declaration.name} is calculated once, here.`,
+            notes: [`With the filters shown above. Every later use of ${declaration.name} reuses this value.`],
           });
         }
         visit(node.body, ctx, null);
@@ -354,8 +354,8 @@ export function analyzeContext(
   function visitVariableRef(nodeId: number, name: string, declarationId: number, ctx: EvalContext) {
     const info = variables.get(declarationId);
     const where = info ? ` (line ${info.line})` : '';
-    const notes = [`Uses the result of VAR ${name}${where}. It was calculated there, once, and is not recalculated here.`];
-    let summary = `Reuses ${name}${where}; it is not recalculated here.`;
+    const notes = [`${name} was calculated once${where}; that value is used here.`];
+    let summary = info ? `${name} from line ${info.line}; not recalculated.` : `${name}: not recalculated here.`;
     if (info) {
       const filtersDiffer = filterSignature(info.context) !== filterSignature(ctx);
       const newRows = ctx.rows.filter((row) => !info.context.rows.includes(row));
@@ -456,7 +456,7 @@ export function analyzeContext(
       innerContext: rowCtx,
       summary: `${spec.name} goes through ${row.table.description} one row at a time.`,
       notes: [
-        `${spec.name} goes through ${row.table.description} one row at a time (row context). The inputs marked "per row" are calculated separately for each row. Going row by row does not filter anything on its own.`,
+        `Row by row (row context): the inputs marked "per row" are calculated for each row. This doesn't filter anything by itself.`,
       ],
     });
   }
@@ -946,19 +946,19 @@ export function analyzeContext(
       return {
         operations: [] as Operation[],
         innerContext: ctx,
-        summary: `${label} is calculated with the filters shown here; nothing is added.`,
-        notes: [`This measure is calculated using the filters shown above. Nothing here is going row by row, so nothing extra is added.`],
+        summary: `${label}, with the filters shown.`,
+        notes: [`Nothing goes row by row here, so no filter is added.`],
       };
     }
     const transition = contextTransition(ctx, nodeId);
     const innermost = ctx.rows[ctx.rows.length - 1];
-    const summary = `${label} is calculated for one row of ${innermost.functionName} at a time.`;
+    const summary = `${label} for the current row of ${innermost.functionName}.`;
     if (reportInsight) {
       insights.push({
         kind: 'context-transition',
         nodeId,
         summary,
-        message: `${label} is calculated once for each row that ${innermost.functionName} goes through (${innermost.table.description}). Each time, DAX first turns the current row into a filter (context transition), so only data for that row is included.`,
+        message: `${label} is calculated for each row of ${innermost.functionName} (${innermost.table.description}). Each time, the current row becomes a filter (context transition), so only that row's data counts.`,
       });
     }
     return {
@@ -966,8 +966,7 @@ export function analyzeContext(
       innerContext: { filter: transition.fc, rows: ctx.rows, unknownReason: null },
       summary,
       notes: [
-        `${ctx.rows.map((r) => r.functionName).join(' and ')} ${ctx.rows.length === 1 ? 'is' : 'are'} going row by row, so ${label} is calculated once for each row. Before each calculation, DAX turns the current row into a filter (context transition), so the measure only includes data for that row.`,
-        `(A measure used like this always behaves as if it were wrapped in CALCULATE.)`,
+        `Calculated for each row, with that row turned into a filter (context transition): only its data counts. (A measure always acts as if wrapped in CALCULATE.)`,
       ],
     };
   }

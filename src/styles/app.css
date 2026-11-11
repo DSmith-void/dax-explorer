@@ -2176,16 +2176,6 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-.paste-heading {
-  margin: 8px 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--color-border);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
-}
 
 .visuals-heading {
   margin: 0;
@@ -2852,4 +2842,20 @@ select {
   gap: 6px;
   margin: 6px 0 0;
   padding-left: 18px;
+}
+
+/* Optional parts of a panel, folded away ("Paste a query instead", "More options"). */
+.panel-more {
+  display: grid;
+  gap: 8px;
+}
+
+.panel-more > summary {
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.panel-more[open] > summary {
+  margin-bottom: 4px;
 }

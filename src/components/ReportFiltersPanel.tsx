@@ -6,6 +6,7 @@ import { columnText } from '../engine/context/describe';
 import type { ColumnName } from '../engine/context/model';
 import { columnDax, reportFilterText, valueText, type FilterValue, type ReportFilter } from '../engine/context/reportFilters';
 import { readVisualQuery, visualRowsDax, type VisualQuery } from '../engine/context/visualQuery';
+import { pillLabel } from './pillLabel';
 import { usePopover } from './usePopover';
 
 interface ReportFiltersPanelProps {
@@ -42,7 +43,7 @@ function formatValue(value: QueryValue): string {
 export function ReportFiltersPanel({ client, model, filters, onChange, onExplainMeasure, desktop, listen, onListenChange }: ReportFiltersPanelProps) {
   const { open, setOpen, container } = usePopover<HTMLDivElement>();
   const [mode, setMode] = useState<'manual' | 'visual'>('manual');
-  const label = filters.length === 0 ? 'none (grand total)' : filters.length === 1 ? reportFilterText(filters[0]) : `${filters.length} filters`;
+  const label = pillLabel(filters);
 
   return (
     <div className="data-source" ref={container}>
@@ -52,7 +53,7 @@ export function ReportFiltersPanel({ client, model, filters, onChange, onExplain
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen(!open)}
-        title="The report's filters (F): which place in the report values are calculated for"
+        title="F: where in the report values are calculated (no filters = the grand total)"
       >
         <span className="data-pill-f" aria-hidden="true">
           F
@@ -70,10 +71,7 @@ export function ReportFiltersPanel({ client, model, filters, onChange, onExplain
         <div className="data-panel report-filters-panel" role="dialog" aria-label="Report filters">
           <section className="data-panel-section">
             <h3 className="data-panel-title">Report filters (F)</h3>
-            <p className="data-bar-muted">
-              A measure's value depends on where it is shown in the report. Choose that place here: these filters stand in for F.
-              With none, values are for the whole model (the grand total).
-            </p>
+            <p className="data-bar-muted">Where in the report to calculate values. No filters: the grand total.</p>
             {filters.length > 0 && (
               <>
                 <ul className="filter-chips">
@@ -312,24 +310,25 @@ function FromVisual({
           void read(query);
         }}
       />
-      <h4 className="paste-heading">Or paste a query</h4>
-      <p className="data-bar-muted">
-        In Power BI Desktop: <strong>Optimize → Performance analyzer → Start recording</strong>, refresh or click the visual, open
-        its entry and choose <strong>Copy query</strong>. Paste it here.
-      </p>
-      <textarea
-        className="text-input query-input"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="// DAX Query&#10;DEFINE …&#10;EVALUATE …"
-        spellCheck={false}
-        aria-label="The visual's query"
-      />
-      <div>
-        <button type="button" className="primary-button" disabled={!text.trim() || busy} onClick={() => void read()}>
-          {busy ? 'Reading…' : 'Read query'}
-        </button>
-      </div>
+      <details className="panel-more">
+        <summary>Paste a query instead</summary>
+        <p className="data-bar-muted">
+          From Power BI Desktop's <strong>Performance analyzer</strong>: <strong>Copy query</strong> on the visual's entry.
+        </p>
+        <textarea
+          className="text-input query-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="// DAX Query&#10;DEFINE …&#10;EVALUATE …"
+          spellCheck={false}
+          aria-label="The visual's query"
+        />
+        <div>
+          <button type="button" className="primary-button" disabled={!text.trim() || busy} onClick={() => void read()}>
+            {busy ? 'Reading…' : 'Read query'}
+          </button>
+        </div>
+      </details>
       {error && <p className="data-bar-error">{error}</p>}
 
       {visual && (
@@ -534,19 +533,16 @@ function DesktopVisualsSection({ desktop, listen, onListenChange, onPick }: Desk
     <div className="capture">
       <div className="capture-start">
         <h4 className="visuals-heading">Visuals in Power BI Desktop</h4>
-        <button type="button" className="secondary-button" disabled={checking} onClick={() => void checkLast()}>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={checking}
+          onClick={() => void checkLast()}
+          title="Shows the visual Power BI Desktop calculated last. To see another, change something in it (or a slicer), then check again."
+        >
           {checking ? 'Checking…' : 'Check again'}
         </button>
       </div>
-      <p className="data-bar-muted">
-        Shows the visual Power BI Desktop calculated last (the one you just added, changed or filtered). To see another,
-        change something in it (or a slicer), then press Check again.
-      </p>
-      <label className="listen-setting">
-        <input type="checkbox" checked={listen} onChange={(e) => onListenChange(e.target.checked)} /> Listen to Power BI Desktop while
-        connected
-        <span className="data-bar-muted"> (collects every visual you change from now on; stops when you disconnect)</span>
-      </label>
       {listening && (
         <div className="capture-status" aria-live="polite">
           <span className="capture-dot" aria-hidden="true" />
@@ -577,9 +573,16 @@ function DesktopVisualsSection({ desktop, listen, onListenChange, onPick }: Desk
           })}
         </ul>
       ) : (
-        !checking && <p className="data-bar-muted">No visual query found yet. Add, change or filter a visual in Power BI Desktop, then press Check again.</p>
+        !checking && <p className="data-bar-muted">No visual yet: change or filter one in Power BI Desktop, then check again.</p>
       )}
       {error && <p className="data-bar-error">{error}</p>}
+      <details className="panel-more" open={listen || undefined}>
+        <summary>More options</summary>
+        <label className="listen-setting">
+          <input type="checkbox" checked={listen} onChange={(e) => onListenChange(e.target.checked)} /> Collect every visual I change
+          while connected
+        </label>
+      </details>
     </div>
   );
 }

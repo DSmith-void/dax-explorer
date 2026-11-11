@@ -101,7 +101,7 @@ describe('buildTimeline: DAX evaluation order', () => {
     const entries = timeline('Big = CALCULATE([Total Sales], FILTER(ALL(Customer), [Total Sales] > 1000))');
     expect(entries.map((e) => e.kind)).toEqual(['start', 'iterate', 'measure', 'iterate-done', 'filter-input', 'calculate', 'measure', 'result']);
     expect(entries[1].summary).toBe('FILTER goes through ALL(Customer) one row at a time.');
-    expect(entries[2].summary).toBe('[Total Sales] is calculated for one row of FILTER at a time.');
+    expect(entries[2].summary).toBe('[Total Sales] for the current row of FILTER.');
   });
 
   it('KEEPFILTERS: the filter input is one moment; the condition inside is not split up', () => {

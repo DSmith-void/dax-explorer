@@ -15,7 +15,7 @@ export interface TechnicalContext {
 
 function entryTechnical(entry: FilterEntry): string {
   const how = entry.origin.kind === 'context-transition'
-    ? `context transition from ${entry.origin.iteratorName}`
+    ? 'context transition'
     : `${entry.origin.functionName}, ${entry.mode === 'intersect' ? 'KEEPFILTERS (intersect)' : 'overwrite'}`;
   return `${entryText(entry)}  [${how}]`;
 }

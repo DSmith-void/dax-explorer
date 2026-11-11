@@ -80,7 +80,7 @@ describe('stepping into measures', () => {
     expect(enter.context.rows).toEqual([]);
     expect(describeContext(enter.context)).toEqual([
       "The report's filters, except any filter on Plant[Plant Name]",
-      "Plant[Plant Name] = the current row's value  (the current row of MAXX, turned into a filter)",
+      "Plant[Plant Name] = the current row of MAXX  (context transition)",
     ]);
     // The steps inside see the same filters.
     expect(describeContext(find('Calculate [Total Sales]').context)).toEqual(describeContext(enter.context));

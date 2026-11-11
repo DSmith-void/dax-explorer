@@ -306,7 +306,7 @@ const SPECS: FunctionSpec[] = [
     name: 'DIVIDE',
     category: 'math',
     returns: 'scalar',
-    summary: 'Divides one value by another. Dividing by zero gives the fallback (BLANK if none is given) instead of an error.',
+    summary: 'Divides; by zero, it gives BLANK (or the fallback) instead of an error.',
     overloads: [[p('numerator', 'scalar'), p('denominator', 'scalar'), p('alternate result', 'scalar', { optional: true })]],
   },
   {

@@ -142,7 +142,7 @@ export function buildTimeline(
       kind: 'enter',
       nodeId: null,
       title: `Enter ${caller.measure}`,
-      summary: `Now inside ${caller.measure}, called by ${caller.caller}. Its code starts with the filters ${caller.caller} has at that point, including any current row turned into a filter (context transition).`,
+      summary: `Inside ${caller.measure}, called by ${caller.caller}. It starts with ${caller.caller}'s filters at that point, including any current row turned into a filter.`,
       context: caller.context,
       depth: 0,
     });
@@ -152,7 +152,7 @@ export function buildTimeline(
       nodeId: null,
       title: "Start with the report's filters",
       summary:
-        "The calculation starts with the filters from wherever the measure is shown in the report (for example, one row of a table visual, plus any slicers). These are shown as F.",
+        "Starts with the filters from where the measure is shown (a row of a visual, slicers): F.",
       depth: 0,
     });
   }
@@ -329,7 +329,7 @@ export function buildTimeline(
       kind: 'return',
       nodeId: root.id,
       title: `Back in ${caller.caller}`,
-      summary: `${caller.measure} is done: its value goes back to ${caller.caller}, which carries on from where it called it.`,
+      summary: `${caller.measure} is done; its value goes back to ${caller.caller}.`,
       context: caller.context,
       depth: 0,
     });
@@ -339,7 +339,7 @@ export function buildTimeline(
     kind: 'result',
     nodeId: root.id,
     title: 'The result goes back to the report',
-    summary: 'The value of the whole expression is returned to the report, for this one place in the visual. The report repeats all of this for every place the measure is shown.',
+    summary: 'The result for this one cell. Power BI repeats all of this for every cell.',
     context: INITIAL_CONTEXT,
     depth: 0,
   });
