@@ -11,11 +11,35 @@ using Microsoft.AnalysisServices.AdomdClient;
 //   --app <folder>        folder with the built app (default: "app" next to the program, else the repo's dist)
 //   --no-browser          don't open the browser
 //   describe [port]       print what the helper finds in Power BI Desktop, then exit
+//   "localhost:<port>" "<database>"
+//                         started from Power BI's External Tools ribbon: connect to that report right away
+//   --install-external-tool / --remove-external-tool
+//                         add or remove the External Tools button (needs administrator rights; the app runs
+//                         these for you, after Windows asks)
 
 if (args is ["describe", ..])
 {
     return Describe(args.Length > 1 && int.TryParse(args[1], out var describePort) ? describePort : null);
 }
+
+if (args is [ExternalTool.InstallArgument] or [ExternalTool.RemoveArgument])
+{
+    try
+    {
+        if (args[0] == ExternalTool.InstallArgument) ExternalTool.Install(ExternalTool.DefaultFolder, Environment.ProcessPath!, ExternalTool.IconBase64());
+        else ExternalTool.Remove(ExternalTool.DefaultFolder);
+        return 0;
+    }
+    catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+    {
+        Console.Error.WriteLine($"Could not change Power BI's External Tools: {ex.Message}");
+        return 5;
+    }
+}
+
+// Started from Power BI's External Tools ribbon: "localhost:<port>" "<database>" come first.
+var launch = ExternalTool.ParseLaunch(args);
+if (launch is not null) args = args.Skip(args.Length > 1 && !args[1].StartsWith("--", StringComparison.Ordinal) ? 2 : 1).ToArray();
 
 var port = HelperServer.DefaultPort;
 var portChosen = false;
@@ -57,6 +81,23 @@ var url = "";
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
+    // From the External Tools ribbon: connect to that report first, so the app opens already connected
+    // (the person chose this report by clicking the button in it).
+    if (launch is { } from)
+    {
+        var services = app.Services;
+        var outcome = Endpoints.ConnectToDesktop(
+            from.Port,
+            services.GetRequiredService<IDesktopInstances>(),
+            services.GetRequiredService<IModelSource>(),
+            services.GetRequiredService<ConnectionState>(),
+            services.GetRequiredService<CaptureState>(),
+            services.GetRequiredService<ILogger<ConnectionState>>());
+        Console.WriteLine(outcome == Endpoints.ConnectOutcome.Connected
+            ? "Opened from Power BI: connected to the report."
+            : "Opened from Power BI, but the report could not be read yet; connect from the data button in the app.");
+    }
+
     var address = app.Urls.FirstOrDefault() ?? $"http://127.0.0.1:{port}";
     url = $"{address.TrimEnd('/')}/#token={token}";
     Console.WriteLine();

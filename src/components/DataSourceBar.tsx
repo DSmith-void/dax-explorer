@@ -3,6 +3,7 @@ import {
   startSample,
   type ConnectionInfo,
   type DesktopInstanceInfo,
+  type ExternalToolStatus,
   type HelperClient,
   type HelperStatus,
   type ModelMetadata,
@@ -300,9 +301,90 @@ export function DataSourceBar({ client, onModelChange }: DataSourceBarProps) {
             </section>
           )}
 
+          {view.kind === 'ready' && <ExternalToolSection client={client} />}
+
           {error && <p className="data-bar-error">{error}</p>}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Power BI's External Tools ribbon: a button there opens DAX Explorer already connected to that report.
+ * Adding or removing it writes one small file under Program Files, so Windows asks for administrator rights.
+ */
+function ExternalToolSection({ client }: { client: HelperClient }) {
+  const [status, setStatus] = useState<ExternalToolStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    client
+      .externalTool()
+      .then((s) => current && setStatus(s))
+      .catch(() => current && setStatus(null));
+    return () => {
+      current = false;
+    };
+  }, [client]);
+
+  const change = async (what: 'install' | 'remove') => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await client.changeExternalTool(what);
+      setStatus(result);
+      setMessage(
+        result.result === 'cancelled'
+          ? 'Nothing changed: Windows asked for permission and it was declined.'
+          : result.result === 'failed'
+            ? 'That did not work. Try again, or ask whoever manages this computer.'
+            : what === 'install'
+              ? 'Added. Restart Power BI Desktop to see DAX Explorer on the External Tools ribbon.'
+              : 'Removed. Restart Power BI Desktop to update the ribbon.',
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'That did not work.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  return (
+    <section className="data-panel-section">
+      <h3 className="data-panel-title">Power BI External Tools</h3>
+      {status.installed && status.startsThisProgram ? (
+        <p>
+          <strong>On the External Tools ribbon.</strong>{' '}
+          <span className="data-bar-muted">Click DAX Explorer there to open it already connected to that report.</span>
+        </p>
+      ) : status.installed ? (
+        <p>
+          On the ribbon, but it starts <strong>another copy</strong> of DaxExplorer.exe (moved or renamed?).{' '}
+          <span className="data-bar-muted">Add it again to use this one.</span>
+        </p>
+      ) : (
+        <p className="data-bar-muted">
+          Add a DAX Explorer button to Power BI Desktop&apos;s External Tools ribbon. It opens DAX Explorer already connected to the
+          report you clicked it in. Windows asks for administrator rights to add it.
+        </p>
+      )}
+      <div className="data-panel-actions">
+        {!(status.installed && status.startsThisProgram) && (
+          <button type="button" className="primary-button" disabled={busy} onClick={() => void change('install')}>
+            {busy ? 'Waiting for Windows…' : status.installed ? 'Use this copy' : 'Add to External Tools'}
+          </button>
+        )}
+        {status.installed && (
+          <button type="button" className="secondary-button" disabled={busy} onClick={() => void change('remove')}>
+            Remove
+          </button>
+        )}
+      </div>
+      {message && <p className="data-bar-muted data-panel-note">{message}</p>}
+    </section>
   );
 }

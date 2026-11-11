@@ -173,3 +173,18 @@ describe('visuals from Power BI Desktop', () => {
     expect(calls.map((c) => c.path)).toEqual(['/api/capture/start?untilDisconnect=true', '/api/visuals/recent']);
   });
 });
+
+describe("Power BI's External Tools ribbon", () => {
+  it('reads whether DAX Explorer is on it, and adds or removes it', async () => {
+    const { impl, calls } = fakeFetch({
+      'GET /api/external-tool': json({ installed: false, startsThisProgram: false }),
+      'POST /api/external-tool/install': json({ result: 'ok', installed: true, startsThisProgram: true }),
+      'POST /api/external-tool/remove': json({ result: 'cancelled', installed: true, startsThisProgram: true }),
+    });
+    const client = createHelperClient(TOKEN, impl);
+    expect(await client.externalTool()).toEqual({ installed: false, startsThisProgram: false });
+    expect(await client.changeExternalTool('install')).toEqual({ result: 'ok', installed: true, startsThisProgram: true });
+    expect((await client.changeExternalTool('remove')).result).toBe('cancelled');
+    expect(calls.map((c) => c.path)).toEqual(['/api/external-tool', '/api/external-tool/install', '/api/external-tool/remove']);
+  });
+});

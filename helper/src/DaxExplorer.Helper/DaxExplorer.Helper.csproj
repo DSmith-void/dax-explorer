@@ -33,4 +33,9 @@
     <InternalsVisibleTo Include="DaxExplorer.Helper.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The icon on Power BI's External Tools ribbon (made from public/favicon.svg). -->
+    <EmbeddedResource Include="Assets/external-tool-icon.png" LogicalName="DaxExplorer.Helper.Assets.external-tool-icon.png" />
+  </ItemGroup>
+
 </Project>

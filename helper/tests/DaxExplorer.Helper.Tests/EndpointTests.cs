@@ -105,6 +105,25 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     private readonly FakeSessions _sessions = new();
+
+    /// <summary>Stands in for the Windows administrator prompt: does what the elevated program would, in a temp folder.</summary>
+    private sealed class FakeElevation(string folder, string exePath) : IElevation
+    {
+        public List<string> Calls { get; } = [];
+        public string Answer { get; set; } = "ok";
+        public string RunElevated(string argument)
+        {
+            Calls.Add(argument);
+            if (Answer != "ok") return Answer;
+            if (argument == ExternalTool.InstallArgument) ExternalTool.Install(folder, exePath, "AAAA");
+            else ExternalTool.Remove(folder);
+            return "ok";
+        }
+    }
+
+    private readonly string _toolFolder = Path.Combine(Path.GetTempPath(), "DaxExplorerToolTests", Guid.NewGuid().ToString("N"));
+    private const string ToolExe = @"C:ToolsDaxExplorerDaxExplorer.exe";
+    private FakeElevation _elevation = null!;
     private readonly FakeModelSource _source = new();
     private WebApplication _app = null!;
     private HttpClient _client = null!;
@@ -121,6 +140,9 @@ public sealed class EndpointTests : IAsyncLifetime
             builder.Services.AddSingleton<IQueryRunner>(_runner);
             builder.Services.AddSingleton<ICaptureSource>(_capture);
             builder.Services.AddSingleton<ISessionCommands>(_sessions);
+            _elevation = new FakeElevation(_toolFolder, ToolExe);
+            builder.Services.AddSingleton<IElevation>(_elevation);
+            builder.Services.AddSingleton(new ExternalToolPlace(_toolFolder, ToolExe));
         });
         await _app.StartAsync();
         _client = _app.GetTestClient();
@@ -131,6 +153,7 @@ public sealed class EndpointTests : IAsyncLifetime
     {
         _client.Dispose();
         await _app.DisposeAsync();
+        if (Directory.Exists(_toolFolder)) Directory.Delete(_toolFolder, recursive: true);
     }
 
     private HttpRequestMessage Request(HttpMethod method, string path, string? token = Token, object? body = null)
@@ -559,5 +582,40 @@ public sealed class EndpointTests : IAsyncLifetime
         Assert.True(a.Length >= 40);
         Assert.DoesNotContain('+', a);
         Assert.DoesNotContain('/', a);
+    }
+
+    // ------------------------------------------------------------------ External Tools ribbon
+
+    [Fact]
+    public async Task External_tool_can_be_added_and_removed_after_the_Windows_prompt()
+    {
+        var status = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/external-tool")));
+        Assert.False(status.GetProperty("installed").GetBoolean());
+
+        var added = await Json(await _client.SendAsync(Request(HttpMethod.Post, "/api/external-tool/install")));
+        Assert.Equal("ok", added.GetProperty("result").GetString());
+        Assert.True(added.GetProperty("installed").GetBoolean());
+        Assert.True(added.GetProperty("startsThisProgram").GetBoolean());
+        Assert.Equal([ExternalTool.InstallArgument], _elevation.Calls);
+
+        var removed = await Json(await _client.SendAsync(Request(HttpMethod.Post, "/api/external-tool/remove")));
+        Assert.False(removed.GetProperty("installed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task External_tool_says_so_when_the_Windows_prompt_is_declined()
+    {
+        _elevation.Answer = "cancelled";
+        var result = await Json(await _client.SendAsync(Request(HttpMethod.Post, "/api/external-tool/install")));
+        Assert.Equal("cancelled", result.GetProperty("result").GetString());
+        Assert.False(result.GetProperty("installed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task External_tool_endpoints_need_the_token()
+    {
+        var response = await _client.SendAsync(Request(HttpMethod.Post, "/api/external-tool/install", token: null));
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Empty(_elevation.Calls);
     }
 }

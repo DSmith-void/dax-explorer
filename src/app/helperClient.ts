@@ -152,6 +152,12 @@ export type HelperAvailability =
 
 export class HelperError extends Error {}
 
+export interface ExternalToolStatus {
+  installed: boolean;
+  /** False when the installed button starts another copy of DaxExplorer.exe (for example, one moved elsewhere). */
+  startsThisProgram: boolean;
+}
+
 export interface HelperClient {
   check(): Promise<HelperAvailability>;
   instances(): Promise<DesktopInstanceInfo[]>;
@@ -177,6 +183,10 @@ export interface HelperClient {
   captured(after: number): Promise<CaptureStatus>;
   /** The visual queries Power BI Desktop ran most recently (from the engine's session list; usually the last visual). */
   recentVisuals(): Promise<{ at: string | null; text: string }[]>;
+  /** Whether DAX Explorer is on Power BI Desktop's External Tools ribbon (and starts this copy of it). */
+  externalTool(): Promise<ExternalToolStatus>;
+  /** Adds or removes it; Windows asks for administrator rights first. */
+  changeExternalTool(change: 'install' | 'remove'): Promise<ExternalToolStatus & { result: 'ok' | 'cancelled' | 'failed' }>;
 }
 
 export function createHelperClient(token: string | null, fetchImpl: typeof fetch = (...args) => fetch(...args)): HelperClient {
@@ -227,6 +237,12 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
     },
     async startCapture(untilDisconnect = false) {
       await json(`/api/capture/start${untilDisconnect ? '?untilDisconnect=true' : ''}`, { method: 'POST' });
+    },
+    async externalTool() {
+      return json<ExternalToolStatus>('/api/external-tool');
+    },
+    async changeExternalTool(change) {
+      return json<ExternalToolStatus & { result: 'ok' | 'cancelled' | 'failed' }>(`/api/external-tool/${change}`, { method: 'POST' });
     },
     async recentVisuals() {
       return (await json<{ queries: { at: string | null; text: string }[] }>('/api/visuals/recent')).queries;

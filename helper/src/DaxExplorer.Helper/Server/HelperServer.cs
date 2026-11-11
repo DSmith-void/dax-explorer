@@ -55,6 +55,8 @@ public static class HelperServer
         builder.Services.AddSingleton<ISampleLauncher>(new ShellSampleLauncher(Sample.FindProject(AppContext.BaseDirectory)));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SampleLaunches>();
+        builder.Services.AddSingleton<IElevation, ShellElevation>();
+        builder.Services.AddSingleton(new ExternalToolPlace(ExternalTool.DefaultFolder, Environment.ProcessPath ?? ""));
 
         configureTest?.Invoke(builder);
 

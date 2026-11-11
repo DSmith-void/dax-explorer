@@ -34,29 +34,28 @@ public static class Endpoints
         {
             // Only connect to a port that discovery reports as a running Desktop engine:
             // the API cannot be used to make the helper connect to arbitrary ports.
-            var instance = instances.Find().FirstOrDefault(i => i.Port == request.Port);
-            if (instance is null)
+            return ConnectToDesktop(request.Port, instances, source, state, capture, log) switch
             {
-                return Results.NotFound(new { error = "That Power BI Desktop report is no longer open. Refresh the list and try again." });
-            }
-            try
-            {
-                var model = source.ReadDesktopModel(instance.Port);
-                capture.Stop(); // a capture belongs to one connection
-                state.Set(new ConnectionInfo("Power BI Desktop", instance.Port, instance.ReportName, DateTimeOffset.Now), model);
-                log.LogInformation("Connected to a Power BI Desktop report on port {Port}", instance.Port); // no model details in logs
-                return Results.Ok(new { connected = true });
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                state.Clear();
-                log.LogWarning("Could not read the model on port {Port}: {Error}", instance.Port, ex.GetType().Name);
-                return Results.Problem(
+                ConnectOutcome.Connected => Results.Ok(new { connected = true }),
+                ConnectOutcome.NotOpen => Results.NotFound(new { error = "That Power BI Desktop report is no longer open. Refresh the list and try again." }),
+                _ => Results.Problem(
                     title: "Could not read the model from Power BI Desktop.",
                     detail: "Make sure the report has finished loading, then try again.",
-                    statusCode: StatusCodes.Status502BadGateway);
-            }
+                    statusCode: StatusCodes.Status502BadGateway),
+            };
         });
+
+        // Power BI's External Tools ribbon: is DAX Explorer on it, and adding or removing it (Windows asks
+        // for administrator rights, since the folder is under Program Files).
+        api.MapGet("/external-tool", (ExternalToolPlace place) =>
+        {
+            var (installed, startsThisProgram) = ExternalTool.Status(place.Folder, place.ExePath);
+            return Results.Ok(new { installed, startsThisProgram });
+        });
+        api.MapPost("/external-tool/install", (ExternalToolPlace place, IElevation elevation, ILogger<ConnectionState> log) =>
+            ChangeExternalTool(ExternalTool.InstallArgument, place, elevation, log));
+        api.MapPost("/external-tool/remove", (ExternalToolPlace place, IElevation elevation, ILogger<ConnectionState> log) =>
+            ChangeExternalTool(ExternalTool.RemoveArgument, place, elevation, log));
 
         // The sample: open it in Power BI Desktop (if it isn't open yet), then the app calls /sample/connect
         // every few seconds until Desktop has loaded it.
@@ -228,4 +227,39 @@ public static class Endpoints
 
     private static bool IsNamedLikeSample(DaxExplorer.Helper.Discovery.DesktopInstance instance) =>
         string.Equals(instance.ReportName, Sample.ReportName, StringComparison.OrdinalIgnoreCase);
+
+    public enum ConnectOutcome { Connected, NotOpen, Failed }
+
+    /// <summary>
+    /// Connects to a Power BI Desktop report by its engine port, but only one that discovery reports as a
+    /// running Desktop engine: neither the API nor the command line can make the helper connect anywhere else.
+    /// </summary>
+    public static ConnectOutcome ConnectToDesktop(int port, IDesktopInstances instances, IModelSource source, ConnectionState state, CaptureState capture, ILogger log)
+    {
+        var instance = instances.Find().FirstOrDefault(i => i.Port == port);
+        if (instance is null) return ConnectOutcome.NotOpen;
+        try
+        {
+            var model = source.ReadDesktopModel(instance.Port);
+            capture.Stop(); // a capture belongs to one connection
+            state.Set(new ConnectionInfo("Power BI Desktop", instance.Port, instance.ReportName, DateTimeOffset.Now), model);
+            log.LogInformation("Connected to a Power BI Desktop report on port {Port}", instance.Port); // no model details in logs
+            return ConnectOutcome.Connected;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            state.Clear();
+            log.LogWarning("Could not read the model on port {Port}: {Error}", instance.Port, ex.GetType().Name);
+            return ConnectOutcome.Failed;
+        }
+    }
+
+    private static IResult ChangeExternalTool(string argument, ExternalToolPlace place, IElevation elevation, ILogger log)
+    {
+        if (place.ExePath.Length == 0) return Results.Problem(title: "DAX Explorer couldn't tell where its program file is.", statusCode: StatusCodes.Status500InternalServerError);
+        var result = elevation.RunElevated(argument);
+        log.LogInformation("External Tools change ({Argument}): {Result}", argument, result);
+        var (installed, startsThisProgram) = ExternalTool.Status(place.Folder, place.ExePath);
+        return Results.Ok(new { result, installed, startsThisProgram });
+    }
 }
