@@ -96,6 +96,15 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     private readonly FakeCaptureSource _capture = new();
+
+    private sealed class FakeSessions : ISessionCommands
+    {
+        public List<SessionCommand> Commands { get; } = [];
+        public bool Fail { get; set; }
+        public IReadOnlyList<SessionCommand> Read(int port) => Fail ? throw new InvalidOperationException("engine gone") : Commands;
+    }
+
+    private readonly FakeSessions _sessions = new();
     private readonly FakeModelSource _source = new();
     private WebApplication _app = null!;
     private HttpClient _client = null!;
@@ -111,6 +120,7 @@ public sealed class EndpointTests : IAsyncLifetime
             builder.Services.AddSingleton<TimeProvider>(_clock);
             builder.Services.AddSingleton<IQueryRunner>(_runner);
             builder.Services.AddSingleton<ICaptureSource>(_capture);
+            builder.Services.AddSingleton<ISessionCommands>(_sessions);
         });
         await _app.StartAsync();
         _client = _app.GetTestClient();
@@ -488,6 +498,55 @@ public sealed class EndpointTests : IAsyncLifetime
         var text = await response.Content.ReadAsStringAsync();
         Assert.Contains("Could not listen to Power BI Desktop", text);
         Assert.DoesNotContain("trace refused", text);
+        Assert.False((await Captured()).GetProperty("listening").GetBoolean());
+    }
+
+    // ------------------------------------------------------------------ recent visuals and listening while connected
+
+    [Fact]
+    public void Recent_visuals_are_Desktops_DAX_visual_queries_newest_first()
+    {
+        var picked = RecentVisuals.Pick(
+        [
+            new("Power BI Desktop0da6", new DateTime(2026, 11, 11, 2, 29, 21), VisualQuery),
+            new("Power BI Desktop0da6", new DateTime(2026, 11, 11, 2, 31, 48), VisualQuery.Replace("Plant Name", "Plant Code")),
+            new("Power BI Desktop0da6", new DateTime(2026, 11, 11, 2, 28, 49), "<Batch><Alter>SUMMARIZECOLUMNS</Alter></Batch>"), // an XMLA command
+            new("Power BI Desktop0da6", new DateTime(2026, 11, 11, 2, 30, 0), "SELECT * FROM $SYSTEM.DISCOVER_SESSIONS"),
+            new("DAX Studio", new DateTime(2026, 11, 11, 2, 32, 0), VisualQuery),                                            // another tool
+            new(null, null, null),
+        ]);
+        Assert.Equal(2, picked.Count);
+        Assert.Contains("Plant Code", picked[0].Text);
+        Assert.Equal(new DateTimeOffset(2026, 11, 11, 2, 31, 48, TimeSpan.Zero), picked[0].At);
+    }
+
+    [Fact]
+    public async Task Recent_visuals_need_a_connection_and_report_problems_plainly()
+    {
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.SendAsync(Request(HttpMethod.Get, "/api/visuals/recent"))).StatusCode);
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        _sessions.Commands.Add(new("Power BI Desktop0da6", new DateTime(2026, 11, 11, 2, 31, 48), VisualQuery));
+        var body = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/visuals/recent")));
+        Assert.Equal(VisualQuery, body.GetProperty("queries")[0].GetProperty("text").GetString());
+
+        _sessions.Fail = true;
+        var failed = await _client.SendAsync(Request(HttpMethod.Get, "/api/visuals/recent"));
+        Assert.Equal(HttpStatusCode.BadGateway, failed.StatusCode);
+        Assert.DoesNotContain("engine gone", await failed.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Listening_while_connected_does_not_stop_after_five_minutes_but_stops_on_disconnect()
+    {
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        var start = await Json(await _client.SendAsync(Request(HttpMethod.Post, "/api/capture/start?untilDisconnect=true")));
+        Assert.Equal(JsonValueKind.Null, start.GetProperty("stopsAt").ValueKind);
+
+        _clock.Now += CaptureState.Duration * 10;
+        Assert.True((await Captured()).GetProperty("listening").GetBoolean());
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/disconnect"));
         Assert.False((await Captured()).GetProperty("listening").GetBoolean());
     }
 

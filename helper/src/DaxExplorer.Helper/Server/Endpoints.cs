@@ -6,6 +6,7 @@ namespace DaxExplorer.Helper.Server;
 
 public sealed record ConnectRequest(int Port);
 
+
 /// <summary>The helper's data endpoints. All are under /api and require the token.</summary>
 public static class Endpoints
 {
@@ -153,7 +154,8 @@ public static class Endpoints
         });
 
         // Capture from Desktop: the queries visuals send, while the user is listening (see CaptureState).
-        api.MapPost("/capture/start", (ConnectionState state, CaptureState capture, ILogger<CaptureState> log) =>
+        // ?untilDisconnect=true: listen until the report is disconnected (the "listen while connected" setting).
+        api.MapPost("/capture/start", (bool? untilDisconnect, ConnectionState state, CaptureState capture, ILogger<CaptureState> log) =>
         {
             var (connection, _) = state.Current;
             if (connection is null)
@@ -162,7 +164,7 @@ public static class Endpoints
             }
             try
             {
-                capture.Start(connection.Port);
+                capture.Start(connection.Port, untilDisconnect ?? false);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -174,6 +176,28 @@ public static class Endpoints
             }
             var (listening, stopsAt, _) = capture.Read(int.MaxValue);
             return Results.Ok(new { listening, stopsAt });
+        });
+
+        // The visual queries Desktop ran most recently, from the engine's session list (a read; nothing is kept).
+        api.MapGet("/visuals/recent", (ConnectionState state, ISessionCommands sessions, ILogger<ConnectionState> log) =>
+        {
+            var (connection, _) = state.Current;
+            if (connection is null)
+            {
+                return Results.Conflict(new { error = "Connect to a report first." });
+            }
+            try
+            {
+                return Results.Ok(new { queries = RecentVisuals.Pick(sessions.Read(connection.Port)) });
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                log.LogWarning("Could not read the recent visual queries: {Error}", ex.GetType().Name);
+                return Results.Problem(
+                    title: "Could not read the recent visual queries from Power BI Desktop.",
+                    detail: "Make sure the report is still open, then try again.",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
         });
 
         api.MapPost("/capture/stop", (CaptureState capture) =>

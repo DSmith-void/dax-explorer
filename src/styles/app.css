@@ -2082,3 +2082,17 @@ select {
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
 }
+
+.visuals-heading {
+  margin: 0;
+  flex: 1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.listen-setting {
+  cursor: pointer;
+}

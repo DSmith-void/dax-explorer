@@ -165,11 +165,16 @@ export interface HelperClient {
    * rows of a table expression ("table", at most maxRows). The helper writes the EVALUATE statement.
    */
   evaluate(kind: 'scalar' | 'table', dax: string, maxRows?: number): Promise<QueryResult>;
-  /** Starts listening to the queries the connected report's visuals send (Capture from Desktop). */
-  startCapture(): Promise<void>;
+  /**
+   * Starts listening to the queries the connected report's visuals send: for a few minutes, or until the
+   * report is disconnected (`untilDisconnect`, the "listen while connected" setting).
+   */
+  startCapture(untilDisconnect?: boolean): Promise<void>;
   stopCapture(): Promise<void>;
   /** Whether it is listening, and the queries captured after `after` (an id; 0 for all). */
   captured(after: number): Promise<CaptureStatus>;
+  /** The visual queries Power BI Desktop ran most recently (from the engine's session list; usually the last visual). */
+  recentVisuals(): Promise<{ at: string | null; text: string }[]>;
 }
 
 export function createHelperClient(token: string | null, fetchImpl: typeof fetch = (...args) => fetch(...args)): HelperClient {
@@ -218,8 +223,11 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
     async connectSample() {
       return (await json<{ state: 'connected' | 'waiting' }>('/api/sample/connect', { method: 'POST' })).state;
     },
-    async startCapture() {
-      await json('/api/capture/start', { method: 'POST' });
+    async startCapture(untilDisconnect = false) {
+      await json(`/api/capture/start${untilDisconnect ? '?untilDisconnect=true' : ''}`, { method: 'POST' });
+    },
+    async recentVisuals() {
+      return (await json<{ queries: { at: string | null; text: string }[] }>('/api/visuals/recent')).queries;
     },
     async stopCapture() {
       await json('/api/capture/stop', { method: 'POST' });

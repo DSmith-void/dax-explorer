@@ -160,3 +160,16 @@ describe('capture from Desktop', () => {
     await expect(createHelperClient(TOKEN, impl).startCapture()).rejects.toThrow('Connect to a report first.');
   });
 });
+
+describe('visuals from Power BI Desktop', () => {
+  it('listens until disconnect when asked, and reads the last visual queries', async () => {
+    const { impl, calls } = fakeFetch({
+      'POST /api/capture/start?untilDisconnect=true': json({ listening: true, stopsAt: null }),
+      'GET /api/visuals/recent': json({ queries: [{ at: '2026-11-11T02:31:48Z', text: 'EVALUATE SUMMARIZECOLUMNS(…)' }] }),
+    });
+    const client = createHelperClient(TOKEN, impl);
+    await client.startCapture(true);
+    expect(await client.recentVisuals()).toEqual([{ at: '2026-11-11T02:31:48Z', text: 'EVALUATE SUMMARIZECOLUMNS(…)' }]);
+    expect(calls.map((c) => c.path)).toEqual(['/api/capture/start?untilDisconnect=true', '/api/visuals/recent']);
+  });
+});

@@ -27,6 +27,7 @@ import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo
 import { measureDefinitionText, toModelSnapshot } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
 import { useStepValues } from './useStepValues';
+import { useDesktopVisuals } from './useDesktopVisuals';
 import { useThemePreference } from './useThemePreference';
 
 type Choices = Record<string, ReferenceType>;
@@ -124,6 +125,14 @@ export function App() {
   const highlightNode = selectedNode ?? (current?.nodeId !== null && current ? findNode(root, current.nodeId) : null);
   const problemCount = (result?.diagnostics.length ?? 0) + (binding?.diagnostics.length ?? 0);
   const matchingSample = result ? SAMPLE_MEASURES.find((s) => s.expression === result.text) : undefined;
+
+  // "Listen to Power BI Desktop while connected": off unless the user turns it on (remembered).
+  const [listen, setListen] = usePersistentState<boolean>('dax-explorer-listen', false, (v): v is boolean => typeof v === 'boolean');
+  const desktopVisuals = useDesktopVisuals({
+    client: helperClient,
+    connectionKey: connectedModel ? `${connectedModel.connection.port}:${connectedModel.model.databaseName}` : null,
+    listen,
+  });
 
   // Real values at each step, from the connected report.
   const stepValues = useStepValues({
@@ -272,6 +281,9 @@ export function App() {
           filters={reportFilters}
           onChange={setReportFilters}
           onExplainMeasure={handleExplainMeasure}
+          desktop={desktopVisuals}
+          listen={listen}
+          onListenChange={setListen}
         />
         <span className="toolbar-spacer" />
         <div className="toolbar-settings">

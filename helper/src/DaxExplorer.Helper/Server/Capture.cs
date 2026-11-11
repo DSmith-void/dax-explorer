@@ -42,8 +42,11 @@ public sealed class CaptureState(ICaptureSource source, TimeProvider clock, ILog
         && e.ApplicationName?.StartsWith("Power BI Desktop", StringComparison.OrdinalIgnoreCase) == true
         && e.Text?.Contains("SUMMARIZECOLUMNS", StringComparison.OrdinalIgnoreCase) == true;
 
-    /// <summary>Starts listening on the engine at this port (stopping any earlier capture first).</summary>
-    public void Start(int port)
+    /// <summary>
+    /// Starts listening on the engine at this port (stopping any earlier capture first). Stops by itself after
+    /// <see cref="Duration"/>, unless <paramref name="untilDisconnect"/> (the "listen while connected" setting).
+    /// </summary>
+    public void Start(int port, bool untilDisconnect = false)
     {
         Stop();
         var session = source.Start(port, OnQuery); // may throw: the caller reports it
@@ -52,8 +55,11 @@ public sealed class CaptureState(ICaptureSource source, TimeProvider clock, ILog
             _queries.Clear();
             _seen = 0;
             _session = session;
-            _stopsAt = clock.GetUtcNow() + Duration;
-            _timer = clock.CreateTimer(_ => Stop(), null, Duration, Timeout.InfiniteTimeSpan);
+            if (!untilDisconnect)
+            {
+                _stopsAt = clock.GetUtcNow() + Duration;
+                _timer = clock.CreateTimer(_ => Stop(), null, Duration, Timeout.InfiniteTimeSpan);
+            }
         }
         log.LogInformation("Capture started on port {Port}", port); // no query text in logs, ever
     }

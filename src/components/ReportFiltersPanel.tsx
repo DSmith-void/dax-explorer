@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CapturedQuery, HelperClient, ModelMetadata, QueryValue } from '../app/helperClient';
+import { useEffect, useMemo, useState } from 'react';
+import type { HelperClient, ModelMetadata, QueryValue } from '../app/helperClient';
+import type { DesktopVisuals } from '../app/useDesktopVisuals';
 import { captureLabel } from './captureLabel';
 import { columnText } from '../engine/context/describe';
 import type { ColumnName } from '../engine/context/model';
@@ -15,6 +16,10 @@ interface ReportFiltersPanelProps {
   onChange: (filters: ReportFilter[]) => void;
   /** Loads a measure from the connected model by name; false when it isn't in the model. */
   onExplainMeasure: (name: string) => boolean;
+  /** Visual queries from Power BI Desktop. */
+  desktop: DesktopVisuals;
+  listen: boolean;
+  onListenChange: (listen: boolean) => void;
 }
 
 const MAX_VALUES = 500;
@@ -34,7 +39,7 @@ function formatValue(value: QueryValue): string {
  * The report filters ("F"): the place in the report to calculate values for. Chosen by hand
  * (column and values) or taken from a visual's query plus one of its rows.
  */
-export function ReportFiltersPanel({ client, model, filters, onChange, onExplainMeasure }: ReportFiltersPanelProps) {
+export function ReportFiltersPanel({ client, model, filters, onChange, onExplainMeasure, desktop, listen, onListenChange }: ReportFiltersPanelProps) {
   const { open, setOpen, container } = usePopover<HTMLDivElement>();
   const [mode, setMode] = useState<'manual' | 'visual'>('manual');
   const label = filters.length === 0 ? 'none (grand total)' : filters.length === 1 ? reportFilterText(filters[0]) : `${filters.length} filters`;
@@ -113,7 +118,17 @@ export function ReportFiltersPanel({ client, model, filters, onChange, onExplain
               {mode === 'manual' ? (
                 <ManualFilter client={client} model={model} filters={filters} onChange={onChange} />
               ) : (
-                <FromVisual client={client} onChange={(f) => { onChange(f); setOpen(false); }} onExplainMeasure={onExplainMeasure} />
+                <FromVisual
+                  client={client}
+                  onChange={(f) => {
+                    onChange(f);
+                    setOpen(false);
+                  }}
+                  onExplainMeasure={onExplainMeasure}
+                  desktop={desktop}
+                  listen={listen}
+                  onListenChange={onListenChange}
+                />
               )}
             </>
           )}
@@ -229,7 +244,21 @@ function ManualFilter({ client, model, filters, onChange }: { client: HelperClie
 
 // ------------------------------------------------------------------ from a visual's query
 
-function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClient; onChange: (f: ReportFilter[]) => void; onExplainMeasure: (name: string) => boolean }) {
+function FromVisual({
+  client,
+  onChange,
+  onExplainMeasure,
+  desktop,
+  listen,
+  onListenChange,
+}: {
+  client: HelperClient;
+  onChange: (f: ReportFilter[]) => void;
+  onExplainMeasure: (name: string) => boolean;
+  desktop: DesktopVisuals;
+  listen: boolean;
+  onListenChange: (listen: boolean) => void;
+}) {
   const [text, setText] = useState('');
   const [visual, setVisual] = useState<VisualQuery | null>(null);
   const [rows, setRows] = useState<{ cells: QueryValue[][]; truncated: boolean } | null>(null);
@@ -270,8 +299,10 @@ function FromVisual({ client, onChange, onExplainMeasure }: { client: HelperClie
 
   return (
     <section className="data-panel-section">
-      <CaptureFromDesktop
-        client={client}
+      <DesktopVisualsSection
+        desktop={desktop}
+        listen={listen}
+        onListenChange={onListenChange}
         onPick={(query) => {
           setText(query);
           void read(query);
@@ -459,127 +490,79 @@ ${rowsDax}`).then(() => setCopied(true));
   );
 }
 
-const timeText = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const timeText = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
+
+interface DesktopVisualsSectionProps {
+  desktop: DesktopVisuals;
+  listen: boolean;
+  onListenChange: (listen: boolean) => void;
+  onPick: (query: string) => void;
+}
 
 /**
- * Capture from Desktop: listens to the queries the connected report's visuals send, while the user
- * clicks or refreshes visuals in Power BI Desktop. Stops when the panel closes (or by itself after a few minutes).
+ * Visuals in Power BI Desktop: the last visual Desktop calculated (read when this opens, and on "Check again"),
+ * plus, with "listen while connected" on, every visual query since connecting.
  */
-function CaptureFromDesktop({ client, onPick }: { client: HelperClient; onPick: (query: string) => void }) {
-  const [listening, setListening] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [stopsAt, setStopsAt] = useState<string | null>(null);
-  const [queries, setQueries] = useState<CapturedQuery[]>([]);
-  const [pickedId, setPickedId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const lastId = useRef(0);
-  const listeningRef = useRef(false);
+function DesktopVisualsSection({ desktop, listen, onListenChange, onPick }: DesktopVisualsSectionProps) {
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const { visuals, listening, checking, error, checkLast } = desktop;
 
+  // Read the last visual whenever this section opens.
   useEffect(() => {
-    listeningRef.current = listening;
-  }, [listening]);
-
-  // Stop listening when the panel closes or the tab changes.
-  useEffect(
-    () => () => {
-      if (listeningRef.current) void client.stopCapture().catch(() => {});
-    },
-    [client],
-  );
-
-  // While listening: ask for new queries every second.
-  useEffect(() => {
-    if (!listening) return;
-    const timer = window.setInterval(() => {
-      void client
-        .captured(lastId.current)
-        .then((status) => {
-          setStopsAt(status.stopsAt);
-          if (status.queries.length > 0) {
-            lastId.current = status.queries[status.queries.length - 1].id;
-            setQueries((previous) => [...[...status.queries].reverse(), ...previous].slice(0, 50));
-          }
-          if (!status.listening) setListening(false);
-        })
-        .catch((e: unknown) => {
-          setError(e instanceof Error ? e.message : 'Lost contact with DAX Explorer.');
-          setListening(false);
-        });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [listening, client]);
-
-  async function start() {
-    setError(null);
-    setStarting(true);
-    try {
-      await client.startCapture();
-      lastId.current = 0;
-      setQueries([]);
-      setPickedId(null);
-      setListening(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not listen to Power BI Desktop.');
-    } finally {
-      setStarting(false);
-    }
-  }
-
-  async function stop() {
-    setListening(false);
-    await client.stopCapture().catch(() => {});
-  }
+    void checkLast();
+    // Runs once per opening; checkLast changes every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="capture">
-      {listening ? (
+      <div className="capture-start">
+        <h4 className="visuals-heading">Visuals in Power BI Desktop</h4>
+        <button type="button" className="secondary-button" disabled={checking} onClick={() => void checkLast()}>
+          {checking ? 'Checking…' : 'Check again'}
+        </button>
+      </div>
+      <p className="data-bar-muted">
+        Shows the visual Power BI Desktop calculated last (the one you just added, changed or filtered). To see another,
+        change something in it (or a slicer), then press Check again.
+      </p>
+      <label className="listen-setting">
+        <input type="checkbox" checked={listen} onChange={(e) => onListenChange(e.target.checked)} /> Listen to Power BI Desktop while
+        connected
+        <span className="data-bar-muted"> (collects every visual you change from now on; stops when you disconnect)</span>
+      </label>
+      {listening && (
         <div className="capture-status" aria-live="polite">
           <span className="capture-dot" aria-hidden="true" />
-          <span>
-            <strong>Listening…</strong> in Power BI Desktop, refresh the visuals (Optimize → Performance analyzer → Refresh
-            visuals) or change a slicer.
-            {stopsAt && <span className="data-bar-muted"> Stops by itself at {timeText(stopsAt)}.</span>}
-          </span>
-          <button type="button" className="secondary-button" onClick={() => void stop()}>
-            Stop
-          </button>
-        </div>
-      ) : (
-        <div className="capture-start">
-          <button type="button" className="primary-button" disabled={starting} onClick={() => void start()}>
-            {starting ? 'Starting…' : 'Capture from Desktop'}
-          </button>
-          <span className="data-bar-muted">
-            Then refresh the visuals in Power BI Desktop (or change a slicer); their queries appear here. Just clicking a visual
-            often sends no new query.
-          </span>
+          <span>Listening: visuals you change in Power BI Desktop appear here.</span>
         </div>
       )}
-      {queries.length > 0 && (
-        <ul className="capture-list" aria-label="Captured visuals, newest first">
-          {queries.map((q) => {
-            const label = captureLabel(q.text);
+      {visuals.length > 0 ? (
+        <ul className="capture-list" aria-label="Visual queries from Power BI Desktop, newest first">
+          {visuals.map((v) => {
+            const label = captureLabel(v.text);
             return (
-              <li key={q.id}>
+              <li key={v.key}>
                 <button
                   type="button"
-                  className={pickedId === q.id ? 'is-picked' : undefined}
+                  className={pickedKey === v.key ? 'is-picked' : undefined}
                   disabled={!label.ok}
                   title={label.ok ? 'Use this visual' : label.error}
                   onClick={() => {
-                    setPickedId(q.id);
-                    onPick(q.text);
+                    setPickedKey(v.key);
+                    onPick(v.text);
                   }}
                 >
-                  <span className="capture-time">{timeText(q.at)}</span>
+                  <span className="capture-time">{timeText(v.at)}</span>
                   <span>{label.ok ? label.label : `Not usable: ${label.error}`}</span>
                 </button>
               </li>
             );
           })}
         </ul>
+      ) : (
+        !checking && <p className="data-bar-muted">No visual query found yet. Add, change or filter a visual in Power BI Desktop, then press Check again.</p>
       )}
-      {listening && queries.length === 0 && <p className="data-bar-muted">Nothing yet.</p>}
       {error && <p className="data-bar-error">{error}</p>}
     </div>
   );
