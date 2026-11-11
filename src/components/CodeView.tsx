@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { scrollWithin } from './scrollWithin';
 import type { Token } from '../engine/lexer/tokens';
 import type { AstNode } from '../engine/parser/ast';
 import type { Span } from '../engine/source';
@@ -25,8 +26,7 @@ export function CodeView({ text, tokens, expressionStart, root, highlight, onSel
 
   // Keep the highlighted code in view while stepping.
   useEffect(() => {
-    const first = container.current?.querySelector('.is-current');
-    first?.scrollIntoView({ block: 'nearest' });
+    scrollWithin(container.current, container.current?.querySelector('.is-current'));
   }, [highlight]);
 
   return (

@@ -16,13 +16,13 @@ interface StepValueProps {
   query: StepQuery;
   state: ValueState;
   connected: boolean;
-  /** Picked rows, by iterator node id. */
-  rows: ReadonlyMap<number, RowChoice>;
+  /** The picked row of an iterator of this measure, by its node id. */
+  rowFor: (iteratorNodeId: number) => RowChoice | undefined;
   onPickRow: (iteratorNodeId: number, choice: RowChoice) => void;
 }
 
 /** The real value at a step, from the connected report. */
-export function StepValue({ entry, query, state, connected, rows, onPickRow }: StepValueProps) {
+export function StepValue({ entry, query, state, connected, rowFor, onPickRow }: StepValueProps) {
   if (!connected) {
     return entry.kind === 'start' ? (
       <p className="value-note">Connect to a report (the data button) to see real values at each step.</p>
@@ -32,7 +32,7 @@ export function StepValue({ entry, query, state, connected, rows, onPickRow }: S
 
   // Which rows of the iterators around this step the value is for.
   const forRows = entry.context.rows
-    .map((r) => ({ name: r.functionName, choice: rows.get(r.nodeId) }))
+    .map((r) => ({ name: r.functionName, choice: rowFor(r.nodeId) }))
     .filter((r): r is { name: string; choice: RowChoice } => r.choice !== undefined);
   const forText = forRows.length > 0 && (
     <p className="value-for">
@@ -58,7 +58,7 @@ export function StepValue({ entry, query, state, connected, rows, onPickRow }: S
 
   const { indexes, valueIndex } = query.kind === 'rows' ? rowColumns(result.columns) : { indexes: result.columns.map((_, i) => i), valueIndex: -1 };
   const iteratorNodeId = entry.nodeId;
-  const picked = query.kind === 'rows' && iteratorNodeId !== null ? rows.get(iteratorNodeId) : undefined;
+  const picked = query.kind === 'rows' && iteratorNodeId !== null ? rowFor(iteratorNodeId) : undefined;
   const shown = count ?? result.rows.length;
   return (
     <div className="value-block">

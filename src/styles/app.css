@@ -104,7 +104,8 @@
 /* --- Timeline --- */
 .timeline-bar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* One row on wide screens: label, slider, the current step's title, count, buttons. */
+  grid-template-columns: auto minmax(12rem, 1fr) minmax(0, max-content) auto auto;
   align-items: center;
   gap: 4px 14px;
   padding: 10px var(--gap) 8px;
@@ -153,9 +154,43 @@
 }
 
 .timeline-title {
-  grid-column: 2 / 5;
+  grid-row: 1;
+  grid-column: 3;
+  max-width: 28rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 550;
+}
+
+.timeline-bar .step-count {
+  grid-column: 4;
+}
+
+.timeline-bar .timeline-buttons {
+  grid-column: 5;
+}
+
+@media (max-width: 1000px) {
+  .timeline-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+
+  .timeline-bar .step-count {
+    grid-column: 3;
+  }
+
+  .timeline-bar .timeline-buttons {
+    grid-column: 4;
+  }
+
+  .timeline-title {
+    grid-row: 2;
+    grid-column: 2 / 5;
+    max-width: none;
+  }
 }
 
 .timeline-buttons {
@@ -178,12 +213,18 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
-  .timeline-buttons {
+  .timeline-bar .step-count {
+    grid-column: 3;
+  }
+
+  .timeline-bar .timeline-buttons {
+    grid-row: 2;
     grid-column: 1 / -1;
     justify-content: flex-end;
   }
 
   .timeline-title {
+    grid-row: 3;
     grid-column: 1 / -1;
   }
 }
@@ -192,15 +233,18 @@
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 12px var(--gap);
+  gap: 10px;
+  padding: 8px var(--gap);
 }
 
+/* Two lines: the label, then the value with its detail beside it. */
 .summary-card {
   display: grid;
-  gap: 2px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 8px;
   justify-items: start;
-  padding: 10px 14px;
+  padding: 6px 12px;
   text-align: left;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -218,6 +262,7 @@
 }
 
 .summary-card-label {
+  grid-column: 1 / -1;
   font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
@@ -244,7 +289,7 @@
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
   gap: 0;
   margin: 0 var(--gap) var(--gap);
   border: 1px solid var(--color-border);
@@ -265,8 +310,21 @@
   }
 
   .code-pane,
-  .inspector-pane {
+  .inspector-pane,
+  .left-pane {
     min-height: 0;
+  }
+
+  /* The code takes what it needs (up to 60%); the story fills the rest and scrolls on its own. */
+  .left-pane > .code-pane {
+    flex: 0 1 auto;
+    max-height: 60%;
+  }
+
+  .story-pane {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
   }
 }
 
@@ -279,18 +337,39 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .code-pane {
+  .left-pane {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
   }
+
+  .story-pane {
+    max-height: 20rem;
+    overflow: auto;
+  }
+}
+
+.left-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-code-bg);
 }
 
 .code-pane {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid var(--color-border);
   background: var(--color-code-bg);
+}
+
+.story-pane {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.story-pane .story-list {
+  padding: 6px 8px 10px;
 }
 
 .pane-header {
@@ -508,23 +587,48 @@
   color: var(--color-notice-text);
 }
 
-/* --- Step tab: four boxes, like a debugger --- */
+/* --- Step tab: two columns, like a debugger: the step | filters, technical, variables.
+ * On wide screens each column fills the height and scrolls on its own, so the page never does. */
 .step-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-auto-rows: minmax(10rem, auto);
+  align-items: start;
+}
+
+.step-col {
+  min-width: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+.step-col:last-child {
+  border-right: none;
+}
+
+@media (min-width: 1301px) {
+  .step-grid {
+    height: 100%;
+    align-items: stretch;
+  }
+
+  .step-col {
+    min-height: 0;
+    overflow: auto;
+  }
 }
 
 @media (max-width: 1300px) {
   .step-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .step-col {
+    border-right: none;
+  }
 }
 
 .step-box {
   min-width: 0;
   border-bottom: 1px solid var(--color-border);
-  border-right: 1px solid var(--color-border);
 }
 
 .step-box-header {
@@ -2095,4 +2199,143 @@ select {
 
 .listen-setting {
   cursor: pointer;
+}
+
+/* ---- Measures stepped into: one tint per level, on the code, the current step and the story list */
+.frame-tint-1 { --frame: var(--color-frame-1); --frame-soft: var(--color-frame-1-soft); }
+.frame-tint-2 { --frame: var(--color-frame-2); --frame-soft: var(--color-frame-2-soft); }
+.frame-tint-3 { --frame: var(--color-frame-3); --frame-soft: var(--color-frame-3-soft); }
+
+.code-pane[class*='frame-tint-'] {
+  box-shadow: inset 0 3px 0 var(--frame);
+}
+
+.frame-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.45rem 0.9rem;
+  background: var(--frame-soft);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+  animation: frame-flash 0.9s ease-out;
+}
+
+.frame-breadcrumb strong {
+  color: var(--frame);
+}
+
+@keyframes frame-flash {
+  from { box-shadow: inset 0 0 0 2px var(--frame); }
+  to { box-shadow: inset 0 0 0 2px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame-breadcrumb { animation: none; }
+}
+
+.step-box-current[class*='frame-tint-'] {
+  border-inline-start: 4px solid var(--frame);
+}
+
+.frame-badge {
+  margin-inline-start: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--frame-soft);
+  color: var(--frame);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.story-list li.in-frame {
+  background: var(--frame-soft);
+  box-shadow: inset 3px 0 0 var(--frame);
+}
+
+.story-list li.is-boundary .story-title {
+  font-weight: 700;
+  color: var(--frame);
+}
+
+.step-into {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.6rem 0;
+}
+
+/* ---- Technical level */
+.technical-list {
+  margin: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.technical-list dt {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.technical-list dd {
+  margin: 0 0 0.4rem;
+}
+
+.technical-list ul,
+.technical-list ol {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+}
+
+.technical-query {
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0 0 0.4rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 0.8rem;
+  white-space: pre;
+}
+
+.technical-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+
+.technical-details summary {
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+}
+
+.technical-details[open] summary {
+  margin-bottom: 4px;
+}
+
+.left-pane .code-view {
+  min-height: 6rem;
+}
+
+@media (max-width: 640px) {
+  .summary-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.story-pane > .step-box-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
 }

@@ -11,18 +11,17 @@ import { ReportFiltersContext } from '../components/reportFiltersContext';
 import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { TimelineBar } from '../components/StepControls';
-import { StepPanel } from '../components/StepPanel';
+import { StepPanel, StoryList } from '../components/StepPanel';
 import { SummaryCards } from '../components/SummaryCards';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { bind, type ReferenceType, type ResolutionMode } from '../engine/binder/binder';
-import { analyzeContext } from '../engine/context/analyzer';
+import type { ReferenceType, ResolutionMode } from '../engine/binder/binder';
 import type { ReportFilter } from '../engine/context/reportFilters';
-import { buildTimeline } from '../engine/context/timeline';
 import type { InputMode } from '../engine/definition';
 import { createModelIndex } from '../engine/model';
 import { findNode, type AstNode } from '../engine/parser/ast';
-import { SAMPLE_MEASURES, type SampleMeasure } from '../samples/sampleMeasures';
+import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
+import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
 import { measureDefinitionText, toModelSnapshot } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
@@ -43,7 +42,7 @@ const isChoices = (value: unknown): value is Choices =>
 
 const DETAIL_OPTIONS: { value: DetailLevel; label: string; title: string }[] = [
   { value: 'brief', label: 'Brief', title: 'Short explanations' },
-  { value: 'detailed', label: 'Detailed', title: 'Full explanations' },
+  { value: 'detailed', label: 'Detailed', title: 'Full explanations, plus the technical view: DAX terms and the query behind each value' },
 ];
 
 /** True when a key press belongs to a form control (typing, choosing), not to stepping. */
@@ -103,28 +102,30 @@ export function App() {
     [connectedModel],
   );
 
-  // Binding is cheap and depends on settings that can change after Explain, so it is derived on render.
-  const binding = useMemo(
-    () => (result?.parse ? bind(result.parse.root, { mode: referenceMode, userChoices, model: modelIndex }) : null),
-    [result, referenceMode, userChoices, modelIndex],
-  );
-  // Context analysis depends on the binding (a measure and a column behave differently), so it is derived too.
-  const contextAnalysis = useMemo(
-    () => (result?.parse && binding ? analyzeContext(result.parse.root, binding, result.text) : null),
-    [result, binding],
-  );
+  // Binding, context analysis and the timeline depend on settings that can change after Explain, so
+  // they are derived on render: one "frame" for the measure, plus one per measure stepped into.
+  const bindOptions = useMemo(() => ({ mode: referenceMode, userChoices, model: modelIndex }), [referenceMode, userChoices, modelIndex]);
+  const rootFrame = useMemo(() => (result ? buildFrame(result, bindOptions) : null), [result, bindOptions]);
+  // Measures stepped into, by frame key. Their code comes from the connected model, or else from the built-in examples.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const lookup = useMemo(() => (connectedModel ? () => undefined : sampleDefinition), [connectedModel]);
   const timeline = useMemo(
-    () => (result?.parse && binding && contextAnalysis ? buildTimeline(result.parse.root, binding, contextAnalysis, result.text) : []),
-    [result, binding, contextAnalysis],
+    () => (rootFrame ? flattenTimeline(rootFrame, expanded, lookup, bindOptions) : []),
+    [rootFrame, expanded, lookup, bindOptions],
   );
 
-  const root = result?.parse?.root ?? null;
   const index = Math.min(stepIndex, Math.max(timeline.length - 1, 0));
   const current = timeline[index];
+  // Everything about the code (the code pane and the other tabs) follows the measure the current step is in.
+  const activeFrame = current?.frame ?? rootFrame;
+  const activeResult = activeFrame?.result ?? result;
+  const binding = activeFrame?.binding ?? null;
+  const contextAnalysis = activeFrame?.analysis ?? null;
+  const root = activeResult?.parse?.root ?? null;
   const selectedNode = selectedNodeId !== null ? findNode(root, selectedNodeId) : null;
   const highlightNode = selectedNode ?? (current?.nodeId !== null && current ? findNode(root, current.nodeId) : null);
-  const problemCount = (result?.diagnostics.length ?? 0) + (binding?.diagnostics.length ?? 0);
-  const matchingSample = result ? SAMPLE_MEASURES.find((s) => s.expression === result.text) : undefined;
+  const problemCount = (activeResult?.diagnostics.length ?? 0) + (binding?.diagnostics.length ?? 0);
+  const matchingSample = result && activeFrame?.level === 0 ? SAMPLE_MEASURES.find((s) => s.expression === result.text) : undefined;
 
   // "Listen to Power BI Desktop while connected": off unless the user turns it on (remembered).
   const [listen, setListen] = usePersistentState<boolean>('dax-explorer-listen', false, (v): v is boolean => typeof v === 'boolean');
@@ -140,11 +141,34 @@ export function App() {
     connectionKey: connectedModel ? `${connectedModel.connection.port}:${connectedModel.model.databaseName}` : null,
     timeline,
     current,
-    root,
-    binding,
-    source: result?.text ?? '',
+    rootFrame,
     reportFilters,
   });
+
+  /** Shows or hides the steps inside a measure. Hiding them while inside goes back to the step that calls it. */
+  function handleExpand(key: string, open: boolean) {
+    setExpanded((previous) => {
+      const next = new Set(previous);
+      if (open) next.add(key);
+      else for (const k of previous) if (k === key || k.startsWith(`${key}/`)) next.delete(k);
+      return next;
+    });
+    if (!open && current && (current.frame.key === key || current.frame.key.startsWith(`${key}/`))) {
+      const slash = key.lastIndexOf('/');
+      const callerKey = key.slice(0, slash);
+      const callNodeId = Number(key.slice(slash + 1));
+      const calling = timeline.find((e) => e.frame.key === callerKey && e.nodeId === callNodeId && e.kind === 'measure');
+      if (calling) goToStep(calling.index);
+    }
+  }
+
+  /** Breadcrumb: go to the step where `frame`'s measure calls the next one in the chain (or the start). */
+  function handleSelectFrame(frame: Frame) {
+    const path = activeFrame ? framePath(activeFrame) : [];
+    const inner = path[path.indexOf(frame) + 1];
+    const calling = inner?.caller ? timeline.find((e) => e.frame === frame && e.nodeId === inner.caller!.callNodeId && e.kind === 'measure') : undefined;
+    goToStep(calling?.index ?? timeline.findIndex((e) => e.frame === frame));
+  }
 
   function goToStep(next: number) {
     const clamped = Math.max(0, Math.min(next, timeline.length - 1));
@@ -176,6 +200,7 @@ export function App() {
     setDaxText(text);
     setInputMode(mode);
     setResult(analyze(text, mode));
+    setExpanded(new Set());
     setEditing(false);
     setStepIndex(0);
     setSelectedNodeId(null);
@@ -235,7 +260,7 @@ export function App() {
 
   /** A part of the code was clicked (in the code or the tree): go to its step, if it has one. */
   function handleSelectNode(node: AstNode) {
-    const step = timeline.find((e) => e.nodeId === node.id);
+    const step = timeline.find((e) => e.frame === activeFrame && e.nodeId === node.id);
     if (step) {
       setStepIndex(step.index);
       setSelectedNodeId(null);
@@ -316,6 +341,7 @@ export function App() {
       />
 
       <main className="workspace">
+        <div className="left-pane">
         <CodePane
           editing={editing}
           onEdit={handleEdit}
@@ -326,11 +352,17 @@ export function App() {
           onTextChange={setDaxText}
           mode={inputMode}
           onModeChange={setInputMode}
-          result={result}
+          result={editing ? result : activeResult}
+          frames={activeFrame ? framePath(activeFrame) : []}
+          onSelectFrame={handleSelectFrame}
           highlight={editing ? null : (highlightNode?.span ?? null)}
           onSelectNode={handleSelectNode}
           concept={matchingSample?.concept ?? null}
         />
+        {!editing && timeline.length > 0 && (
+          <StoryList entries={timeline} index={index} onStep={goToStep} values={stepValues} connected={connectedModel !== null} />
+        )}
+        </div>
 
         <section className="inspector-pane" aria-label="Explanation">
           <div className="tabs" role="tablist" aria-label="Explanation views">
@@ -356,18 +388,18 @@ export function App() {
                 entries={timeline}
                 index={index}
                 onStep={goToStep}
-                analysis={contextAnalysis}
-                root={root}
-                source={result?.text ?? ''}
                 detail={detail}
                 onSelectNode={handleSelectNode}
                 values={stepValues}
                 connected={connectedModel !== null}
+                stepInto={(entry) => stepIntoTarget(entry.frame, entry, lookup)}
+                isExpanded={(key) => expanded.has(key)}
+                onExpand={handleExpand}
               />
             )}
             {tab === 'part' && (
               <ContextInspectorPanel
-                result={result}
+                result={activeResult}
                 binding={binding}
                 analysis={contextAnalysis}
                 selectedId={selectedNode?.id ?? current?.nodeId ?? null}
@@ -378,7 +410,7 @@ export function App() {
             )}
             {tab === 'tree' && (
               <ExpressionTreePanel
-                result={result}
+                result={activeResult}
                 binding={binding}
                 analysis={contextAnalysis}
                 selectedId={highlightNode?.id ?? null}
@@ -393,7 +425,7 @@ export function App() {
             )}
             {tab === 'problems' && (
               <DiagnosticsPanel
-                result={result}
+                result={activeResult}
                 binding={binding}
                 analysis={contextAnalysis}
                 detail={detail}

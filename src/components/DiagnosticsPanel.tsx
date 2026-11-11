@@ -129,7 +129,7 @@ function Explanation({
                 </button>
               )}
               <span className="insight-summary">{insight.summary}</span>
-              {detail === 'detailed' ? (
+              {detail !== 'brief' ? (
                 <span className="insight-message">{insight.message}</span>
               ) : (
                 <details className="insight-more">

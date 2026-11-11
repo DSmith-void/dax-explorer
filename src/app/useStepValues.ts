@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { BindResult } from '../engine/binder/binder';
-import { buildStepQuery, rowColumns, type RowChoice, type StepQuery } from '../engine/context/stepQuery';
-import type { TimelineEntry } from '../engine/context/timeline';
+import { buildStepQuery, rowColumns, rowKey, type RowChoice, type StepQuery } from '../engine/context/stepQuery';
 import type { FilterValue, ReportFilter } from '../engine/context/reportFilters';
-import type { Expr } from '../engine/parser/ast';
+import { callersOf, type FlatEntry, type Frame } from './frames';
 import type { HelperClient, QueryResult } from './helperClient';
 
 /** At most this many rows are shown for a table or an iterator. */
@@ -20,11 +18,11 @@ interface Options {
   client: HelperClient;
   /** Identifies the connected report; null when not connected (values come from it). */
   connectionKey: string | null;
-  timeline: readonly TimelineEntry[];
-  current: TimelineEntry | undefined;
-  root: Expr | null;
-  binding: BindResult | null;
-  source: string;
+  /** The flat timeline (with any measures stepped into). */
+  timeline: readonly FlatEntry[];
+  current: FlatEntry | undefined;
+  /** The measure being explained. */
+  rootFrame: Frame | null;
   reportFilters: readonly ReportFilter[];
 }
 
@@ -35,13 +33,14 @@ const keyOf = (q: StepQuery) => (q.kind === 'scalar' || q.kind === 'table' || q.
  * results are kept, so stepping back is instant. A step inside an iterator needs one of its rows:
  * the iterator's rows are fetched and the first one is picked, until the user picks another.
  */
-export function useStepValues({ client, connectionKey, timeline, current, root, binding, source, reportFilters }: Options) {
-  const [rows, setRows] = useState<ReadonlyMap<number, RowChoice>>(new Map());
+export function useStepValues({ client, connectionKey, timeline, current, rootFrame, reportFilters }: Options) {
+  const [rows, setRows] = useState<ReadonlyMap<string, RowChoice>>(new Map());
   const [cache, setCache] = useState<ReadonlyMap<string, ValueState>>(new Map());
   const inFlight = useRef(new Set<string>());
   const enabled = connectionKey !== null;
 
   // Picked rows belong to one expression and one set of report filters.
+  const root = rootFrame?.result ?? null;
   const [rowsFor, setRowsFor] = useState({ root, reportFilters });
   if (rowsFor.root !== root || rowsFor.reportFilters !== reportFilters) {
     setRowsFor({ root, reportFilters });
@@ -51,9 +50,20 @@ export function useStepValues({ client, connectionKey, timeline, current, root, 
   // Building a query is cheap (no engine involved), so it isn't cached.
   const queryFor = useMemo(
     () =>
-      (entry: TimelineEntry): StepQuery =>
-        binding ? buildStepQuery(entry, { root, binding, source, reportFilters, rows }) : { kind: 'none', reason: '' },
-    [root, binding, source, reportFilters, rows],
+      (entry: FlatEntry): StepQuery => {
+        const { frame } = entry;
+        if (!frame.binding) return { kind: 'none', reason: '' };
+        return buildStepQuery(entry, {
+          root: frame.result.parse?.root ?? null,
+          binding: frame.binding,
+          source: frame.result.text,
+          reportFilters,
+          rows,
+          frameKey: frame.key,
+          callers: callersOf(frame),
+        });
+      },
+    [reportFilters, rows],
   );
 
   const stateOf = (q: StepQuery): ValueState => {
@@ -64,15 +74,15 @@ export function useStepValues({ client, connectionKey, timeline, current, root, 
   };
 
   // What to fetch for the current step: its own query, or first the rows of the iterator it needs.
-  const wanted = useMemo((): { query: StepQuery; pickFor: number | null } | null => {
+  const wanted = useMemo((): { query: StepQuery; pickFor: string | null } | null => {
     if (!enabled || !current) return null;
     let query = queryFor(current);
-    let pickFor: number | null = null;
+    let pickFor: string | null = null;
     for (let depth = 0; depth < 8 && query.kind === 'needs-row'; depth++) {
-      const iteratorNodeId: number = query.iteratorNodeId;
-      const iterator = timeline.find((e) => e.kind === 'iterate' && e.nodeId === iteratorNodeId);
+      const { frameKey, iteratorNodeId } = query;
+      const iterator = timeline.find((e) => e.kind === 'iterate' && e.nodeId === iteratorNodeId && e.frame.key === frameKey);
       if (!iterator) return null;
-      pickFor = iteratorNodeId;
+      pickFor = rowKey(frameKey, iteratorNodeId);
       query = queryFor(iterator);
     }
     return keyOf(query) ? { query, pickFor } : null;
@@ -128,6 +138,8 @@ export function useStepValues({ client, connectionKey, timeline, current, root, 
     rows,
     queryFor,
     stateOf,
-    pickRow: (iteratorNodeId: number, choice: RowChoice) => setRows((previous) => new Map(previous).set(iteratorNodeId, choice)),
+    /** Picks a row of an iterator in one measure (by the measure's frame key). */
+    pickRow: (frameKey: string, iteratorNodeId: number, choice: RowChoice) =>
+      setRows((previous) => new Map(previous).set(rowKey(frameKey, iteratorNodeId), choice)),
   };
 }

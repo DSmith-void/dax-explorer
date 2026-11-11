@@ -6,7 +6,7 @@
 //   release/DaxExplorer/app/...
 //   release/DaxExplorer/sample/Initech/...   (the made-up sample report, opened by "Use sample data")
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { closeSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { dotnetEnv, dotnetExecutable } from './dotnet.mjs';
 
@@ -38,6 +38,17 @@ run(process.execPath, [process.env.npm_execpath, 'run', 'build']);
 // 2. The helper as one self-contained executable.
 // Empty the output folder rather than deleting it: a window open on the folder (Explorer, or the terminal
 // DaxExplorer.exe was started from) would make deleting the folder itself fail.
+// A running DaxExplorer.exe can't be replaced: stop before deleting anything, or the running app would
+// lose its files (Windows lists "app" before "DaxExplorer.exe").
+const exe = join(output, 'DaxExplorer.exe');
+if (existsSync(exe)) {
+  try {
+    closeSync(openSync(exe, 'r+'));
+  } catch {
+    console.error(`\n${exe} is in use. Close DAX Explorer (and its window) first, then run npm run package again. Nothing was changed.`);
+    process.exit(1);
+  }
+}
 mkdirSync(output, { recursive: true });
 for (const entry of readdirSync(output)) rmSync(join(output, entry), { recursive: true, force: true });
 run(
@@ -63,7 +74,6 @@ cpSync(join(root, 'samples', 'Initech'), join(output, 'sample', 'Initech'), {
   filter: (source) => basename(source).toLowerCase() !== '.pbi',
 });
 
-const exe = join(output, 'DaxExplorer.exe');
 if (!existsSync(exe)) {
   console.error(`Expected ${exe} but it was not created.`);
   process.exit(1);

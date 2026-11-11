@@ -53,6 +53,13 @@
   --radius: 8px;
   --gap: 16px;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.07);
+  /* Measures stepped into, by level (1, 2, 3, then repeating) */
+  --color-frame-1: #6d5bd0;
+  --color-frame-1-soft: #efecfb;
+  --color-frame-2: #c2662d;
+  --color-frame-2-soft: #fbefe6;
+  --color-frame-3: #2f7fb8;
+  --color-frame-3-soft: #e6f1f9;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -98,6 +105,13 @@
     --syn-measure-name: #9aa1a9;
 
     --shadow: none;
+    /* Measures stepped into, by level (1, 2, 3, then repeating) */
+    --color-frame-1: #a99cf0;
+    --color-frame-1-soft: #2a2540;
+    --color-frame-2: #eb9a62;
+    --color-frame-2-soft: #3a2a1e;
+    --color-frame-3: #6fb4e6;
+    --color-frame-3-soft: #1b2c3a;
   }
 }
 
@@ -143,6 +157,13 @@
   --syn-measure-name: #9aa1a9;
 
   --shadow: none;
+  /* Measures stepped into, by level (1, 2, 3, then repeating) */
+  --color-frame-1: #a99cf0;
+  --color-frame-1-soft: #2a2540;
+  --color-frame-2: #eb9a62;
+  --color-frame-2-soft: #3a2a1e;
+  --color-frame-3: #6fb4e6;
+  --color-frame-3-soft: #1b2c3a;
 }
 
 /* --- Base --- */

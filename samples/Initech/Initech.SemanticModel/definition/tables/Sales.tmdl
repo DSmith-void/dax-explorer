@@ -78,6 +78,16 @@ table Sales
 			    )
 		formatString: 0.0%
 
+	measure 'Average Order Value' = DIVIDE([Total Sales], [Order Count])
+		formatString: #,##0.00
+
+	measure 'Best Plant Order Value' =
+			MAXX(
+			    VALUES(Plant[Plant Name]),
+			    [Average Order Value]
+			)
+		formatString: #,##0.00
+
 	column 'Order Key'
 		dataType: int64
 		isNameInferred

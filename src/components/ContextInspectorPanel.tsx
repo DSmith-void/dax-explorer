@@ -20,6 +20,7 @@ const ROLE_TEXT: Record<ArgRole, string> = {
   keyword: 'an option word',
 };
 
+/** Brief: short. Detailed: full plain-language explanations, plus the technical view (DAX's own terms and the queries). */
 export type DetailLevel = 'brief' | 'detailed';
 
 interface ContextInspectorPanelProps {
@@ -147,7 +148,7 @@ function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode
         <dd>
           <strong className="inspector-label">{presentation.label}</strong> <span className="ast-kind">{presentation.kind}</span>
         </dd>
-        {detail === 'detailed' && (
+        {detail !== 'brief' && (
           <>
             <dt>Position</dt>
             <dd>

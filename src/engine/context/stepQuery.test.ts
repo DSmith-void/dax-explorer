@@ -6,7 +6,7 @@ import { tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
 import { analyzeContext } from './analyzer';
 import type { ReportFilter } from './reportFilters';
-import { buildStepQuery, columnNameDax, rowColumns, type RowChoice, type StepQuery } from './stepQuery';
+import { buildStepQuery, columnNameDax, evaluateText, rowColumns, rowKey, type RowChoice, type StepQuery } from './stepQuery';
 import { buildTimeline, type TimelineEntry } from './timeline';
 
 // The values these queries produce were checked live against the Initech sample in Power BI Desktop
@@ -19,10 +19,10 @@ function steps(definition: string, reportFilters: ReportFilter[] = [], rows: (en
   const { root } = parse(tokenize(definition, start).tokens);
   const binding = bind(root, { mode: 'convention', userChoices: {} });
   const timeline = buildTimeline(root, binding, analyzeContext(root, binding, definition), definition);
-  const picked = new Map<number, RowChoice>();
+  const picked = new Map<string, RowChoice>();
   for (const e of timeline) {
     const choice = e.kind === 'iterate' && e.nodeId !== null ? rows(e) : undefined;
-    if (choice) picked.set(e.nodeId!, choice);
+    if (choice) picked.set(rowKey('', e.nodeId!), choice);
   }
   const query = (title: string, nth = 0): StepQuery => {
     const entry = timeline.filter((e) => e.title === title)[nth];
@@ -74,7 +74,7 @@ describe('buildStepQuery', () => {
 
   it("inside an iterator, a value needs a picked row; the iterator's step lists its rows with per-row values", () => {
     const { query } = steps(SAMPLE_MEASURES[1].expression, WIDGETS);
-    expect(query('Calculate [Total Sales]')).toEqual({ kind: 'needs-row', iteratorNodeId: expect.any(Number), iteratorName: 'AVERAGEX' });
+    expect(query('Calculate [Total Sales]')).toEqual({ kind: 'needs-row', frameKey: '', iteratorNodeId: expect.any(Number), iteratorName: 'AVERAGEX' });
     const rows = query('AVERAGEX goes row by row');
     expect(rows.kind).toBe('rows');
     expect(dax(rows)).toBe(
@@ -127,5 +127,12 @@ describe('engine column names', () => {
 
   it("separate an iterator's own columns from the per-row value", () => {
     expect(rowColumns(['Plant[Plant Name]', '[@DaxExplorerValue]'])).toEqual({ indexes: [0], valueIndex: 1 });
+  });
+});
+
+describe('evaluateText', () => {
+  it('makes a complete query to paste into DAX Studio, as the helper runs it', () => {
+    expect(evaluateText({ kind: 'scalar', dax: '[Total Sales]' })).toBe('EVALUATE\nROW("value",\n[Total Sales]\n)');
+    expect(evaluateText({ kind: 'table', dax: 'VALUES(Plant[Plant Name])', countDax: '' })).toBe('EVALUATE\nVALUES(Plant[Plant Name])');
   });
 });

@@ -1,5 +1,6 @@
 import type { Ref } from 'react';
 import type { AnalysisResult } from '../app/analysis';
+import { frameTint, type Frame } from '../app/frames';
 import type { InputMode } from '../engine/definition';
 import type { AstNode } from '../engine/parser/ast';
 import type { Span } from '../engine/source';
@@ -23,6 +24,9 @@ interface CodePaneProps {
   onSelectNode: (node: AstNode) => void;
   /** A one-line hint about the loaded example, if any. */
   concept: string | null;
+  /** The chain of measures stepped into, from the measure being explained to the one shown. */
+  frames: readonly Frame[];
+  onSelectFrame: (frame: Frame) => void;
 }
 
 const MODE_OPTIONS: { value: InputMode; label: string; title: string }[] = [
@@ -45,9 +49,31 @@ export function CodePane({
   highlight,
   onSelectNode,
   concept,
+  frames,
+  onSelectFrame,
 }: CodePaneProps) {
+  const shown = editing ? undefined : frames[frames.length - 1];
+  const tint = shown ? frameTint(shown.level) : 0;
   return (
-    <section className="code-pane" aria-label="DAX">
+    <section className={`code-pane${tint ? ` frame-tint-${tint}` : ''}`} aria-label="DAX">
+      {shown && shown.level > 0 && (
+        // Keyed by the measure, so the highlight replays each time the code switches to another measure.
+        <nav key={shown.key} className="frame-breadcrumb" aria-label="Measures stepped into">
+          {frames.map((frame, i) => (
+            <span key={frame.key} className="frame-crumb">
+              {i > 0 && <span aria-hidden="true"> › </span>}
+              {frame === shown ? (
+                <strong aria-current="location">{frame.name}</strong>
+              ) : (
+                <button type="button" className="link-button" onClick={() => onSelectFrame(frame)} title={`Back to ${frame.name}`}>
+                  {frame.name}
+                </button>
+              )}
+            </span>
+          ))}
+          <span className="muted"> · the code of {shown.name}, as {frames[frames.length - 2].name} calls it</span>
+        </nav>
+      )}
       <header className="pane-header">
         {editing ? (
           <>
@@ -66,9 +92,11 @@ export function CodePane({
           <>
             <p className="pane-concept">{concept ?? 'Click any part of the code to see what happens there.'}</p>
             <span className="pane-header-spacer" />
-            <button type="button" className="secondary-button" onClick={onEdit}>
-              <Icon name="edit" /> Edit
-            </button>
+            {(!shown || shown.level === 0) && (
+              <button type="button" className="secondary-button" onClick={onEdit}>
+                <Icon name="edit" /> Edit
+              </button>
+            )}
           </>
         )}
       </header>

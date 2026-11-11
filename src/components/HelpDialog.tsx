@@ -52,6 +52,11 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             <kbd>←</kbd> goes back, <kbd>Home</kbd> and <kbd>End</kbd> jump to the first and last step. You can also drag the
             timeline, or click any part of the code to jump to its step.
           </p>
+          <p>
+            When a step calculates another measure, <strong>Step into</strong> shows that measure&apos;s own steps right after it,
+            in a colored band, from &quot;Enter [Measure]&quot; to &quot;Back in …&quot;. Next and Previous walk in and out; the
+            names above the code show where you are, and clicking one goes back out. Press Next instead to step over it.
+          </p>
           <p className="muted">
             The steps follow the logical order DAX defines, not the order the Power BI engine physically runs a query in.
           </p>
@@ -85,7 +90,11 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
 
         <section>
           <h3>Brief or Detailed</h3>
-          <p>Brief keeps explanations short; Detailed adds the full reasoning. Everything runs on this computer.</p>
+          <p>
+            Brief keeps explanations short; Detailed adds the full reasoning and a Technical box with DAX&apos;s own terms (filter context, row
+            context, context transition) and the exact query behind each value, to copy into DAX Studio. Everything runs on this
+            computer.
+          </p>
         </section>
       </div>
     </dialog>

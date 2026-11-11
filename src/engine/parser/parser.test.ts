@@ -248,6 +248,7 @@ describe('built-in samples', () => {
       '(VAR (CurrentPlantSales [Total Sales]) (AllPlantSales (CALCULATE [Total Sales] (ALL Plant))) RETURN (DIVIDE var:CurrentPlantSales var:AllPlantSales))',
     'top-plant':
       '(VAR (TopPlant (TOPN 1 (FILTER (VALUES Plant[Plant Name]) (<> Plant[Plant Name] "Unknown")) [Total Sales] DESC)) RETURN (CONCATENATEX var:TopPlant (& (& Plant[Plant Name] ": ") (FORMAT [Total Sales] "#,##0"))))',
+    'best-plant-order-value': '(MAXX (VALUES Plant[Plant Name]) [Average Order Value])',
   };
 
   it.each(SAMPLE_MEASURES.map((s) => [s.id, s.expression]))('parses sample "%s" into the expected tree', (sampleId, text) => {

@@ -32,18 +32,36 @@ export type StepQuery =
   /** An iterator's rows, each with the value its per-row expression has there (column ROW_VALUE_COLUMN). */
   | { kind: 'rows'; dax: string; countDax: string; iteratorName: string }
   /** The value depends on which row of an iterator is meant; the user picks one at that iterator's step. */
-  | { kind: 'needs-row'; iteratorNodeId: number; iteratorName: string }
+  | { kind: 'needs-row'; frameKey: string; iteratorNodeId: number; iteratorName: string }
   /** No value to show here (with a plain reason). */
   | { kind: 'none'; reason: string };
+
+/** A measure that calls the measure being explained (stepped into), with where it calls it. */
+export interface CallerFrame {
+  /** Identifies the measure's place in the chain of calls (for picked rows). */
+  key: string;
+  root: Expr;
+  binding: BindResult;
+  source: string;
+  /** The node in the caller that calls the inner measure. */
+  callNodeId: number;
+}
 
 export interface StepQueryOptions {
   root: Expr | null;
   binding: BindResult;
   source: string;
   reportFilters: readonly ReportFilter[];
-  /** Picked rows, by iterator node id. */
-  rows: ReadonlyMap<number, RowChoice>;
+  /** Picked rows, by rowKey(frame key, iterator node id). */
+  rows: ReadonlyMap<string, RowChoice>;
+  /** This measure's key in the chain of calls; '' for the measure being explained. */
+  frameKey?: string;
+  /** When stepped into from other measures: the callers, innermost first. */
+  callers?: readonly CallerFrame[];
 }
+
+/** The key of a picked row: node ids are only unique within one measure. */
+export const rowKey = (frameKey: string, iteratorNodeId: number) => `${frameKey}#${iteratorNodeId}`;
 
 /** Functions whose result depends on how the visual's query is built, which a CALCULATE can't reproduce. */
 const DEPENDS_ON_VISUAL = new Set(['ALLSELECTED', 'ISINSCOPE', 'SELECTEDMEASURE', 'SELECTEDMEASURENAME', 'SELECTEDMEASUREFORMATSTRING', 'ISSELECTEDMEASURE']);
@@ -68,6 +86,8 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
   if (!root) return { kind: 'none', reason: 'There is no expression.' };
   const text = (node: AstNode) => source.slice(node.span.start, node.span.end);
   const spec = (node: AstNode) => (node.kind === 'FunctionCall' ? binding.calls.get(node.id) : undefined);
+  const own: CallerFrame = { key: options.frameKey ?? '', root, binding, source, callNodeId: -1 };
+  const callers = options.callers ?? [];
 
   const isTable = (node: AstNode): boolean => {
     switch (node.kind) {
@@ -87,9 +107,27 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
     }
   };
 
-  /** Wraps `dax` (the text of `node`, possibly already changed) in everything around `node`, then in F. */
+  /**
+   * Wraps `dax` (the text of `node`, possibly already changed) in everything around `node`; then, for each
+   * caller, in CALCULATE (a measure reference is exactly CALCULATE of its code) and everything around the
+   * call; then in F.
+   */
   const inContext = (node: AstNode, dax: string, table: boolean): string => {
-    const path = pathTo(root, node.id);
+    let expr = wrap(own, node.id, dax, table);
+    for (const caller of callers) {
+      expr = wrap(caller, caller.callNodeId, `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr}\n)`, table);
+    }
+    if (options.reportFilters.length > 0) {
+      expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${options.reportFilters.map(reportFilterDax).join(',\n')}\n)`;
+    }
+    return expr;
+  };
+
+  /** Wraps `dax` in everything around the node `nodeId` of one measure (its CALCULATEs, VARs and iterator rows). */
+  function wrap(frame: CallerFrame, nodeId: number, dax: string, table: boolean): string {
+    const text = (node: AstNode) => frame.source.slice(node.span.start, node.span.end);
+    const spec = (node: AstNode) => (node.kind === 'FunctionCall' ? frame.binding.calls.get(node.id) : undefined);
+    const path = pathTo(frame.root, nodeId);
     if (!path) throw new Unsupported('This part could not be found in the expression.');
     let expr = dax;
     for (let i = path.length - 2; i >= 0; i--) {
@@ -112,18 +150,15 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         continue;
       }
       if (call.spec.iteratesArgument !== undefined && call.params[argIndex]?.role === 'rowExpression') {
-        const choice = options.rows.get(parent.id);
-        if (!choice) throw new NeedsRow(parent.id, call.spec.name);
+        const choice = options.rows.get(rowKey(frame.key, parent.id));
+        if (!choice) throw new NeedsRow(frame.key, parent.id, call.spec.name);
         if (table) throw new Unsupported(`A table calculated for one row of ${call.spec.name} is not shown yet.`);
         const tableArg = parent.args[call.spec.iteratesArgument];
         expr = pickRow(text(tableArg), choice, expr);
       }
     }
-    if (options.reportFilters.length > 0) {
-      expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${options.reportFilters.map(reportFilterDax).join(',\n')}\n)`;
-    }
     return expr;
-  };
+  }
 
   const valueOf = (node: AstNode): StepQuery => {
     const table = isTable(node);
@@ -133,15 +168,18 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
 
   try {
     // Values that depend on the visual's layout can't be reproduced with filters alone.
-    const used = functionNames(root);
-    const blocking = [...used].find((name) => DEPENDS_ON_VISUAL.has(name));
-    if (blocking) {
-      return { kind: 'none', reason: `This measure uses ${blocking}, whose result depends on how the visual is built; a value here could be wrong, so none is shown.` };
+    for (const frame of [own, ...callers]) {
+      const blocking = [...functionNames(frame.root)].find((name) => DEPENDS_ON_VISUAL.has(name));
+      if (blocking) {
+        const who = frame === own ? 'This measure uses' : 'A measure that calls this one uses';
+        return { kind: 'none', reason: `${who} ${blocking}, whose result depends on how the visual is built; a value here could be wrong, so none is shown.` };
+      }
     }
 
     const node = entry.nodeId === null ? null : findNode(root, entry.nodeId);
     switch (entry.kind) {
       case 'start':
+      case 'enter':
         return { kind: 'none', reason: '' };
       case 'filter-input':
         return { kind: 'none', reason: 'This is a filter for CALCULATE, not a value.' };
@@ -166,17 +204,19 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         return node ? valueOf(node) : { kind: 'none', reason: '' };
     }
   } catch (e) {
-    if (e instanceof NeedsRow) return { kind: 'needs-row', iteratorNodeId: e.iteratorNodeId, iteratorName: e.iteratorName };
+    if (e instanceof NeedsRow) return { kind: 'needs-row', frameKey: e.frameKey, iteratorNodeId: e.iteratorNodeId, iteratorName: e.iteratorName };
     if (e instanceof Unsupported) return { kind: 'none', reason: e.message };
     throw e;
   }
 }
 
 class NeedsRow extends Error {
+  readonly frameKey: string;
   readonly iteratorNodeId: number;
   readonly iteratorName: string;
-  constructor(iteratorNodeId: number, iteratorName: string) {
+  constructor(frameKey: string, iteratorNodeId: number, iteratorName: string) {
     super('needs a row');
+    this.frameKey = frameKey;
     this.iteratorNodeId = iteratorNodeId;
     this.iteratorName = iteratorName;
   }
@@ -223,4 +263,12 @@ function functionNames(root: AstNode): Set<string> {
 export function rowColumns(columns: readonly string[]): { indexes: number[]; valueIndex: number } {
   const valueIndex = columns.findIndex((c) => c === `[${ROW_VALUE_COLUMN}]` || c.endsWith(`[${ROW_VALUE_COLUMN}]`));
   return { indexes: columns.map((_, i) => i).filter((i) => i !== valueIndex), valueIndex };
+}
+
+/**
+ * A step's query as a complete DAX query (EVALUATE …), ready to paste into DAX Studio or a DAX query view.
+ * Matches what the helper runs, without its row limit.
+ */
+export function evaluateText(query: Extract<StepQuery, { dax: string }>): string {
+  return query.kind === 'scalar' ? `EVALUATE\nROW("value",\n${query.dax}\n)` : `EVALUATE\n${query.dax}`;
 }

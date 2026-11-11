@@ -70,4 +70,37 @@ RETURN
         Plant[Plant Name] & ": " & FORMAT([Total Sales], "#,##0")
     )`,
   },
+  {
+    id: 'best-plant-order-value',
+    title: 'Best Plant Order Value',
+    concept: 'A measure that calls a measure that calls measures: step into [Average Order Value] to see what it does for one plant.',
+    expression: `Best Plant Order Value =
+MAXX(
+    VALUES(Plant[Plant Name]),
+    [Average Order Value]
+)`,
+  },
 ];
+
+/**
+ * The measures the examples call, so they can be stepped into without a connected report.
+ * Same names and code as in the Initech sample report.
+ */
+export const SAMPLE_BASE_MEASURES: readonly { name: string; expression: string }[] = [
+  { name: 'Total Sales', expression: 'SUM(Sales[Amount])' },
+  { name: 'Total Quantity', expression: 'SUM(Sales[Quantity])' },
+  { name: 'Order Count', expression: 'COUNTROWS(Sales)' },
+  { name: 'Average Order Value', expression: 'DIVIDE([Total Sales], [Order Count])' },
+];
+
+/** The code of a built-in measure (an example's measure or one they call), by name, ignoring case. */
+export function sampleDefinition(name: string): { name: string; expression: string } | undefined {
+  const key = name.toLowerCase();
+  const base = SAMPLE_BASE_MEASURES.find((m) => m.name.toLowerCase() === key);
+  if (base) return base;
+  for (const sample of SAMPLE_MEASURES) {
+    const match = /^([^=\n]+?)\s*=\s*\n([\s\S]*)$/.exec(sample.expression);
+    if (match && match[1].toLowerCase() === key) return { name: match[1], expression: match[2] };
+  }
+  return undefined;
+}

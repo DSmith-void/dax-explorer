@@ -38,7 +38,11 @@ import { INITIAL_CONTEXT } from './model';
  * Everything else that would change context (relationships, ALLSELECTED, unknown functions...)
  * is recorded as "not modeled" or "unknown", never guessed.
  */
-export function analyzeContext(root: Expr | null, binding: BindResult, source: string): ContextAnalysis {
+/**
+ * @param initial the context the expression starts in: the report's filters F by default, or, for a measure
+ *   called by another measure, the filters that caller passes in.
+ */
+export function analyzeContext(root: Expr | null, binding: BindResult, source: string, initial: EvalContext = INITIAL_CONTEXT): ContextAnalysis {
   const steps = new Map<number, Step>();
   const insights: Insight[] = [];
   const variables = new Map<number, { name: string; line: number; context: EvalContext; shape: TableShape | null }>();
@@ -753,6 +757,6 @@ export function analyzeContext(root: Expr | null, binding: BindResult, source: s
     };
   }
 
-  visit(root, INITIAL_CONTEXT, null);
+  visit(root, initial, null);
   return { steps, insights };
 }

@@ -46,7 +46,11 @@ export type TimelineKind =
   /** A function the app doesn't know: nothing inside it is followed. */
   | 'unknown'
   /** The whole expression's result goes back to the report. */
-  | 'result';
+  | 'result'
+  /** A measure called by another measure starts, with the filters its caller passes in (replaces 'start'). */
+  | 'enter'
+  /** A called measure's value goes back to the measure that called it (replaces 'result'). */
+  | 'return';
 
 export interface TimelineEntry {
   /** Position in the timeline, starting at 0. */
@@ -87,7 +91,23 @@ const COMBINES: Record<string, string> = {
   SUMMARIZE: 'returns the results as a new table',
 };
 
-export function buildTimeline(root: Expr | null, binding: BindResult, analysis: ContextAnalysis, source: string): TimelineEntry[] {
+/** For a measure stepped into from another measure. */
+export interface TimelineCaller {
+  /** The measure being stepped into, e.g. "[Total Sales]". */
+  measure: string;
+  /** The measure that calls it, e.g. "[Profit %]". */
+  caller: string;
+  /** The filters the caller passes in (what the measure's code starts with). */
+  context: EvalContext;
+}
+
+export function buildTimeline(
+  root: Expr | null,
+  binding: BindResult,
+  analysis: ContextAnalysis,
+  source: string,
+  caller?: TimelineCaller,
+): TimelineEntry[] {
   const entries: TimelineEntry[] = [];
   if (!root) return entries;
 
@@ -114,14 +134,25 @@ export function buildTimeline(root: Expr | null, binding: BindResult, analysis: 
   const stepOf = (node: AstNode) => analysis.steps.get(node.id);
   const specOf = (node: FunctionCall): FunctionSpec | undefined => binding.calls.get(node.id)?.spec;
 
-  add({
-    kind: 'start',
-    nodeId: null,
-    title: "Start with the report's filters",
-    summary:
-      "The calculation starts with the filters from wherever the measure is shown in the report (for example, one row of a table visual, plus any slicers). These are shown as F.",
-    depth: 0,
-  });
+  if (caller) {
+    add({
+      kind: 'enter',
+      nodeId: null,
+      title: `Enter ${caller.measure}`,
+      summary: `Now inside ${caller.measure}, called by ${caller.caller}. Its code starts with the filters ${caller.caller} has at that point, including any current row turned into a filter (context transition).`,
+      context: caller.context,
+      depth: 0,
+    });
+  } else {
+    add({
+      kind: 'start',
+      nodeId: null,
+      title: "Start with the report's filters",
+      summary:
+        "The calculation starts with the filters from wherever the measure is shown in the report (for example, one row of a table visual, plus any slicers). These are shown as F.",
+      depth: 0,
+    });
+  }
 
   /**
    * @param inFilterInput inside a CALCULATE filter input: only measures, variables, CALCULATE and
@@ -286,6 +317,17 @@ export function buildTimeline(root: Expr | null, binding: BindResult, analysis: 
 
   walk(root, 0, null, false);
 
+  if (caller) {
+    add({
+      kind: 'return',
+      nodeId: root.id,
+      title: `Back in ${caller.caller}`,
+      summary: `${caller.measure} is done: its value goes back to ${caller.caller}, which carries on from where it called it.`,
+      context: caller.context,
+      depth: 0,
+    });
+    return entries;
+  }
   add({
     kind: 'result',
     nodeId: root.id,
