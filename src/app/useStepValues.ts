@@ -126,7 +126,12 @@ export function useStepValues({ client, connectionKey, timeline, current, rootFr
     inFlight.current.add(key);
     void (async () => {
       try {
-        if (query.kind === 'scalar') {
+        if (query.kind === 'scalar' && query.visual) {
+          // The visual's own query, filtered to one row: the value is its last column (no row: BLANK).
+          const table = await client.evaluate('table', query.dax, 2);
+          const value = table.rows[0]?.[table.columns.length - 1] ?? null;
+          done({ status: 'ready', result: { columns: ['value'], rows: [[value]], truncated: false }, count: null });
+        } else if (query.kind === 'scalar') {
           done({ status: 'ready', result: await client.evaluate('scalar', query.dax), count: null });
         } else if (query.kind === 'table' || query.kind === 'rows') {
           const [result, count] = await Promise.all([

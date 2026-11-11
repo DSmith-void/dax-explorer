@@ -111,8 +111,32 @@ describe('buildStepQuery', () => {
     expect(query("Start with the report's filters")).toEqual({ kind: 'none', reason: '' });
     expect(query('Prepare filter: REMOVEFILTERS(Product[Category])')).toEqual({ kind: 'none', reason: 'This is a filter for CALCULATE, not a value.' });
 
-    const visualDependent = steps('S = DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED(Product)))').query('DIVIDE');
-    expect(visualDependent.kind === 'none' && visualDependent.reason).toContain('ALLSELECTED');
+    const typedByHand = steps('S = DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED(Product)))', WIDGETS).query('DIVIDE');
+    expect(typedByHand.kind === 'none' && typedByHand.reason).toContain('Take the report filters from a visual');
+    const calculationGroups = steps('S = SELECTEDMEASURE()').query('SELECTEDMEASURE: not followed');
+    expect(calculationGroups.kind === 'none' && calculationGroups.reason).toContain('calculation groups');
+  });
+
+  it("values that depend on the visual are calculated inside the visual's own query, for the chosen row", () => {
+    const visual: ReportFilter[] = [
+      { kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Widgets'], source: 'visual-row' },
+      { kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Widgets', 'Gadgets'], source: 'visual-filter' },
+    ];
+    const q = steps('S = DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED(Product[Category])))', visual).query('DIVIDE');
+    expect(q).toEqual({
+      kind: 'scalar',
+      visual: true,
+      dax: `FILTER(
+SUMMARIZECOLUMNS(
+'Product'[Category],
+TREATAS({"Widgets", "Gadgets"}, 'Product'[Category]),
+"@DaxExplorerValue",
+DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED(Product[Category])))
+),
+'Product'[Category] == "Widgets"
+)`,
+    });
+    expect(evaluateText(q as Extract<typeof q, { dax: string }>).startsWith('EVALUATE\nFILTER(')).toBe(true);
   });
 });
 

@@ -119,6 +119,13 @@ table Sales
 			    DIVIDE(ThisYear - LastYear, LastYear)
 		formatString: 0.0%
 
+	measure 'Share of Selected Categories' =
+			DIVIDE(
+			    [Total Sales],
+			    CALCULATE([Total Sales], ALLSELECTED(Product[Category]))
+			)
+		formatString: 0.0%
+
 	measure 'Best Plant Order Value' =
 			MAXX(
 			    VALUES(Plant[Plant Name]),

@@ -293,8 +293,12 @@ function FromVisual({
   function use(withRow: boolean) {
     if (!visual || !rows) return;
     const row = withRow && picked !== null ? rows.cells[picked] : undefined;
-    const fromRow: ReportFilter[] = row ? visual.groupBy.map((column, i) => ({ kind: 'values', column, values: [row[i] as FilterValue] })) : [];
-    onChange([...visual.filters, ...fromRow]);
+    // Remember where each filter comes from: ALLSELECTED drops the visual's own rows and columns but keeps
+    // the filters from outside it (slicers, the filter pane).
+    const fromRow: ReportFilter[] = row
+      ? visual.groupBy.map((column, i) => ({ kind: 'values', column, values: [row[i] as FilterValue], source: 'visual-row' }))
+      : [];
+    onChange([...visual.filters.map((f): ReportFilter => ({ ...f, source: 'visual-filter' })), ...fromRow]);
   }
 
   return (

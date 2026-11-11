@@ -293,7 +293,11 @@ export function filterReach(
       context.filter.entries.some((e) => (e.target.kind === 'columns' && e.target.columns.some((c) => same(c.table, table) && same(c.column, column))) || (e.target.kind === 'table' && same(e.target.table, table)));
     for (const removal of context.filter.removals) {
       if (removal.kind === 'all') for (const t of reach.values()) markRemoved(t.table, 'all');
-      else if (removal.kind === 'column') {
+      else if (removal.kind === 'visual') {
+        // ALLSELECTED: only the visual's own rows and columns go ("visual:" + the column, or "" for all of them).
+        if (removal.columns) for (const c of removal.columns) markRemoved(c.table, `visual:${c.column}`);
+        else for (const t of reach.values()) if (removal.table === null || same(removal.table, t.table)) markRemoved(t.table, 'visual:');
+      } else if (removal.kind === 'column') {
         if (!replaced(removal.column.table, removal.column.column)) markRemoved(removal.column.table, removal.column.column);
       } else if (context.filter.entries.some((e) => e.target.kind === 'table' && same(e.target.table, removal.table))) continue;
       else for (const t of expandedTables(model, removal.table)) markRemoved(t, removal.except.length > 0 && same(t, removal.table) ? `all but ${removal.except.map((c) => c.column).join(', ')}` : 'all');

@@ -27,7 +27,11 @@ export const ROW_VALUE_COLUMN = '@DaxExplorerValue';
 
 export type StepQuery =
   /** One value. */
-  | { kind: 'scalar'; dax: string }
+  /**
+   * One value. With `visual`, `dax` is a one-row table (the visual's own query, filtered to the chosen
+   * row) whose last column is the value.
+   */
+  | { kind: 'scalar'; dax: string; visual?: true }
   /** A table: its first rows (`dax`) and how many rows it has (`countDax`). */
   | { kind: 'table'; dax: string; countDax: string }
   /** An iterator's rows, each with the value its per-row expression has there (column ROW_VALUE_COLUMN). */
@@ -69,6 +73,43 @@ export const rowKey = (frameKey: string, iteratorNodeId: number) => `${frameKey}
 /** Functions whose result depends on how the visual's query is built, which a CALCULATE can't reproduce. */
 const DEPENDS_ON_VISUAL = new Set(['ALLSELECTED', 'ISINSCOPE', 'SELECTEDMEASURE', 'SELECTEDMEASURENAME', 'SELECTEDMEASUREFORMATSTRING', 'ISSELECTEDMEASURE']);
 
+/** Of those, the ones a rebuilt copy of the visual's query reproduces (the others need calculation groups). */
+const VISUAL_REPRODUCES = new Set(['ALLSELECTED', 'ISINSCOPE']);
+
+/** Name of the value column in a rebuilt visual query. */
+const VISUAL_VALUE_COLUMN = '@DaxExplorerValue';
+
+/**
+ * The visual the report filters came from, when every one of them did ("From a visual"): its own row
+ * and column filters (one value each: the chosen row) and its filters from outside (slicers, filter pane).
+ */
+function visualOf(reportFilters: readonly ReportFilter[]): { row: Extract<ReportFilter, { kind: 'values' }>[]; outside: ReportFilter[] } | null {
+  if (reportFilters.some((f) => !f.source)) return null;
+  const row = reportFilters.filter((f): f is Extract<ReportFilter, { kind: 'values' }> => f.source === 'visual-row' && f.kind === 'values');
+  if (row.length !== reportFilters.filter((f) => f.source === 'visual-row').length) return null;
+  return { row, outside: reportFilters.filter((f) => f.source === 'visual-filter') };
+}
+
+/**
+ * `expr` calculated the way the visual does: inside SUMMARIZECOLUMNS with the visual's row columns and its
+ * outside filters, then filtered to the chosen row. ALLSELECTED and ISINSCOPE see exactly what they see
+ * in the report. (A row whose value is BLANK isn't returned, which reads as BLANK.)
+ */
+function visualQuery(visual: NonNullable<ReturnType<typeof visualOf>>, expr: string): string {
+  const args = [
+    ...visual.row.map((f) => columnDax(f.column)),
+    ...visual.outside.map(reportFilterDax),
+    `${daxLiteral(VISUAL_VALUE_COLUMN)},\n${expr}`,
+  ];
+  const summarize = `SUMMARIZECOLUMNS(\n${args.join(',\n')}\n)`;
+  if (visual.row.length === 0) return summarize;
+  const conditions = visual.row.map((f) => {
+    const value = f.values[0] ?? null;
+    return value === null ? `ISBLANK(${columnDax(f.column)})` : `${columnDax(f.column)} == ${daxLiteral(value)}`;
+  });
+  return `FILTER(\n${summarize},\n${conditions.join(' && ')}\n)`;
+}
+
 /**
  * An engine column name as DAX: Plant[Plant Name] and [@Value] are used as they are; a table name the
  * engine didn't quote (Product Line[Name]) is quoted. Null when the name isn't a column reference.
@@ -90,6 +131,8 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
   const text = (node: AstNode) => source.slice(node.span.start, node.span.end);
   const spec = (node: AstNode) => (node.kind === 'FunctionCall' ? binding.calls.get(node.id) : undefined);
   const own: CallerFrame = { key: options.frameKey ?? '', root, binding, source, callNodeId: -1 };
+  /** Set when the value depends on the visual: steps are then calculated inside the visual's own query. */
+  let visualMode: ReturnType<typeof visualOf> = null;
   const callers = options.callers ?? [];
 
   const isTable = (node: AstNode): boolean => {
@@ -120,7 +163,8 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
     for (const caller of callers) {
       expr = wrap(caller, caller.callNodeId, `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr}\n)`, table);
     }
-    if (options.reportFilters.length > 0) {
+    // F: as filters, or (for ALLSELECTED and ISINSCOPE) as the visual's own query, added by valueOf.
+    if (options.reportFilters.length > 0 && !visualMode) {
       expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${options.reportFilters.map(reportFilterDax).join(',\n')}\n)`;
     }
     return expr;
@@ -175,6 +219,11 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
   }
 
   const valueOf = (node: AstNode): StepQuery => {
+    if (visualMode) {
+      if (isTable(node) && options.replace?.nodeId !== node.id) throw new Unsupported('Tables at steps that depend on the visual are not shown yet.');
+      const expr = inContext(node, options.replace?.nodeId === node.id ? options.replace.dax : text(node), false);
+      return { kind: 'scalar', dax: visualQuery(visualMode, expr), visual: true };
+    }
     if (options.replace?.nodeId === node.id) return { kind: 'scalar', dax: inContext(node, options.replace.dax, false) };
     const table = isTable(node);
     const dax = inContext(node, text(node), table);
@@ -183,12 +232,24 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
 
   try {
     // Values that depend on the visual's layout can't be reproduced with filters alone.
+    // Values that depend on the visual (ALLSELECTED, ISINSCOPE) are calculated inside the visual's own
+    // query, rebuilt from the report filters, when they all came from a visual.
     for (const frame of [own, ...callers]) {
-      const blocking = [...functionNames(frame.root)].find((name) => DEPENDS_ON_VISUAL.has(name));
-      if (blocking) {
-        const who = frame === own ? 'This measure uses' : 'A measure that calls this one uses';
-        return { kind: 'none', reason: `${who} ${blocking}, whose result depends on how the visual is built; a value here could be wrong, so none is shown.` };
+      const blocking = [...functionNames(frame.root)].filter((name) => DEPENDS_ON_VISUAL.has(name));
+      if (blocking.length === 0) continue;
+      const who = frame === own ? 'This measure uses' : 'A measure that calls this one uses';
+      const cannot = blocking.find((name) => !VISUAL_REPRODUCES.has(name));
+      if (cannot) {
+        return { kind: 'none', reason: `${who} ${cannot}, which belongs to calculation groups; values here are not shown yet.` };
       }
+      const visual = visualOf(options.reportFilters);
+      if (!visual) {
+        return {
+          kind: 'none',
+          reason: `${who} ${blocking[0]}, whose result depends on how the visual is built. Take the report filters from a visual (F → From a visual) to see real values here.`,
+        };
+      }
+      visualMode = visual;
     }
 
     const node = entry.nodeId === null ? null : findNode(root, entry.nodeId);
@@ -321,5 +382,6 @@ export function rowColumns(columns: readonly string[]): { indexes: number[]; val
  * Matches what the helper runs, without its row limit.
  */
 export function evaluateText(query: Extract<StepQuery, { dax: string }>): string {
+  if (query.kind === 'scalar' && query.visual) return `EVALUATE\n${query.dax}`;
   return query.kind === 'scalar' ? `EVALUATE\nROW("value",\n${query.dax}\n)` : `EVALUATE\n${query.dax}`;
 }

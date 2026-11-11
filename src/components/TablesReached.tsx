@@ -190,7 +190,15 @@ function stateText(t: TableReach): string {
 
 /** "Product[Category]", or "all of Sales". */
 function removedText(t: TableReach): string {
-  return t.removed.map((what) => (what === 'all' ? `all of ${t.table}` : what.startsWith('all but') ? `${t.table}, ${what}` : `${t.table}[${what}]`)).join(', ');
+  return t.removed
+    .map((what) => {
+      if (what === 'all') return `all of ${t.table}`;
+      if (what === 'visual:') return `the visual's own rows and columns on ${t.table}`;
+      if (what.startsWith('visual:')) return `the visual's own rows and columns on ${t.table}[${what.slice(7)}]`;
+      if (what.startsWith('all but')) return `${t.table}, ${what}`;
+      return `${t.table}[${what}]`;
+    })
+    .join(', ');
 }
 
 /** The sentence under the map for a clicked table. */

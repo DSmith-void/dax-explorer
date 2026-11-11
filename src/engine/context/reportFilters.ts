@@ -14,12 +14,26 @@ export type FilterValue = string | number | boolean | null | { date: string };
 
 export type ReportFilter =
   /** The column is limited to these values (one value: "= value"). */
-  | { kind: 'values'; column: ColumnName; values: FilterValue[] }
+  | { kind: 'values'; column: ColumnName; values: FilterValue[]; source?: ReportFilterSource }
   /**
    * A filter table taken as-is from a visual's query (for example a "Top 5" or a date range).
    * `dax` is a table expression; `columns` are the columns it filters.
    */
-  | { kind: 'table'; columns: ColumnName[]; dax: string; description: string };
+  | { kind: 'table'; columns: ColumnName[]; dax: string; description: string; source?: ReportFilterSource };
+
+/**
+ * Where a report filter comes from, when it was taken from a visual: one of the visual's own rows or
+ * columns ("Use this row"), or a filter from outside the visual (a slicer, the filter pane). Unknown for
+ * filters typed in by hand. ALLSELECTED treats the two differently.
+ */
+export type ReportFilterSource = 'visual-row' | 'visual-filter';
+
+/** Does an ALLSELECTED removal cover this column? */
+export function visualRemovalCovers(removal: Extract<Removal, { kind: 'visual' }>, column: ColumnName): boolean {
+  if (removal.columns) return removal.columns.some((c) => sameColumn(c, column));
+  if (removal.table !== null) return same(removal.table, column.table);
+  return true;
+}
 
 /** How a report filter stands at some step. */
 export type ReportFilterStatus = 'applies' | 'removed' | 'maybe-removed';
@@ -89,21 +103,33 @@ export function reportFilterColumns(filter: ReportFilter): ColumnName[] {
  */
 export function reportFilterStatus(filter: ReportFilter, removals: readonly Removal[], model?: RelationshipModel | null): ReportFilterStatus {
   const columns = reportFilterColumns(filter);
-  let maybe = false;
+  // In order: a later ALLSELECTED can bring back a slicer filter that an earlier ALL removed.
+  let status: ReportFilterStatus = 'applies';
+  const removed = () => {
+    status = 'removed';
+  };
   for (const removal of removals) {
-    if (removal.kind === 'all') return 'removed';
+    if (removal.kind === 'visual') {
+      if (!columns.some((c) => visualRemovalCovers(removal, c))) continue;
+      status = filter.source === 'visual-row' ? 'removed' : filter.source === 'visual-filter' ? 'applies' : 'maybe-removed';
+      continue;
+    }
+    if (removal.kind === 'all') {
+      removed();
+      continue;
+    }
     if (removal.kind === 'column') {
-      if (columns.some((c) => sameColumn(c, removal.column))) return 'removed';
+      if (columns.some((c) => sameColumn(c, removal.column))) removed();
       continue;
     }
     const inTable = columns.filter((c) => same(c.table, removal.table));
     if (inTable.length > 0) {
-      if (inTable.every((c) => !removal.except.some((kept) => sameColumn(kept, c)))) return 'removed';
+      if (inTable.every((c) => !removal.except.some((kept) => sameColumn(kept, c)))) removed();
     } else if (model) {
-      if (columns.some((c) => c.table !== '' && expandedCovers(model, removal.table, c.table))) return 'removed';
-    } else {
-      maybe = true;
+      if (columns.some((c) => c.table !== '' && expandedCovers(model, removal.table, c.table))) removed();
+    } else if (status === 'applies') {
+      status = 'maybe-removed';
     }
   }
-  return maybe ? 'maybe-removed' : 'applies';
+  return status;
 }

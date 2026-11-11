@@ -128,6 +128,16 @@ RETURN
     DIVIDE(ThisYear - LastYear, LastYear)`,
   },
   {
+    id: 'share-of-selected',
+    title: 'Share of Selected Categories',
+    concept: "ALLSELECTED drops the visual's own Category row but keeps the slicer: the share of what is selected, not of everything.",
+    expression: `Share of Selected Categories =
+DIVIDE(
+    [Total Sales],
+    CALCULATE([Total Sales], ALLSELECTED(Product[Category]))
+)`,
+  },
+  {
     id: 'best-plant-order-value',
     title: 'Best Plant Order Value',
     concept: 'A measure that calls a measure that calls measures: step into [Average Order Value] to see what it does for one plant.',

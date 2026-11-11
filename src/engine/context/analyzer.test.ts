@@ -8,6 +8,7 @@ import { parse } from '../parser/parser';
 import { analyzeContext } from './analyzer';
 import { describeContext } from './describe';
 import type { Step } from './model';
+import { buildTimeline } from './timeline';
 
 const CONVENTION: BindOptions = { mode: 'convention', userChoices: {} };
 
@@ -178,7 +179,7 @@ describe('CALCULATE filters', () => {
   });
 
   it.each([
-    ['CALCULATE([X], ALLSELECTED(Product))', /^ALLSELECTED brings back the filters chosen outside this visual/],
+    ['CALCULATE([X], ALLSELECTED(VALUES(Product[Color])))', /^The app can't work out ALLSELECTED/],
     ['CALCULATE([X], [Y] > 0)', /compares a measure \(\[Y\]\)/],
     ['CALCULATE([X], Product[Color] = Plant[Code])', /uses columns from more than one table/],
   ])('says what it cannot check: %s', (source, pattern) => {
@@ -278,7 +279,7 @@ describe('one-line summaries (for "Brief" explanations)', () => {
       ['VAR v = [Total Sales] RETURN CALCULATE(v, ALL(Product))', 'v keeps its earlier value here, even though the filters are different.'],
       ['VAR v = [Total Sales] RETURN SUMX(Customer, v)', 'v has the same value for every row of SUMX.'],
       ['Sales[Amount] * 2', 'Sales[Amount] has no current row to read from (an error in a measure).'],
-      ['CALCULATE([X], ALLSELECTED(Product))', "The app can't check ALLSELECTED(Product) yet."],
+      ['CALCULATE([X], ALLSELECTED(VALUES(Product[Color])))', "The app can't check ALLSELECTED(VALUES(Product[Color])) yet."],
       ['MYHELPER(1)', "The app doesn't know MYHELPER yet, so the parts inside it aren't checked."],
     ];
     for (const [source, summary] of cases) {
@@ -325,5 +326,25 @@ describe('unknowns', () => {
 
   it('returns no steps for no tree', () => {
     expect(analyzeContext(null, bind(null, CONVENTION), '').steps.size).toBe(0);
+  });
+});
+
+describe('ALLSELECTED', () => {
+  it("removes the visual's own rows and columns on the column, and filters the measure added there", () => {
+    const steps = buildTimeline(...(() => {
+      const source = 'M = CALCULATE(CALCULATE([Total Sales], ALLSELECTED(Product[Category])), Product[Category] = "Widgets")';
+      const { root } = parse(tokenize(source, splitMeasureDefinition(source).header!.expressionStart).tokens);
+      const binding = bind(root, CONVENTION);
+      return [root, binding, analyzeContext(root, binding, source), source] as const;
+    })());
+    const inner = steps.filter((e) => e.kind === 'calculate')[1];
+    expect(inner.summary).toBe("CALCULATE calculates [Total Sales] without filters on the visual's own rows and columns on Product[Category] (slicers and the filter pane stay).");
+    expect(describeContext(inner.innerContext!)).toEqual(["The report's filters, except any filter on the visual's own rows and columns on Product[Category] (slicers and the filter pane stay)"]);
+  });
+
+  it('inside a row-by-row calculation, says what is not checked', () => {
+    const { analysis } = run('SUMX(VALUES(Plant[Plant Name]), CALCULATE([Total Sales], ALLSELECTED(Product[Category])))');
+    const step = [...analysis.steps.values()].find((s) => s.innerContext?.filter.caveats.length);
+    expect(step?.innerContext?.filter.caveats[0]).toContain('ALLSELECTED inside a row-by-row calculation (SUMX)');
   });
 });

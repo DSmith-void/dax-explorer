@@ -254,6 +254,7 @@ describe('built-in samples', () => {
     'sales-ytd': "(TOTALYTD [Total Sales] 'Date'[Date])",
     'sales-last-year': "(CALCULATE [Total Sales] (SAMEPERIODLASTYEAR 'Date'[Date]))",
     'sales-growth': '(VAR (ThisYear [Total Sales]) (LastYear [Sales Last Year]) RETURN (DIVIDE (- var:ThisYear var:LastYear) var:LastYear))',
+    'share-of-selected': '(DIVIDE [Total Sales] (CALCULATE [Total Sales] (ALLSELECTED Product[Category])))',
     'featured-category-sales': '(CALCULATE [Total Sales] (TREATAS {"Widgets" "Gadgets"} Product[Category]))',
   };
 

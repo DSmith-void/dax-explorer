@@ -2596,3 +2596,16 @@ select {
   padding-inline-start: 3px;
   border-inline-start: 1px solid var(--color-border);
 }
+
+.report-filter-group {
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.report-filter-heading {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}

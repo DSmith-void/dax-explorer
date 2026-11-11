@@ -65,3 +65,30 @@ describe('reportFilterStatus', () => {
     expect(reportFilterStatus(category, [{ kind: 'table', table: 'Sales', except: [] }])).toBe('maybe-removed');
   });
 });
+
+describe('ALLSELECTED and where report filters come from', () => {
+  const row: ReportFilter = { kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Widgets'], source: 'visual-row' };
+  const slicer: ReportFilter = { kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Widgets', 'Gadgets'], source: 'visual-filter' };
+  const typed: ReportFilter = { kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Widgets'] };
+  const allSelected = { kind: 'visual' as const, columns: [{ table: 'Product', column: 'Category' }], table: null };
+
+  it("drops the visual's own row, keeps the slicer, and can't tell for filters typed by hand", () => {
+    expect(reportFilterStatus(row, [allSelected])).toBe('removed');
+    expect(reportFilterStatus(slicer, [allSelected])).toBe('applies');
+    expect(reportFilterStatus(typed, [allSelected])).toBe('maybe-removed');
+  });
+
+  it('brings back a slicer filter that an earlier ALL removed, in order', () => {
+    const all = { kind: 'column' as const, column: { table: 'Product', column: 'Category' } };
+    expect(reportFilterStatus(slicer, [all])).toBe('removed');
+    expect(reportFilterStatus(slicer, [all, allSelected])).toBe('applies');
+    expect(reportFilterStatus(slicer, [allSelected, all])).toBe('removed');
+  });
+
+  it('only covers the columns (or table) it names; with no arguments, all of them', () => {
+    const plant: ReportFilter = { kind: 'values', column: { table: 'Plant', column: 'Plant Name' }, values: ['Austin'], source: 'visual-row' };
+    expect(reportFilterStatus(plant, [allSelected])).toBe('applies');
+    expect(reportFilterStatus(plant, [{ kind: 'visual', columns: null, table: 'Plant' }])).toBe('removed');
+    expect(reportFilterStatus(plant, [{ kind: 'visual', columns: null, table: null }])).toBe('removed');
+  });
+});

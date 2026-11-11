@@ -53,6 +53,11 @@ export interface RelationshipChange {
 /** A part of the incoming filters F that has been removed. */
 export type Removal =
   | { kind: 'all' }
+  /**
+   * ALLSELECTED: the visual's own row and column filters go (on these columns, this table, or all when
+   * both are null); the filters from outside the visual (slicers, the filter pane) stay, or come back.
+   */
+  | { kind: 'visual'; columns: ColumnName[] | null; table: string | null }
   | { kind: 'column'; column: ColumnName }
   | { kind: 'table'; table: string; except: ColumnName[] };
 

@@ -142,11 +142,27 @@ describe('values inside a measure stepped into', () => {
     expect(q.kind === 'scalar' && q.dax).toContain('MAXX(__DaxExplorerRow,\nCALCULATE(\nCALCULATE(\nSUM(Sales[Amount])\n)\n)\n)');
   });
 
-  it("refuses when a caller's value depends on the visual", () => {
+  it("a caller's ALLSELECTED: refused with filters typed by hand, calculated in the visual's query otherwise", () => {
     const text = 'Outer = CALCULATE([Total Sales], ALLSELECTED(Plant))';
     const key = keyOf(explain(text).find('Calculate [Total Sales]'));
-    const q = query(explain(text, [key]).find('SUM'));
-    expect(q).toMatchObject({ kind: 'none' });
-    expect(q.kind === 'none' && q.reason).toContain('A measure that calls this one uses ALLSELECTED');
+    const sum = explain(text, [key]).find('SUM');
+    const typed = query(sum, new Map(), WIDGETS);
+    expect(typed.kind === 'none' && typed.reason).toContain('A measure that calls this one uses ALLSELECTED');
+    expect(typed.kind === 'none' && typed.reason).toContain('From a visual');
+    const fromVisual = query(sum, new Map(), [{ ...WIDGETS[0], source: 'visual-filter' }]);
+    expect(fromVisual).toEqual({
+      kind: 'scalar',
+      visual: true,
+      dax: `SUMMARIZECOLUMNS(
+TREATAS({"Widgets"}, 'Product'[Category]),
+"@DaxExplorerValue",
+CALCULATE(
+CALCULATE(
+SUM(Sales[Amount])
+),
+ALLSELECTED(Plant)
+)
+)`,
+    });
   });
 });

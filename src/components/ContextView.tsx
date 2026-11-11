@@ -1,14 +1,21 @@
 import { entryText, incomingText, originText, rowContextText, relationshipChangeText } from '../engine/context/describe';
 import type { EvalContext } from '../engine/context/model';
-import { reportFilterStatus, reportFilterText, type ReportFilterStatus } from '../engine/context/reportFilters';
+import { reportFilterStatus, reportFilterText, type ReportFilter, type ReportFilterStatus } from '../engine/context/reportFilters';
 import { useRelationships } from './relationshipContext';
 import { useReportFilters } from './reportFiltersContext';
 
 const STATUS_TEXT: Record<ReportFilterStatus, string> = {
   applies: 'applies',
   removed: 'removed here',
-  'maybe-removed': 'may be removed through a relationship (not checked)',
+  'maybe-removed': 'may be removed here (not checked: it depends on the data model, or on whether it comes from the visual)',
 };
+
+/** The report's filters, by where they come from (only shown as groups when some came from a visual). */
+const GROUPS: { heading: string; test: (f: ReportFilter) => boolean }[] = [
+  { heading: "From the visual's own rows and columns", test: (f) => f.source === 'visual-row' },
+  { heading: 'From slicers and the filter pane', test: (f) => f.source === 'visual-filter' },
+  { heading: 'Added by hand', test: (f) => !f.source },
+];
 
 interface ContextViewProps {
   context: EvalContext;
@@ -36,18 +43,27 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
     <ul className="context-view">
       <li className={`context-incoming${previousIncoming !== null && previousIncoming !== incoming ? ' is-changed' : ''}`}>
         {incoming}
-        {reportFilters.length > 0 && (
-          <ul className="report-filter-list" aria-label="The report's filters at this point">
-            {reportFilters.map((filter, i) => {
-              const status = reportFilterStatus(filter, context.filter.removals, model);
-              return (
-                <li key={i} className={`report-filter is-${status}`}>
-                  <code>{reportFilterText(filter)}</code> <span className="context-origin">{STATUS_TEXT[status]}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        {GROUPS.map(({ heading, test }) => {
+          const group = reportFilters.filter(test);
+          if (group.length === 0) return null;
+          // Grouped only when some filters came from a visual (ALLSELECTED treats the groups differently).
+          const grouped = reportFilters.some((f) => f.source);
+          return (
+            <div key={heading} className="report-filter-group">
+              {grouped && <span className="report-filter-heading">{heading}</span>}
+              <ul className="report-filter-list" aria-label={grouped ? heading : "The report's filters at this point"}>
+                {group.map((filter, i) => {
+                  const status = reportFilterStatus(filter, context.filter.removals, model);
+                  return (
+                    <li key={i} className={`report-filter is-${status}`}>
+                      <code>{reportFilterText(filter)}</code> <span className="context-origin">{STATUS_TEXT[status]}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
       </li>
       {context.filter.entries.map((entry, i) => {
         const isNew = compareTo !== undefined && !previousEntries.has(`${entryText(entry)}|${originText(entry)}`);

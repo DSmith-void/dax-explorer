@@ -35,6 +35,12 @@ export function removalText(removal: Removal): string {
   switch (removal.kind) {
     case 'all':
       return 'all filters';
+    case 'visual':
+      return removal.columns
+        ? `the visual's own rows and columns on ${removal.columns.map(columnText).join(', ')} (slicers and the filter pane stay)`
+        : removal.table !== null
+          ? `the visual's own rows and columns on table ${tableText(removal.table)} (slicers and the filter pane stay)`
+          : "the visual's own rows and columns (slicers and the filter pane stay)";
     case 'column':
       return columnText(removal.column);
     case 'table':

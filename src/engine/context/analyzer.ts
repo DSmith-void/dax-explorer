@@ -19,6 +19,7 @@ import type {
   TableShape,
 } from './model';
 import { INITIAL_CONTEXT } from './model';
+import { visualRemovalCovers } from './reportFilters';
 import { crossfilterError, expandedCovers, findRelationship, wholeTableDateRule, type RelationshipModel } from './relationships';
 
 /**
@@ -106,6 +107,11 @@ export function analyzeContext(
   function removalCovers(removal: Removal, target: FilterTarget): boolean {
     if (removal.kind === 'all') return true;
     if (target.kind === 'unknown') return false;
+    if (removal.kind === 'visual') {
+      // Filters the measure itself added on these columns go too: ALLSELECTED puts back the outer selection.
+      if (target.kind === 'table') return removal.columns === null && (removal.table === null || same(removal.table, target.table));
+      return target.columns.some((c) => visualRemovalCovers(removal, c));
+    }
     if (removal.kind === 'column') {
       return target.kind === 'columns' && target.columns.some((c) => sameColumn(c, removal.column));
     }
@@ -116,7 +122,9 @@ export function analyzeContext(
   }
 
   function removalAlreadyImplied(existing: readonly Removal[], removal: Removal): boolean {
+    if (removal.kind === 'visual') return false; // never already implied: it can bring filters back
     return existing.some((r) => {
+      if (r.kind === 'visual') return false;
       if (r.kind === 'all') return true;
       if (removal.kind === 'all') return false;
       if (r.kind === 'table' && r.except.length === 0) {
@@ -132,9 +140,12 @@ export function analyzeContext(
     const removals =
       removal.kind === 'all'
         ? [removal]
-        : removalAlreadyImplied(fc.removals, removal)
-          ? fc.removals
-          : [...fc.removals, removal];
+        : removal.kind === 'visual'
+          ? // ALLSELECTED resets its columns to the outer selection: earlier removals on them no longer matter.
+            [...fc.removals.filter((r) => !(r.kind === 'column' && visualRemovalCovers(removal, r.column))), removal]
+          : removalAlreadyImplied(fc.removals, removal)
+            ? fc.removals
+            : [...fc.removals, removal];
     const caveats = [...fc.caveats];
     if (removal.kind === 'table' && !model) {
       caveats.push(
@@ -514,6 +525,12 @@ export function analyzeContext(
       for (const removal of c.removals) {
         const result = removeFilters(fc, removal);
         fc = result.fc;
+        if (removal.kind === 'visual' && ctx.rows.length > 0) {
+          fc = {
+            ...fc,
+            caveats: [...fc.caveats, `ALLSELECTED inside a row-by-row calculation (${ctx.rows.map((r) => r.functionName).join(', ')}) also brings back the rows being gone through; that part isn't checked`],
+          };
+        }
         operations.push({ kind: 'remove-filters', removal, nodeId: arg.id, functionName: c.functionName, removedEntries: result.removedEntries });
       }
       const step = steps.get(arg.id);
@@ -748,11 +765,17 @@ export function analyzeContext(
             }
             return { kind: 'not-modeled', description: `the app can't work out ${snippet(arg)} yet` };
           }
-          case 'ALLSELECTED':
-            return {
-              kind: 'not-modeled',
-              description: 'ALLSELECTED brings back the filters chosen outside this visual (for example, slicers); the app can\'t work this out yet',
-            };
+          case 'ALLSELECTED': {
+            if (arg.args.length === 0) return { kind: 'remove', removals: [{ kind: 'visual', columns: null, table: null }], functionName: 'ALLSELECTED' };
+            const columns = arg.args.map(columnOf);
+            if (columns.every((c): c is ColumnName => c !== null && c.table !== '')) {
+              return { kind: 'remove', removals: [{ kind: 'visual', columns, table: null }], functionName: 'ALLSELECTED' };
+            }
+            if (arg.args.length === 1 && arg.args[0].kind === 'TableRef') {
+              return { kind: 'remove', removals: [{ kind: 'visual', columns: null, table: arg.args[0].name }], functionName: 'ALLSELECTED' };
+            }
+            return { kind: 'not-modeled', description: `the app can't work out ${snippet(arg)} (it needs Table[Column] references or a table)` };
+          }
           case 'USERELATIONSHIP':
           case 'CROSSFILTER': {
             const [a, b] = [arg.args[0], arg.args[1]].map((x) => (x ? columnOf(x) : null));
