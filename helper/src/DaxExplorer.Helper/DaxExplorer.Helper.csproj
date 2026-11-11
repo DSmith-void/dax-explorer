@@ -3,6 +3,10 @@
   <PropertyGroup>
     <!-- Windows-only: finds Power BI Desktop through Windows process and network APIs. -->
     <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- A Windows program without a console window: it lives in the tray (Tray.cs). -->
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Assets/dax-explorer.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -36,6 +40,8 @@
   <ItemGroup>
     <!-- The icon on Power BI's External Tools ribbon (made from public/favicon.svg). -->
     <EmbeddedResource Include="Assets/external-tool-icon.png" LogicalName="DaxExplorer.Helper.Assets.external-tool-icon.png" />
+    <!-- The tray icon and the program icon (the same picture). -->
+    <EmbeddedResource Include="Assets/dax-explorer.ico" LogicalName="DaxExplorer.Helper.Assets.dax-explorer.ico" />
   </ItemGroup>
 
 </Project>

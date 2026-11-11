@@ -10,12 +10,16 @@ using Microsoft.AnalysisServices.AdomdClient;
 //   --port <n>            listen on this loopback port (default 5092, or a free one if 5092 is taken)
 //   --app <folder>        folder with the built app (default: "app" next to the program, else the repo's dist)
 //   --no-browser          don't open the browser
+//                         (with --port: a developer run; no tray icon and no "only one DAX Explorer")
 //   describe [port]       print what the helper finds in Power BI Desktop, then exit
 //   "localhost:<port>" "<database>"
 //                         started from Power BI's External Tools ribbon: connect to that report right away
 //   --install-external-tool / --remove-external-tool
 //                         add or remove the External Tools button (needs administrator rights; the app runs
 //                         these for you, after Windows asks)
+
+// No console window of its own: DAX Explorer lives in the tray. From a terminal, it writes there.
+var terminal = ConsoleWindow.UseParentTerminal();
 
 if (args is ["describe", ..])
 {
@@ -66,6 +70,17 @@ for (var i = 0; i < args.Length; i++)
     }
 }
 
+// Only one DAX Explorer per Windows user (developer runs with --port excepted): a later start (a second
+// click on Power BI's ribbon, a double-click) hands its request to the running one and exits.
+var instanceName = SingleInstance.NameForCurrentUser();
+using var running = portChosen ? null : SingleInstance.TryClaim(instanceName);
+if (!portChosen && running is null)
+{
+    var reply = await SingleInstance.SendAsync(instanceName, new InstanceRequest(launch?.Port, launch?.Database), TimeSpan.FromSeconds(20));
+    if (reply is null) return StartupFailed("DAX Explorer is already running but did not answer. Quit it from its icon in the taskbar's notification area, then try again.", 6);
+    return 0;
+}
+
 // A fixed token can be supplied for development (the Vite dev server forwards it); otherwise a new random one.
 var token = Environment.GetEnvironmentVariable("DAXEXPLORER_HELPER_TOKEN") is { Length: >= 16 } devToken
     ? devToken
@@ -78,6 +93,92 @@ if (!portChosen && !HelperServer.IsPortFree(port)) port = 0;
 
 var app = HelperServer.Build(new HelperOptions(port, appPath, token));
 var url = "";
+var autoQuit = new AutoQuit(TimeProvider.System, AutoQuit.DefaultGrace);
+if (launch is not null) autoQuit.Arm();
+Tray? tray = null;
+using var stopping = new CancellationTokenSource();
+
+void OpenBrowser()
+{
+    if (url.Length == 0) return;
+    try
+    {
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    }
+    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+    {
+        tray?.Notify("DAX Explorer", "Could not open the browser. Try Open DAX Explorer in the tray menu.");
+    }
+}
+
+Endpoints.ConnectOutcome ConnectTo(int reportPort)
+{
+    var services = app.Services;
+    return Endpoints.ConnectToDesktop(
+        reportPort,
+        services.GetRequiredService<IDesktopInstances>(),
+        services.GetRequiredService<IModelSource>(),
+        services.GetRequiredService<ConnectionState>(),
+        services.GetRequiredService<CaptureState>(),
+        services.GetRequiredService<ILogger<ConnectionState>>());
+}
+
+// A later start's request: connect to the report it came from (ribbon), then open a new tab.
+InstanceReply Handle(InstanceRequest request)
+{
+    string? message = null;
+    if (request.ConnectPort is { } reportPort)
+    {
+        autoQuit.Arm();
+        if (ConnectTo(reportPort) != Endpoints.ConnectOutcome.Connected)
+        {
+            message = "The report could not be read yet; connect from the data button in the app.";
+            tray?.Notify("DAX Explorer", message);
+        }
+    }
+    else
+    {
+        autoQuit.Disarm();
+    }
+    OpenBrowser();
+    return new InstanceReply(true, message);
+}
+
+// Started from the ribbon: quit a minute after the last Power BI Desktop closes (with a notice first).
+async Task WatchDesktopAsync()
+{
+    var instances = app.Services.GetRequiredService<IDesktopInstances>();
+    using var timer = new PeriodicTimer(AutoQuit.CheckEvery);
+    try
+    {
+        while (await timer.WaitForNextTickAsync(stopping.Token).ConfigureAwait(false))
+        {
+            if (!autoQuit.Armed) continue;
+            int open;
+            try
+            {
+                open = instances.Find().Count;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                continue;
+            }
+            switch (autoQuit.Check(open))
+            {
+                case AutoQuit.Step.Warn:
+                    tray?.Notify("Power BI Desktop closed", "DAX Explorer will quit in a minute, unless a report is opened again.");
+                    break;
+                case AutoQuit.Step.Quit:
+                    app.Lifetime.StopApplication();
+                    return;
+            }
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        // Stopping.
+    }
+}
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
@@ -85,14 +186,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     // (the person chose this report by clicking the button in it).
     if (launch is { } from)
     {
-        var services = app.Services;
-        var outcome = Endpoints.ConnectToDesktop(
-            from.Port,
-            services.GetRequiredService<IDesktopInstances>(),
-            services.GetRequiredService<IModelSource>(),
-            services.GetRequiredService<ConnectionState>(),
-            services.GetRequiredService<CaptureState>(),
-            services.GetRequiredService<ILogger<ConnectionState>>());
+        var outcome = ConnectTo(from.Port);
         Console.WriteLine(outcome == Endpoints.ConnectOutcome.Connected
             ? "Opened from Power BI: connected to the report."
             : "Opened from Power BI, but the report could not be read yet; connect from the data button in the app.");
@@ -104,18 +198,23 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine("DAX Execution Explorer helper is running (this computer only).");
     Console.WriteLine($"Open the app: {url}");
     Console.WriteLine(appPath is null ? "Note: the app has not been built yet; run 'npm run build' first." : $"Serving the app from: {appPath}");
-    Console.WriteLine("Press Ctrl+C to stop.");
-    if (openBrowser)
+    Console.WriteLine(portChosen ? "Press Ctrl+C to stop." : "Quit from DAX Explorer's icon in the taskbar's notification area.");
+
+    if (!portChosen)
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            Console.WriteLine("Could not open the browser automatically; use the link above.");
-        }
+        tray = Tray.Start(new TrayActions(
+            Open: OpenBrowser,
+            Quit: app.Lifetime.StopApplication,
+            ConnectedTo: () => app.Services.GetRequiredService<ConnectionState>().Current.Connection?.ReportName));
+        _ = SingleInstance.ListenAsync(instanceName, Handle, stopping.Token);
+        _ = WatchDesktopAsync();
     }
+    if (openBrowser) OpenBrowser();
+});
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    stopping.Cancel();
+    tray?.Dispose();
 });
 
 try
@@ -132,17 +231,17 @@ catch (Exception ex) when (ex is not OutOfMemoryException)
     return StartupFailed($"DAX Explorer could not start: {ex.Message}", 4);
 }
 
-// Shows a startup error. When DAX Explorer was double-clicked, Windows created a console window just for it,
-// and that window would close the moment the program exits; keep it open so the message can be read.
-static int StartupFailed(string message, int exitCode)
+// Shows a startup error: in the terminal, or (double-clicked, started by Power BI) in a message box.
+int StartupFailed(string message, int exitCode)
 {
-    Console.Error.WriteLine();
-    Console.Error.WriteLine(message);
-    if (ConsoleWindow.IsOwnedOnlyByThisProcess())
+    if (terminal)
     {
         Console.Error.WriteLine();
-        Console.Error.WriteLine("Press any key to close this window.");
-        Console.ReadKey(intercept: true);
+        Console.Error.WriteLine(message);
+    }
+    else
+    {
+        System.Windows.Forms.MessageBox.Show(message, "DAX Explorer", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Warning);
     }
     return exitCode;
 }

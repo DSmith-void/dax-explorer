@@ -2609,3 +2609,35 @@ select {
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
 }
+
+/* --- Covered when DAX Explorer was opened in a newer tab --- */
+.newer-tab {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--gap);
+  background: rgb(0 0 0 / 0.55);
+}
+
+.newer-tab-box {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  width: min(30rem, 100%);
+  padding: 20px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.newer-tab-box h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.newer-tab-box p {
+  margin: 0;
+}

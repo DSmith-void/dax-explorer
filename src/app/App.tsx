@@ -25,6 +25,7 @@ import { findNode, type AstNode } from '../engine/parser/ast';
 import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
 import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
+import { useNewerTab } from './newerTab';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
 import { measureDefinitionText, toModelSnapshot } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
@@ -77,7 +78,10 @@ export function App() {
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
   // The optional local helper (Power BI Desktop connection). Created once; the token is read from the address bar.
-  const [helperClient] = useState(() => createHelperClient(takeHelperToken()));
+  const [helperToken] = useState(takeHelperToken);
+  const [helperClient] = useState(() => createHelperClient(helperToken));
+  // A second click on Power BI's ribbon opens a new tab; this one then no longer shows the current report.
+  const newerTab = useNewerTab(helperToken !== null);
   // If the helper's link (with "#token=...") is pasted into a tab where the app is already open, only the
   // fragment changes and the page doesn't reload; reload so the token is picked up.
   useEffect(() => {
@@ -304,6 +308,20 @@ export function App() {
     <ReportFiltersContext.Provider value={reportFilters}>
     <RelationshipContext.Provider value={relationships}>
     <div className="app">
+      {newerTab.newer && (
+        <div className="newer-tab" role="alertdialog" aria-labelledby="newer-tab-title">
+          <div className="newer-tab-box">
+            <h2 id="newer-tab-title">DAX Explorer continued in a newer tab</h2>
+            <p>
+              DAX Explorer was opened again (perhaps from another report in Power BI Desktop). This tab may no longer show the report it
+              is connected to.
+            </p>
+            <button type="button" className="primary-button" onClick={newerTab.useThisTab}>
+              Use this tab instead
+            </button>
+          </div>
+        </div>
+      )}
       <header className="toolbar">
         <div className="brand">
           <span className="brand-mark">

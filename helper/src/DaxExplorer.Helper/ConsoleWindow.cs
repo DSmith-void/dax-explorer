@@ -2,24 +2,27 @@ using System.Runtime.InteropServices;
 
 namespace DaxExplorer.Helper;
 
-/// <summary>Facts about the console window DAX Explorer is running in.</summary>
+/// <summary>
+/// DAX Explorer is a Windows program without a console window (it lives in the tray). Started from a
+/// terminal (describe, development), it writes to that terminal instead.
+/// </summary>
 internal static class ConsoleWindow
 {
+    private const int AttachParentProcess = -1;
+
     [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
+    private static extern bool AttachConsole(int processId);
 
     /// <summary>
-    /// True when this process is the only one attached to its console, which is the case when it was
-    /// started by double-clicking (Windows creates a window just for it). From a terminal, the shell
-    /// shares the console, so this is false and nothing waits for a key press.
+    /// True when output reaches someone: redirected (a script reading it) or the terminal that started
+    /// this program. False when double-clicked or started by Power BI: messages then need a window.
     /// </summary>
-    public static bool IsOwnedOnlyByThisProcess()
+    public static bool UseParentTerminal()
     {
+        if (Console.IsOutputRedirected || Console.IsErrorRedirected) return true;
         try
         {
-            if (Console.IsInputRedirected) return false;
-            var processes = new uint[4];
-            return GetConsoleProcessList(processes, (uint)processes.Length) == 1;
+            return AttachConsole(AttachParentProcess);
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
