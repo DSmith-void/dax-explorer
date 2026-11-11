@@ -101,6 +101,33 @@ CALCULATE(
 )`,
   },
   {
+    id: 'sales-ytd',
+    title: 'Sales YTD',
+    concept: 'TOTALYTD is CALCULATE with DATESYTD: the dates from 1 January up to the last date in the current filter.',
+    expression: `Sales YTD =
+TOTALYTD([Total Sales], 'Date'[Date])`,
+  },
+  {
+    id: 'sales-last-year',
+    title: 'Sales Last Year',
+    concept: 'SAMEPERIODLASTYEAR swaps the dates in the filter for the same dates one year earlier.',
+    expression: `Sales Last Year =
+CALCULATE(
+    [Total Sales],
+    SAMEPERIODLASTYEAR('Date'[Date])
+)`,
+  },
+  {
+    id: 'sales-growth',
+    title: 'Sales Growth vs Last Year',
+    concept: 'Compares this period with the same period last year: step into [Sales Last Year] to see its dates move.',
+    expression: `Sales Growth vs Last Year =
+VAR ThisYear = [Total Sales]
+VAR LastYear = [Sales Last Year]
+RETURN
+    DIVIDE(ThisYear - LastYear, LastYear)`,
+  },
+  {
     id: 'best-plant-order-value',
     title: 'Best Plant Order Value',
     concept: 'A measure that calls a measure that calls measures: step into [Average Order Value] to see what it does for one plant.',

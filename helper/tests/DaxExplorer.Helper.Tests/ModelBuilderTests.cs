@@ -29,6 +29,16 @@ public class ModelBuilderTests
         ]);
 
     [Fact]
+    public void Reads_whether_a_table_is_marked_as_a_date_table()
+    {
+        var model = ModelBuilder.Build(
+            "db",
+            [R(("Name", "Date"), ("IsHidden", false), ("DataCategory", "Time")), R(("Name", "Sales"), ("IsHidden", false), ("DataCategory", DBNull.Value))],
+            [], [], []);
+        Assert.Equal(["Time", null], model.Tables.Select(t => t.DataCategory));
+    }
+
+    [Fact]
     public void Builds_tables_measures_and_relationships()
     {
         var model = BuildSample();

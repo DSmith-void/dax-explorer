@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 import { scrollWithin } from './scrollWithin';
 import { frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
 import { TablesReached } from './TablesReached';
+import { DateStrip } from './DateStrip';
 import { useFilterReach } from './relationshipContext';
 import { pathText } from '../engine/context/relationships';
 import type { ValueState } from '../app/useStepValues';
@@ -39,6 +40,8 @@ export interface StepValues {
   stateOf: (query: StepQuery) => ValueState;
   rows: ReadonlyMap<string, RowChoice>;
   pickRow: (frameKey: string, iteratorNodeId: number, choice: RowChoice) => void;
+  /** For a step that changes a date filter: its date-range queries. */
+  dateRangeFor: (entry: FlatEntry) => ComponentProps<typeof DateStrip>['range'];
 }
 
 const KIND_LABEL: Record<TimelineKind, string> = {
@@ -164,6 +167,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         ) : (
           <ContextView context={current.context} />
         )}
+        <DateStrip entry={current} range={values.dateRangeFor(current)} stateOf={values.stateOf} connected={connected} />
         <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={detail === 'brief'} />
       </Box>
 

@@ -102,6 +102,23 @@ table Sales
 			)
 		formatString: #,##0
 
+	measure 'Sales YTD' = TOTALYTD([Total Sales], 'Date'[Date])
+		formatString: #,##0
+
+	measure 'Sales Last Year' =
+			CALCULATE(
+			    [Total Sales],
+			    SAMEPERIODLASTYEAR('Date'[Date])
+			)
+		formatString: #,##0
+
+	measure 'Sales Growth vs Last Year' =
+			VAR ThisYear = [Total Sales]
+			VAR LastYear = [Sales Last Year]
+			RETURN
+			    DIVIDE(ThisYear - LastYear, LastYear)
+		formatString: 0.0%
+
 	measure 'Best Plant Order Value' =
 			MAXX(
 			    VALUES(Plant[Plant Name]),

@@ -43,7 +43,9 @@ export function technicalOperation(op: Operation): string {
       return `Context transition: the row context of ${iterators} becomes filter context${added.length > 0 ? ` (${added.join('; ')})` : ''}`;
     }
     case 'remove-filters':
-      return `${op.functionName}: removes filters on ${removalText(op.removal)}`;
+      return op.because
+        ? `Automatic REMOVEFILTERS(${removalText(op.removal).replace(/^table /, '')}): ${op.because}`
+        : `${op.functionName}: removes filters on ${removalText(op.removal)}`;
     case 'add-filter':
       return `Filter ${entryText(op.entry)}: ${op.entry.mode === 'intersect' ? 'KEEPFILTERS, intersected with the existing filters' : 'overwrites existing filters on the same columns'}`;
     case 'relationship': {

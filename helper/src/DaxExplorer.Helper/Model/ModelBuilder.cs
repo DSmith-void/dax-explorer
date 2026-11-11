@@ -44,7 +44,7 @@ public static class ModelBuilder
         IEnumerable<Row> relationships) =>
         new(
             databaseName,
-            tables.Select(r => new TableInfo(r.RequiredText("Name"), r.Flag("IsHidden"), r.Text("Expression"))).ToList(),
+            tables.Select(r => new TableInfo(r.RequiredText("Name"), r.Flag("IsHidden"), r.Text("Expression"), r.Text("DataCategory"))).ToList(),
             columns
                 // Every table has an internal "RowNumber-<guid>" column; it is not part of the user's model.
                 .Where(r => !string.Equals(r.Text("Type"), "RowNumber", StringComparison.OrdinalIgnoreCase))

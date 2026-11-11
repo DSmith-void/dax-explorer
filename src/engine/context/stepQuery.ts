@@ -12,7 +12,8 @@
  */
 import type { BindResult } from '../binder/binder';
 import { childrenOf, findNode, type AstNode, type Expr } from '../parser/ast';
-import { daxLiteral, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
+import type { ColumnName } from './model';
+import { columnDax, daxLiteral, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
 import type { TimelineEntry } from './timeline';
 
 /** The row of an iterator the user is looking at: its columns (as the engine names them) and values. */
@@ -54,6 +55,8 @@ export interface StepQueryOptions {
   reportFilters: readonly ReportFilter[];
   /** Picked rows, by rowKey(frame key, iterator node id). */
   rows: ReadonlyMap<string, RowChoice>;
+  /** Calculate this DAX instead of the step's own expression (it is still wrapped in everything around it). */
+  replace?: { nodeId: number; dax: string };
   /** This measure's key in the chain of calls; '' for the measure being explained. */
   frameKey?: string;
   /** When stepped into from other measures: the callers, innermost first. */
@@ -144,6 +147,17 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
       if (!call?.spec || !call.params) throw new Unsupported(`${parent.name} isn't known to the app, so what happens inside it can't be reproduced.`);
       const argIndex = parent.args.indexOf(child as Expr);
       if (name === 'RELATEDTABLE') throw new Unsupported('Values inside RELATEDTABLE are not shown yet.');
+      // TOTALYTD(expression, dates, [filter], [year end]) is CALCULATE(expression, DATESYTD(dates[, year end]), filter).
+      const total = name ? TOTALS[name] : undefined;
+      if (total && argIndex === 0) {
+        const [, dates, ...rest] = parent.args;
+        const yearEnd = rest.find((a) => a.kind === 'StringLiteral');
+        const filter = rest.find((a) => a.kind !== 'StringLiteral' && a.kind !== 'Omitted');
+        if (!dates) throw new Unsupported(`${name} has no dates argument.`);
+        const datesDax = `${total}(${text(dates)}${yearEnd ? `, ${text(yearEnd)}` : ''})`;
+        expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${datesDax}${filter ? `,\n${text(filter)}` : ''}\n)`;
+        continue;
+      }
       if ((name === 'CALCULATE' || name === 'CALCULATETABLE') && argIndex === 0) {
         const filters = parent.args.slice(1).filter((a) => a.kind !== 'Omitted').map(text);
         if (filters.length > 0) expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${filters.join(',\n')}\n)`;
@@ -161,6 +175,7 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
   }
 
   const valueOf = (node: AstNode): StepQuery => {
+    if (options.replace?.nodeId === node.id) return { kind: 'scalar', dax: inContext(node, options.replace.dax, false) };
     const table = isTable(node);
     const dax = inContext(node, text(node), table);
     return table ? { kind: 'table', dax, countDax: `COUNTROWS(${dax})` } : { kind: 'scalar', dax };
@@ -208,6 +223,42 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
     if (e instanceof Unsupported) return { kind: 'none', reason: e.message };
     throw e;
   }
+}
+
+/** TOTALYTD and friends: CALCULATE with the matching DATES…TD filter. */
+const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD' };
+
+/** The first date, last date and number of dates of a date column, separated by "|". */
+export function dateRangeProbe(column: ColumnName): string {
+  const c = columnDax(column);
+  return `FORMAT(MIN(${c}), "yyyy-mm-dd") & "|" & FORMAT(MAX(${c}), "yyyy-mm-dd") & "|" & COUNTROWS(VALUES(${c}))`;
+}
+
+/**
+ * For a step that changes a date filter (a time-intelligence function in CALCULATE, or TOTALYTD): queries
+ * for the dates before it (where the CALCULATE is) and inside it (what its first input sees), plus the
+ * whole date range, each as "first|last|count". Null for other steps.
+ */
+export function dateRangeQueries(
+  entry: TimelineEntry,
+  options: StepQueryOptions,
+): { column: ColumnName; functionName: string; before: StepQuery; after: StepQuery; all: string } | null {
+  if (entry.kind !== 'calculate' || entry.nodeId === null || !options.root) return null;
+  const dated = entry.operations.find((op) => op.kind === 'add-filter' && op.entry.dates);
+  const dates = dated?.kind === 'add-filter' ? dated.entry.dates : undefined;
+  const node = findNode(options.root, entry.nodeId);
+  if (!dates || node?.kind !== 'FunctionCall' || !node.args[0]) return null;
+  const probe = dateRangeProbe(dates.column);
+  const at = (nodeId: number): StepQuery =>
+    buildStepQuery({ ...entry, kind: 'function', nodeId }, { ...options, replace: { nodeId, dax: probe } });
+  const c = columnDax(dates.column);
+  return {
+    column: dates.column,
+    functionName: dates.functionName,
+    before: at(node.id),
+    after: at(node.args[0].id),
+    all: `FORMAT(CALCULATE(MIN(${c}), REMOVEFILTERS()), "yyyy-mm-dd") & "|" & FORMAT(CALCULATE(MAX(${c}), REMOVEFILTERS()), "yyyy-mm-dd")`,
+  };
 }
 
 class NeedsRow extends Error {

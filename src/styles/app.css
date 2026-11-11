@@ -2526,3 +2526,73 @@ select {
   font-weight: 700;
   fill: var(--color-frame-1);
 }
+
+/* ---- Dates: before and inside a step that changes a date filter */
+.date-strip {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.date-strip .step-subheading {
+  margin: 0;
+}
+
+.date-strip-rule {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.date-strip-row {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 8px;
+  font-size: 0.8125rem;
+}
+
+.date-strip-label {
+  color: var(--color-text-muted);
+}
+
+.date-strip-track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+}
+
+.date-strip-bar {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  border-radius: 5px;
+  background: var(--color-gutter);
+}
+
+.date-strip-row.is-after .date-strip-bar {
+  background: var(--color-accent);
+}
+
+.date-strip-text {
+  grid-column: 2;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-strip-axis {
+  position: relative;
+  height: 1rem;
+  margin-inline-start: calc(3.4rem + 8px);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.date-strip-axis span {
+  position: absolute;
+  top: 0;
+  padding-inline-start: 3px;
+  border-inline-start: 1px solid var(--color-border);
+}

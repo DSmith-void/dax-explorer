@@ -72,6 +72,9 @@ export interface TimelineEntry {
   depth: number;
 }
 
+/** TOTALYTD and friends: CALCULATE with the matching DATES…TD filter. */
+const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD' };
+
 /** What each iterator does with the results of its rows. */
 const COMBINES: Record<string, string> = {
   SUMX: 'adds up the results from every row',
@@ -247,16 +250,20 @@ export function buildTimeline(
     }
     const params = call.params;
 
-    if (spec.name === 'CALCULATE' || spec.name === 'CALCULATETABLE' || spec.name === 'RELATEDTABLE') {
-      const [first, ...filterInputs] = node.args;
+    const total = TOTALS[spec.name];
+    if (spec.name === 'CALCULATE' || spec.name === 'CALCULATETABLE' || spec.name === 'RELATEDTABLE' || total) {
+      const [first, ...written] = node.args;
+      // TOTALYTD(expression, dates, [filter], [year end]): the filters are DATESYTD(dates) and the optional filter.
+      const filterInputs = total ? written.slice(0, 2).filter((a, i) => !(i === 1 && a.kind === 'StringLiteral')) : written;
       if (spec.name !== 'RELATEDTABLE') {
-        for (const input of filterInputs) {
+        for (const [i, input] of filterInputs.entries()) {
           if (input.kind === 'Omitted') continue;
-          walk(input, depth + 1, 'filter', true);
+          const isDates = total !== undefined && i === 0;
+          if (!isDates) walk(input, depth + 1, 'filter', true);
           add({
             kind: 'filter-input',
             nodeId: input.id,
-            title: `Prepare filter: ${snippet(input, 32)}`,
+            title: isDates ? `Prepare filter: ${total}(${snippet(input, 24)})` : `Prepare filter: ${snippet(input, 32)}`,
             summary: stepOf(input)?.summary ?? `${snippet(input)} is worked out, using the filters from outside the ${spec.name}.`,
             depth: depth + 1,
           });

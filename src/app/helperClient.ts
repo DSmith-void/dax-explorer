@@ -42,6 +42,8 @@ export interface TableInfo {
   name: string;
   isHidden: boolean;
   expression: string | null;
+  /** "Time" when the table is marked as a date table (older helpers don't send it). */
+  dataCategory?: string | null;
 }
 
 export interface ColumnInfo {

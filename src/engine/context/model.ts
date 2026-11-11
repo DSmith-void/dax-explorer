@@ -35,6 +35,8 @@ export interface FilterEntry {
   mode: 'replace' | 'intersect';
   /** For TREATAS: the tables its values come from (it filters as if through a relationship from them). */
   treatAsFrom?: string[];
+  /** For time-intelligence functions: the function, and the date column whose dates it works out. */
+  dates?: { functionName: string; column: ColumnName };
 }
 
 /** USERELATIONSHIP or CROSSFILTER inside CALCULATE: which relationship is used, or which way it filters. */
@@ -88,7 +90,15 @@ export interface EvalContext {
 
 export type Operation =
   | { kind: 'context-transition'; rows: RowContext[]; added: FilterEntry[] }
-  | { kind: 'remove-filters'; removal: Removal; nodeId: number; functionName: string; removedEntries: FilterEntry[] }
+  | {
+      kind: 'remove-filters';
+      removal: Removal;
+      nodeId: number;
+      functionName: string;
+      removedEntries: FilterEntry[];
+      /** Set when DAX removes these filters by itself (not written in the code), with the reason. */
+      because?: string;
+    }
   | { kind: 'add-filter'; entry: FilterEntry; nodeId: number; replaced: FilterEntry[]; replacesIncoming: boolean }
   | { kind: 'row-context'; row: RowContext }
   | { kind: 'relationship'; change: RelationshipChange; nodeId: number }

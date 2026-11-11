@@ -45,6 +45,7 @@ export type FunctionCategory =
   | 'table'
   | 'scope and filter inspection'
   | 'relationship'
+  | 'time intelligence'
   | 'logical'
   | 'math'
   | 'text';
@@ -283,6 +284,9 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('table', 'table'), p('column', 'column', { repeating: true })]],
   },
 
+  // --- Time intelligence: tables of dates, used as CALCULATE filters (or tables) ---
+  ...timeIntelligence(),
+
   // --- Logical and math ---
   {
     name: 'IF',
@@ -449,4 +453,51 @@ export function parametersForCall(spec: FunctionSpec, argumentCount: number): Pa
     return result;
   }
   return null;
+}
+
+/** Time-intelligence functions. Each returns a table of dates from the date column it is given. */
+function timeIntelligence(): FunctionSpec[] {
+  const interval = p('interval', 'keyword', { keywords: ['DAY', 'MONTH', 'QUARTER', 'YEAR'] });
+  const dates = p('dates', 'column');
+  const spec = (name: string, summary: string, params: ParamSpec[], returns: 'table' | 'scalar' = 'table'): FunctionSpec => ({
+    name,
+    category: 'time intelligence',
+    returns,
+    summary,
+    overloads: [params],
+  });
+  const toDate = (name: string, period: string) =>
+    spec(name, `The dates from the start of the ${period} up to the last date in the current filter.`, [dates, p('year end date', 'scalar', { optional: true })]);
+  const total = (name: string, period: string) =>
+    spec(
+      name,
+      `Calculates an expression for the ${period} to date: CALCULATE(expression, DATES${name.slice(5)}(dates), filter).`,
+      [p('expression', 'scalar'), dates, p('filter', 'filter', { optional: true }), p('year end date', 'scalar', { optional: true })],
+      'scalar',
+    );
+  const around = (name: string, which: 'before' | 'after', period: string) =>
+    spec(name, `The whole ${period} ${which} the ${which === 'before' ? 'first' : 'last'} date in the current filter.`, [dates]);
+  return [
+    toDate('DATESYTD', 'year'),
+    toDate('DATESQTD', 'quarter'),
+    toDate('DATESMTD', 'month'),
+    total('TOTALYTD', 'year'),
+    total('TOTALQTD', 'quarter'),
+    total('TOTALMTD', 'month'),
+    spec('SAMEPERIODLASTYEAR', 'The same dates as the current filter, one year earlier.', [dates]),
+    spec('DATEADD', 'The dates in the current filter, moved by a number of days, months, quarters or years.', [dates, p('number of intervals', 'scalar'), interval]),
+    spec('PARALLELPERIOD', 'The whole months, quarters or years in the current filter, moved by a number of them.', [dates, p('number of intervals', 'scalar'), interval]),
+    spec('DATESBETWEEN', 'The dates from a start date to an end date.', [dates, p('start date', 'scalar'), p('end date', 'scalar')]),
+    spec('DATESINPERIOD', 'The dates in a period of a number of days, months, quarters or years, from a start date.', [dates, p('start date', 'scalar'), p('number of intervals', 'scalar'), interval]),
+    around('PREVIOUSDAY', 'before', 'day'),
+    around('PREVIOUSMONTH', 'before', 'month'),
+    around('PREVIOUSQUARTER', 'before', 'quarter'),
+    around('PREVIOUSYEAR', 'before', 'year'),
+    around('NEXTDAY', 'after', 'day'),
+    around('NEXTMONTH', 'after', 'month'),
+    around('NEXTQUARTER', 'after', 'quarter'),
+    around('NEXTYEAR', 'after', 'year'),
+    spec('FIRSTDATE', 'The first date in the current filter.', [dates]),
+    spec('LASTDATE', 'The last date in the current filter.', [dates]),
+  ];
 }

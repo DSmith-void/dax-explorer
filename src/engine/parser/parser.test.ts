@@ -251,6 +251,9 @@ describe('built-in samples', () => {
     'best-plant-order-value': '(MAXX (VALUES Plant[Plant Name]) [Average Order Value])',
     'sales-by-ship-date': "(CALCULATE [Total Sales] (USERELATIONSHIP Sales[Ship Date] 'Date'[Date]))",
     'customers-who-bought': '(CALCULATE (COUNTROWS Customer) (CROSSFILTER Sales[Customer Key] Customer[Customer Key] BOTH))',
+    'sales-ytd': "(TOTALYTD [Total Sales] 'Date'[Date])",
+    'sales-last-year': "(CALCULATE [Total Sales] (SAMEPERIODLASTYEAR 'Date'[Date]))",
+    'sales-growth': '(VAR (ThisYear [Total Sales]) (LastYear [Sales Last Year]) RETURN (DIVIDE (- var:ThisYear var:LastYear) var:LastYear))',
     'featured-category-sales': '(CALCULATE [Total Sales] (TREATAS {"Widgets" "Gadgets"} Product[Category]))',
   };
 

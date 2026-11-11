@@ -117,6 +117,8 @@ export function App() {
         // Power BI's automatic date tables (one hidden table per date column) are left out of the drawing.
         tables: connectedModel.model.tables.filter((t) => !/^(LocalDateTable|DateTableTemplate)_/.test(t.name)).map((t) => t.name),
         relationships: connectedModel.model.relationships.map(relationshipFromInfo),
+        dateColumns: connectedModel.model.columns.filter((c) => /^date/i.test(c.dataType)).map((c) => ({ table: c.table, column: c.name })),
+        dateTables: connectedModel.model.tables.filter((t) => t.dataCategory?.toLowerCase() === 'time').map((t) => t.name),
       };
     }
     return isBuiltInExample ? INITECH_MODEL : null;

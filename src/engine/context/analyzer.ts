@@ -19,7 +19,7 @@ import type {
   TableShape,
 } from './model';
 import { INITIAL_CONTEXT } from './model';
-import { crossfilterError, expandedCovers, findRelationship, type RelationshipModel } from './relationships';
+import { crossfilterError, expandedCovers, findRelationship, wholeTableDateRule, type RelationshipModel } from './relationships';
 
 /**
  * Symbolic context analysis.
@@ -40,6 +40,13 @@ import { crossfilterError, expandedCovers, findRelationship, type RelationshipMo
  * Everything else that would change context (relationships, ALLSELECTED, unknown functions...)
  * is recorded as "not modeled" or "unknown", never guessed.
  */
+/** TOTALYTD and friends: CALCULATE with the matching DATES…TD function. */
+const TOTALS = new Map([
+  ['TOTALYTD', 'DATESYTD'],
+  ['TOTALQTD', 'DATESQTD'],
+  ['TOTALMTD', 'DATESMTD'],
+]);
+
 /**
  * @param initial the context the expression starts in: the report's filters F by default, or, for a measure
  *   called by another measure, the filters that caller passes in.
@@ -225,6 +232,28 @@ export function analyzeContext(
             if (args.length === 1 && args[0].kind === 'TableRef') return { kind: 'table', table: args[0].name, description };
             return { kind: 'unknown', description };
           }
+          case 'DATESYTD':
+          case 'DATESQTD':
+          case 'DATESMTD':
+          case 'SAMEPERIODLASTYEAR':
+          case 'DATEADD':
+          case 'PARALLELPERIOD':
+          case 'DATESBETWEEN':
+          case 'DATESINPERIOD':
+          case 'PREVIOUSDAY':
+          case 'PREVIOUSMONTH':
+          case 'PREVIOUSQUARTER':
+          case 'PREVIOUSYEAR':
+          case 'NEXTDAY':
+          case 'NEXTMONTH':
+          case 'NEXTQUARTER':
+          case 'NEXTYEAR':
+          case 'FIRSTDATE':
+          case 'LASTDATE': {
+            // A table of dates from its date column.
+            const column = args[0] ? columnOf(args[0]) : null;
+            return column ? { kind: 'columns', columns: [column], description } : { kind: 'unknown', description };
+          }
           case 'TREATAS': {
             // Its result has the lineage of the columns it names.
             const columns = args.slice(1).map(columnOf);
@@ -354,7 +383,7 @@ export function analyzeContext(
       for (const arg of node.args) visit(arg, unknown, null);
       return;
     }
-    if (spec.name === 'CALCULATE' || spec.name === 'CALCULATETABLE' || spec.name === 'RELATEDTABLE') {
+    if (spec.name === 'CALCULATE' || spec.name === 'CALCULATETABLE' || spec.name === 'RELATEDTABLE' || TOTALS.has(spec.name)) {
       visitCalculate(node, ctx, spec);
       return;
     }
@@ -432,13 +461,26 @@ export function analyzeContext(
 
   function visitCalculate(node: FunctionCall, ctx: EvalContext, spec: FunctionSpec) {
     const isRelatedTable = spec.name === 'RELATEDTABLE';
-    const [first, ...filterArgs] = node.args;
+    // TOTALYTD(expression, dates, [filter], [year end]) is CALCULATE(expression, DATESYTD(dates[, year end]), filter).
+    const total = TOTALS.get(spec.name);
+    const [first, ...written] = node.args;
+    const filterArgs = total ? totalFilterArgs(node) : written;
+    const yearEnd = total ? written.slice(1).find((a) => a.kind === 'StringLiteral') : undefined;
     const operations: Operation[] = [];
 
     // Classify first (this registers implicit row contexts for boolean filters), then:
     // 1. Filter arguments are evaluated in the outer context.
-    const classified = isRelatedTable ? [] : filterArgs.map((arg) => ({ arg, c: classifyFilter(arg, node, spec.name, 'replace') }));
-    if (!isRelatedTable) for (const arg of filterArgs) visit(arg, ctx, 'filter');
+    const classified = isRelatedTable
+      ? []
+      : filterArgs.map((arg, i) => ({
+          arg,
+          c:
+            total && i === 0
+              ? timeFilter(total, yearEnd ? [arg, yearEnd] : [arg], node, spec.name, 'replace')
+              : classifyFilter(arg, node, spec.name, 'replace'),
+        }));
+    // (TOTALYTD's dates argument is just the date column.)
+    if (!isRelatedTable) filterArgs.forEach((arg, i) => visit(arg, ctx, total && i === 0 ? 'column' : 'filter'));
 
     // 2. Context transition.
     let fc = ctx.filter;
@@ -454,7 +496,19 @@ export function analyzeContext(
       });
     }
 
-    // 3. Modifiers.
+    // 3. Modifiers. Putting a filter on the date column of a date table also removes every other filter on
+    //    that table: DAX adds this by itself, as a modifier.
+    for (const { arg, c } of classified) {
+      if (c.kind !== 'filter' || c.entry.target.kind !== 'columns') continue;
+      for (const column of c.entry.target.columns) {
+        const because = model ? wholeTableDateRule(model, column) : null;
+        if (!because) continue;
+        const removal: Removal = { kind: 'table', table: column.table, except: [] };
+        const result = removeFilters(fc, removal);
+        fc = result.fc;
+        operations.push({ kind: 'remove-filters', removal, nodeId: arg.id, functionName: spec.name, removedEntries: result.removedEntries, because });
+      }
+    }
     for (const { arg, c } of classified) {
       if (c.kind !== 'remove') continue;
       for (const removal of c.removals) {
@@ -531,7 +585,11 @@ export function analyzeContext(
       // The step-by-step explanation of CALCULATE is generated by the UI from `operations`.
       notes: isRelatedTable
         ? ['RELATEDTABLE is CALCULATETABLE with no filters: in a row context, context transition selects the related rows.']
-        : [],
+        : total
+          ? [
+              `${spec.name} is a short way of writing CALCULATE(${first ? snippet(first, 40) : 'expression'}, ${total}(${filterArgs[0] ? snippet(filterArgs[0], 30) : 'dates'})${filterArgs[1] ? `, ${snippet(filterArgs[1], 30)}` : ''}).`,
+            ]
+          : [],
     });
   }
 
@@ -543,8 +601,10 @@ export function analyzeContext(
     if (transition?.kind === 'context-transition') {
       parts.push(`for the current row of ${transition.rows[transition.rows.length - 1].functionName}`);
     }
-    const removed = operations.flatMap((op) => (op.kind === 'remove-filters' ? [removalText(op.removal)] : []));
+    const removed = operations.flatMap((op) => (op.kind === 'remove-filters' && !op.because ? [removalText(op.removal)] : []));
     if (removed.length > 0) parts.push(`without filters on ${removed.join(' and ')}`);
+    const cleared = operations.flatMap((op) => (op.kind === 'remove-filters' && op.because ? [removalText(op.removal).replace(/^table /, '')] : []));
+    if (cleared.length > 0) parts.push(`with the other filters on ${cleared.join(' and ')} cleared (DAX does this by itself)`);
     const added = operations.flatMap((op) => (op.kind === 'add-filter' ? [entryText(op.entry)] : []));
     if (added.length > 0) parts.push(`with ${added.join(' and ')}`);
     const changes = operations.flatMap((op) => (op.kind === 'relationship' ? [relationshipChangeText(op.change, true)] : []));
@@ -570,6 +630,88 @@ export function analyzeContext(
     const error = crossfilterError(r, change);
     if (error) return `But ${error}.`;
     return r.bothDirections ? 'Normally it filters both ways.' : 'Normally it filters one way, from the one side to the many side.';
+  }
+
+  /** TOTALYTD(expression, dates, [filter], [year end]): its filter arguments are the dates and the optional filter. */
+  function totalFilterArgs(node: FunctionCall): Expr[] {
+    return node.args.slice(1, 3).filter((a, i) => !(i === 1 && a.kind === 'StringLiteral'));
+  }
+
+  /**
+   * A time-intelligence function as a CALCULATE filter: a filter on its date column, replaced by the dates
+   * it works out (described as a rule; the actual dates depend on the filters in effect).
+   */
+  function timeFilter(name: string, args: readonly Expr[], calculate: FunctionCall, calculateName: string, mode: FilterEntry['mode']): FilterArgument {
+    const column = args[0] ? columnOf(args[0]) : null;
+    if (!column || column.table === '') {
+      return { kind: 'not-modeled', description: `the app can't tell which date column ${name} uses (it needs a Table[Column] reference)` };
+    }
+    return {
+      kind: 'filter',
+      entry: {
+        target: { kind: 'columns', columns: [column] },
+        condition: `= ${dateRuleText(name, args)}`,
+        origin: { kind: 'calculate', nodeId: calculate.id, functionName: calculateName },
+        mode,
+        dates: { functionName: name, column },
+      },
+    };
+  }
+
+  /** The dates a time-intelligence function works out, in plain words. */
+  function dateRuleText(name: string, args: readonly Expr[]): string {
+    const arg = (i: number) => (args[i] ? snippet(args[i], 30) : '?');
+    const count = (i: number): { n: number | null; text: string } => {
+      const a = args[i];
+      if (a?.kind === 'NumberLiteral') return { n: Number(a.value), text: arg(i) };
+      if (a?.kind === 'UnaryOp' && a.operator === '-' && a.operand.kind === 'NumberLiteral') return { n: -Number(a.operand.value), text: arg(i) };
+      return { n: null, text: arg(i) };
+    };
+    const unit = (i: number, n: number | null) => {
+      const word = (args[i] ? snippet(args[i]) : 'interval').toLowerCase();
+      return n !== null && Math.abs(n) === 1 ? word : `${word}s`;
+    };
+    const shift = (n: { n: number | null; text: string }, u: string) =>
+      n.n === null ? `moved by ${n.text} ${u}` : n.n === 0 ? 'not moved' : `${Math.abs(n.n)} ${u} ${n.n < 0 ? 'earlier' : 'later'}`;
+    switch (name) {
+      case 'DATESYTD':
+        return `every date from the start of the year up to the last date in the current filter${args[1] ? ` (for a year ending ${arg(1)})` : ''}`;
+      case 'DATESQTD':
+        return 'every date from the start of the quarter up to the last date in the current filter';
+      case 'DATESMTD':
+        return 'every date from the start of the month up to the last date in the current filter';
+      case 'SAMEPERIODLASTYEAR':
+        return 'the same dates as the current filter, one year earlier';
+      case 'DATEADD': {
+        const n = count(1);
+        return `the dates in the current filter, ${shift(n, unit(2, n.n))}`;
+      }
+      case 'PARALLELPERIOD': {
+        const n = count(1);
+        const u = unit(2, n.n);
+        return `the whole ${unit(2, 1)}s of the current filter, ${shift(n, u)}`;
+      }
+      case 'DATESBETWEEN':
+        return `every date from ${arg(1)} to ${arg(2)}`;
+      case 'DATESINPERIOD': {
+        const n = count(2);
+        const u = unit(3, n.n);
+        if (n.n === null) return `the dates in a period of ${n.text} ${u} from ${arg(1)}`;
+        return n.n < 0 ? `the ${Math.abs(n.n)} ${u} up to ${arg(1)}` : `the ${n.n} ${u} from ${arg(1)}`;
+      }
+      case 'FIRSTDATE':
+        return 'the first date in the current filter';
+      case 'LASTDATE':
+        return 'the last date in the current filter';
+      default: {
+        const match = /^(PREVIOUS|NEXT)(DAY|MONTH|QUARTER|YEAR)$/.exec(name);
+        if (!match) return `the dates ${name} works out`;
+        const period = match[2].toLowerCase();
+        return match[1] === 'PREVIOUS'
+          ? `the whole ${period} before the first date in the current filter`
+          : `the whole ${period} after the last date in the current filter`;
+      }
+    }
   }
 
   function classifyFilter(arg: Expr, calculate: FunctionCall, calculateName: string, mode: 'replace' | 'intersect'): FilterArgument {
@@ -624,6 +766,25 @@ export function analyzeContext(
             if (!direction) return { kind: 'not-modeled', description: `the app doesn't know the direction ${keyword || '(missing)'} in ${snippet(arg)}` };
             return { kind: 'relationship', change: { kind: 'crossfilter', columns: [a, b], direction, nodeId: arg.id, functionName: spec.name } };
           }
+          case 'DATESYTD':
+          case 'DATESQTD':
+          case 'DATESMTD':
+          case 'SAMEPERIODLASTYEAR':
+          case 'DATEADD':
+          case 'PARALLELPERIOD':
+          case 'DATESBETWEEN':
+          case 'DATESINPERIOD':
+          case 'PREVIOUSDAY':
+          case 'PREVIOUSMONTH':
+          case 'PREVIOUSQUARTER':
+          case 'PREVIOUSYEAR':
+          case 'NEXTDAY':
+          case 'NEXTMONTH':
+          case 'NEXTQUARTER':
+          case 'NEXTYEAR':
+          case 'FIRSTDATE':
+          case 'LASTDATE':
+            return timeFilter(spec.name, arg.args, calculate, calculateName, mode);
           case 'TREATAS': {
             const [values, ...targets] = arg.args;
             const columns = targets.map(columnOf);

@@ -9,6 +9,7 @@ const CATEGORY_TEXT: Record<FunctionCategory, string> = {
   table: 'returns a table',
   'scope and filter inspection': 'checks filters',
   relationship: 'uses relationships',
+  'time intelligence': 'works with dates',
   logical: 'logic',
   math: 'math',
   text: 'text',

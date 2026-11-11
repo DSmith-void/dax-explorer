@@ -67,7 +67,13 @@ export function CalculateSteps({ node, step, source, onSelectNode }: CalculateSt
 
   for (const op of step.operations) {
     const argNode = 'nodeId' in op ? findNode(node, op.nodeId) : null;
-    if (op.kind === 'remove-filters') {
+    if (op.kind === 'remove-filters' && op.because) {
+      items.push(
+        <>
+          DAX also removes every other filter on <strong>{removalText(op.removal)}</strong>, by itself, because {op.because}.
+        </>,
+      );
+    } else if (op.kind === 'remove-filters') {
       items.push(
         <>
           {code(argNode, op.functionName)} removes any filter on <strong>{removalText(op.removal)}</strong>.

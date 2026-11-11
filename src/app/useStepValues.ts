@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildStepQuery, rowColumns, rowKey, type RowChoice, type StepQuery } from '../engine/context/stepQuery';
+import { buildStepQuery, dateRangeQueries, rowColumns, rowKey, type RowChoice, type StepQuery, type StepQueryOptions } from '../engine/context/stepQuery';
 import type { FilterValue, ReportFilter } from '../engine/context/reportFilters';
 import { callersOf, type FlatEntry, type Frame } from './frames';
 import type { HelperClient, QueryResult } from './helperClient';
@@ -48,12 +48,12 @@ export function useStepValues({ client, connectionKey, timeline, current, rootFr
   }
 
   // Building a query is cheap (no engine involved), so it isn't cached.
-  const queryFor = useMemo(
+  const optionsFor = useMemo(
     () =>
-      (entry: FlatEntry): StepQuery => {
+      (entry: FlatEntry): StepQueryOptions | null => {
         const { frame } = entry;
-        if (!frame.binding) return { kind: 'none', reason: '' };
-        return buildStepQuery(entry, {
+        if (!frame.binding) return null;
+        return {
           root: frame.result.parse?.root ?? null,
           binding: frame.binding,
           source: frame.result.text,
@@ -61,9 +61,26 @@ export function useStepValues({ client, connectionKey, timeline, current, rootFr
           rows,
           frameKey: frame.key,
           callers: callersOf(frame),
-        });
+        };
       },
     [reportFilters, rows],
+  );
+  const queryFor = useMemo(
+    () =>
+      (entry: FlatEntry): StepQuery => {
+        const options = optionsFor(entry);
+        return options ? buildStepQuery(entry, options) : { kind: 'none', reason: '' };
+      },
+    [optionsFor],
+  );
+  /** For a step that changes a date filter: the queries for its dates before and inside it, and all dates. */
+  const dateRangeFor = useMemo(
+    () => (entry: FlatEntry) => {
+      const options = optionsFor(entry);
+      const queries = options ? dateRangeQueries(entry, options) : null;
+      return queries ? { ...queries, all: { kind: 'scalar', dax: queries.all } as StepQuery } : null;
+    },
+    [optionsFor],
   );
 
   const stateOf = (q: StepQuery): ValueState => {
@@ -127,6 +144,28 @@ export function useStepValues({ client, connectionKey, timeline, current, rootFr
     })();
   }, [wanted, cached, client]);
 
+  // The current step's date ranges (single values), when it changes a date filter.
+  const rangeQueries = useMemo(() => {
+    if (!enabled || !current) return [];
+    const range = dateRangeFor(current);
+    return range ? [range.before, range.after, range.all].filter((q) => q.kind === 'scalar') : [];
+  }, [enabled, current, dateRangeFor]);
+  useEffect(() => {
+    for (const query of rangeQueries) {
+      if (query.kind !== 'scalar') continue;
+      const key = keyOf(query)!;
+      if (cache.has(key) || inFlight.current.has(key)) continue;
+      inFlight.current.add(key);
+      void client
+        .evaluate('scalar', query.dax)
+        .then((result) => setCache((previous) => new Map(previous).set(key, { status: 'ready', result, count: null })))
+        .catch((e: unknown) =>
+          setCache((previous) => new Map(previous).set(key, { status: 'error', message: e instanceof Error ? e.message : 'The dates could not be worked out.' })),
+        )
+        .finally(() => inFlight.current.delete(key));
+    }
+  }, [rangeQueries, cache, client]);
+
   // Values belong to one connection: start over when it changes.
   const [cacheFor, setCacheFor] = useState(connectionKey);
   if (cacheFor !== connectionKey) {
@@ -138,6 +177,7 @@ export function useStepValues({ client, connectionKey, timeline, current, rootFr
     rows,
     queryFor,
     stateOf,
+    dateRangeFor,
     /** Picks a row of an iterator in one measure (by the measure's frame key). */
     pickRow: (frameKey: string, iteratorNodeId: number, choice: RowChoice) =>
       setRows((previous) => new Map(previous).set(rowKey(frameKey, iteratorNodeId), choice)),

@@ -8,7 +8,8 @@ public sealed record ModelMetadata(
     IReadOnlyList<MeasureInfo> Measures,
     IReadOnlyList<RelationshipInfo> Relationships);
 
-public sealed record TableInfo(string Name, bool IsHidden, string? Expression);
+/// <param name="DataCategory">"Time" when the table is marked as a date table; null when not set (or not reported).</param>
+public sealed record TableInfo(string Name, bool IsHidden, string? Expression, string? DataCategory = null);
 
 /// <param name="Kind">How the column is defined: Data, Calculated, or CalculatedTableColumn.</param>
 public sealed record ColumnInfo(string Table, string Name, string DataType, bool IsHidden, string Kind, string? Expression);

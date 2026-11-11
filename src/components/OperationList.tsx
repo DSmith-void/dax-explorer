@@ -37,6 +37,14 @@ export function OperationList({ operations, root, source, onSelectNode }: Operat
               </li>
             );
           case 'remove-filters':
+            if (op.because) {
+              return (
+                <li key={i} className="op-remove op-automatic">
+                  DAX also removes every other filter on <code>{removalText(op.removal)}</code>, by itself, because {op.because}
+                  {op.removedEntries.length > 0 && <> (including {op.removedEntries.map((e) => entryText(e)).join(', ')})</>}.
+                </li>
+              );
+            }
             return (
               <li key={i} className="op-remove">
                 {link(op.nodeId, op.functionName)} removes any filter on <code>{removalText(op.removal)}</code>

@@ -40,6 +40,10 @@ export interface RelationshipModel {
   relationships: readonly Relationship[];
   /** Where it comes from: the connected report, or the built-in example model. */
   source: 'report' | 'example';
+  /** Columns whose data type is a date (or date and time). */
+  dateColumns?: readonly ColumnName[];
+  /** Tables marked as date tables. */
+  dateTables?: readonly string[];
 }
 
 const key = (name: string) => name.toLowerCase();
@@ -109,6 +113,22 @@ export function crossfilterError(r: Relationship, change: RelationshipChange): s
   const oneTable = r.fromMany ? r.toTable : r.fromTable;
   if (!same(filtersFrom, manyTable)) return null;
   return `CROSSFILTER can't make only the many side (${manyTable}) filter the one side (${oneTable}), so DAX shows an error here`;
+}
+
+/**
+ * When a filter is put on this column, does DAX also remove every other filter on its table? It does for
+ * the date column of a date table: a table marked as a date table, or a date-typed column that a
+ * relationship uses (so time intelligence works without the month or year filters getting in the way).
+ * Returns the reason in plain words, or null.
+ */
+export function wholeTableDateRule(model: RelationshipModel, column: ColumnName): string | null {
+  const isDate = (model.dateColumns ?? []).some((c) => same(c.table, column.table) && same(c.column, column.column));
+  if (!isDate) return null;
+  if ((model.dateTables ?? []).some((t) => same(t, column.table))) return `${column.table} is marked as a date table`;
+  const keyOfRelationship = model.relationships.some(
+    (r) => (same(r.toTable, column.table) && same(r.toColumn, column.column)) || (same(r.fromTable, column.table) && same(r.fromColumn, column.column)),
+  );
+  return keyOfRelationship ? `${column.table}[${column.column}] is a date column that a relationship uses` : null;
 }
 
 /** The relationship between two columns (in either order), if the model has one. */

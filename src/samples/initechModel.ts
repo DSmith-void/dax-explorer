@@ -8,6 +8,12 @@ import type { RelationshipModel } from '../engine/context/relationships';
 export const INITECH_MODEL: RelationshipModel = {
   source: 'example',
   tables: ['Sales', 'Product', 'Customer', 'Plant', 'Date'],
+  dateColumns: [
+    { table: 'Date', column: 'Date' },
+    { table: 'Sales', column: 'Date' },
+    { table: 'Sales', column: 'Ship Date' },
+  ],
+  dateTables: [],
   relationships: [
     { fromTable: 'Sales', fromColumn: 'Date', toTable: 'Date', toColumn: 'Date', fromMany: true, toMany: false, active: true, bothDirections: false },
     { fromTable: 'Sales', fromColumn: 'Product Key', toTable: 'Product', toColumn: 'Product Key', fromMany: true, toMany: false, active: true, bothDirections: false },
