@@ -35,15 +35,17 @@
   place-items: center;
   width: 30px;
   height: 30px;
+  border: 1.5px solid var(--color-accent);
   border-radius: 8px;
-  background: var(--color-accent-soft);
   color: var(--color-accent);
+  box-shadow: var(--glow);
 }
 
 .brand h1 {
-  font-size: 1.0625rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
@@ -131,7 +133,7 @@
   border-radius: 50%;
   background: var(--color-accent);
   border: 2px solid var(--color-surface);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 0 10px color-mix(in srgb, var(--color-accent) 60%, transparent);
 }
 
 .timeline-bar input[type='range']::-moz-range-thumb {
@@ -237,10 +239,10 @@
   padding: 8px var(--gap);
 }
 
-/* Two lines: the label, then the value with its detail beside it. */
+/* One line: the label, the value, its detail. */
 .summary-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: baseline;
   gap: 0 8px;
   justify-items: start;
@@ -262,9 +264,13 @@
 }
 
 .summary-card-label {
-  grid-column: 1 / -1;
-  font-size: 0.8125rem;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 .summary-card-value {
@@ -281,15 +287,19 @@
 }
 
 .summary-card-detail {
+  min-width: 0;
+  overflow: hidden;
   font-size: 0.75rem;
   color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* --- Workspace: code | explanation --- */
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+  grid-template-columns: minmax(18rem, 27rem) minmax(0, 1fr);
   gap: 0;
   margin: 0 var(--gap) var(--gap);
   border: 1px solid var(--color-border);
@@ -542,8 +552,10 @@
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--color-text-muted);
+  font-family: var(--font-display);
   font-size: 0.875rem;
-  font-weight: 550;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
 }
 
@@ -575,23 +587,22 @@
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
+  border: 1px solid currentColor;
   border-radius: 999px;
-  background: var(--color-surface-muted);
   color: var(--color-text-muted);
   font-size: 0.6875rem;
   font-weight: 650;
 }
 
 .count-badge.is-warning {
-  background: var(--color-notice-bg);
-  color: var(--color-notice-text);
+  color: var(--color-notice-border);
 }
 
 /* --- Step tab: two columns, like a debugger: the step | filters, technical, variables.
  * On wide screens each column fills the height and scrolls on its own, so the page never does. */
 .step-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
   align-items: start;
 }
 
@@ -643,11 +654,30 @@
 .step-box-header h3 {
   margin: 0;
   flex: 1;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-text);
+  color: inherit;
+}
+
+/* A colour per kind of information: the step and filters (accent), technical, variables. */
+.tone-step > .step-box-header,
+.tone-filter > .step-box-header {
+  color: var(--color-accent);
+}
+
+.tone-technical > .step-box-header {
+  color: var(--color-technical);
+}
+
+.tone-variable > .step-box-header {
+  color: var(--color-variable);
+}
+
+.story-pane > .step-box-header {
+  color: var(--color-text-muted);
 }
 
 .step-box-body {
@@ -665,13 +695,14 @@
 }
 
 .kind-badge {
-  padding: 2px 8px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
   border-radius: 999px;
-  background: var(--color-accent-soft);
   color: var(--color-accent);
+  font-family: var(--font-display);
   font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -682,8 +713,10 @@
 
 .step-title {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+  font-weight: 600;
+  text-wrap: balance;
 }
 
 .step-summary {
@@ -1093,8 +1126,12 @@ select {
 }
 
 .panel-header h2 {
-  font-size: 0.9375rem;
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
   font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
 }
 
 .panel-actions {
@@ -1986,13 +2023,15 @@ select {
   display: grid;
   gap: 6px;
   padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
-  border-radius: 6px;
-  background: var(--color-surface-muted);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface));
+  box-shadow: var(--glow);
 }
 
 .value-number {
+  font-family: var(--font-mono);
+  color: var(--color-accent);
   font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -2352,7 +2391,7 @@ select {
 .tables-map {
   display: block;
   width: 100%;
-  max-height: 15rem;
+  max-height: 16rem;
   margin: 6px 0 2px;
   font-family: var(--font-sans);
 }
@@ -2653,37 +2692,33 @@ select {
   font-weight: 400;
 }
 
+/* Outlined chips, coloured by kind. */
 .hint-kind {
-  padding: 2px 8px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
   border-radius: 999px;
+  font-family: var(--font-display);
   font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .hint-kind-warning {
-  color: var(--color-notice-text);
-  background: var(--color-notice-bg);
-  box-shadow: inset 0 0 0 1px var(--color-notice-border);
+  color: var(--color-notice-border);
 }
 
 .hint-kind-cost {
-  color: var(--color-error-text);
-  background: var(--color-error-bg);
-  box-shadow: inset 0 0 0 1px var(--color-error-border);
+  color: var(--color-error-border);
 }
 
 .hint-kind-note {
   color: var(--color-accent);
-  background: var(--color-accent-soft);
 }
 
 .hint-kind-silent {
   color: var(--color-text-muted);
-  background: var(--color-surface-muted);
-  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
 .hint-list {

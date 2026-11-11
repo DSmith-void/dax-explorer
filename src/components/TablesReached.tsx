@@ -239,8 +239,9 @@ function placeTables(model: RelationshipModel, reach: FilterReach, usedTables: r
   const ring1 = shown.filter((t) => t !== center && center && neighbourOf(center.table, t.table));
   const ring2 = shown.filter((t) => t !== center && !ring1.includes(t));
 
-  const width = ring2.length > 0 ? 640 : 540;
-  const height = ring2.length > 0 ? 250 : 190;
+  // Compact, so it stays readable in the Step tab's narrow Filters column.
+  const width = ring2.length > 0 ? 470 : 390;
+  const height = ring2.length > 0 ? 260 : 200;
   const cx = width / 2;
   const cy = height / 2;
   const rowTables = context.rows.flatMap((r) => (r.table.kind === 'table' ? [r.table.table] : r.table.kind === 'columns' ? r.table.columns.map((c) => c.table) : []));
@@ -258,8 +259,8 @@ function placeTables(model: RelationshipModel, reach: FilterReach, usedTables: r
       const angle = -Math.PI / 2 + offset + (2 * Math.PI * i) / Math.max(list.length, 1);
       boxes.push(place(t, cx + rx * Math.cos(angle), cy + ry * Math.sin(angle)));
     });
-  ring(ring1, ring2.length > 0 ? 170 : 185, ring2.length > 0 ? 62 : 68, 0);
-  ring(ring2, 270, 105, Math.PI / Math.max(ring2.length, 2));
+  ring(ring1, ring2.length > 0 ? 125 : 130, ring2.length > 0 ? 66 : 70, 0);
+  ring(ring2, 195, 112, Math.PI / Math.max(ring2.length, 2));
   // Keep every box inside the drawing.
   for (const b of boxes) {
     b.x = Math.min(Math.max(b.x, b.width / 2 + 4), width - b.width / 2 - 4);

@@ -109,7 +109,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
   return (
     <div className="step-grid">
       <div className="step-col">
-      <Box title="This step" icon="steps" className={`step-box-current${tint ? ` frame-tint-${tint}` : ''}`}>
+      <Box title="This step" icon="steps" className={`step-box-current tone-step${tint ? ` frame-tint-${tint}` : ''}`}>
         <p className="step-kind">
           <span className="kind-badge">{KIND_LABEL[current.kind]}</span>
           {frame.level > 0 && <span className="frame-badge">in {frame.name}</span>}
@@ -170,7 +170,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
       </div>
 
       <div className="step-col">
-      <Box title={changed ? 'Filters: before → after' : 'Filters at this step'} icon="filter">
+      <Box title={changed ? 'Filters: before → after' : 'Filters at this step'} icon="filter" className="tone-filter">
         {changed ? (
           <div className="filters-compare">
             <div>
@@ -188,10 +188,12 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         <DateStrip entry={current} range={values.dateRangeFor(current)} stateOf={values.stateOf} connected={connected} />
         <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={detail === 'brief'} />
       </Box>
+      </div>
 
+      <div className="step-col">
       {detail !== 'brief' && <TechnicalBox entry={current} query={query} runTimings={runTimings} />}
 
-      <Box title={frame.level > 0 ? `Variables in ${frame.name}` : 'Variables'} icon="variable" count={variables.length}>
+      <Box title={frame.level > 0 ? `Variables in ${frame.name}` : 'Variables'} icon="variable" count={variables.length} className="tone-variable">
         {variables.length === 0 ? (
           <p className="empty-note">No variables stored yet.</p>
         ) : (
@@ -311,7 +313,7 @@ function TechnicalBox({ entry, query, runTimings }: { entry: FlatEntry; query: S
     }
   };
   return (
-    <Box title="Technical" icon="logo" className="step-box-technical">
+    <Box title="Technical" icon="logo" className="step-box-technical tone-technical">
       <dl className="technical-list">
         <dt>Filter context{entry.innerContext ? ' (inside)' : ''}</dt>
         <dd>

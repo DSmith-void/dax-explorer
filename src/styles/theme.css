@@ -3,56 +3,114 @@
  * Light palette on :root. Dark palette applies when:
  *   - the OS prefers dark AND the user hasn't forced light, or
  *   - the user explicitly chose dark (data-theme="dark").
- * The dark palette is neutral gray with a teal accent; the light palette mirrors it.
+ * Dark is a navy workspace on a faint grid with an electric-blue accent; light keeps the same structure on a
+ * pale grid. Four colours carry meaning everywhere: filters change (the accent), row by row (amber),
+ * a row becomes a filter (rose), technical (violet), variables (cyan).
  */
+
+/* Fonts, bundled (SIL Open Font License, see public/fonts): a technical face for headings only, a very
+   readable face for the explanations, and a code face. */
+@font-face {
+  font-family: 'Chakra Petch';
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/chakra-petch-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Chakra Petch';
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/chakra-petch-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Chakra Petch';
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/chakra-petch-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/atkinson-hyperlegible-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/atkinson-hyperlegible-400-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/atkinson-hyperlegible-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono.woff2') format('woff2');
+}
+
 :root {
   color-scheme: light;
 
-  --color-bg: #eef0f2;
+  --color-bg: #eef2f7;
+  --color-grid: rgb(30 60 110 / 0.06);
   --color-surface: #ffffff;
-  --color-surface-muted: #f4f5f7;
-  --color-border: #d8dce1;
-  --color-text: #1c1f23;
-  --color-text-muted: #5d6670;
-  --color-accent: #0d8a7e;
-  --color-accent-hover: #0a7469;
+  --color-surface-muted: #f5f8fc;
+  --color-border: #d3dce8;
+  --color-text: #142036;
+  --color-text-muted: #55657f;
+  --color-accent: #2456d6;
+  --color-accent-hover: #1c47b3;
   --color-accent-contrast: #ffffff;
-  --color-accent-soft: #d9f2ee;
-  --color-focus: #0d8a7e;
-  --color-code-bg: #fbfbfc;
-  --color-gutter: #9aa2ab;
-  --color-current: #fff1c2;
+  --color-accent-soft: #e3ebfc;
+  --color-focus: #2456d6;
+  --color-code-bg: #f8fafd;
+  --color-gutter: #94a3b8;
+  --color-current: #fff1bf;
   --color-current-line: #fffaf0;
 
-  --color-notice-bg: #fff7e6;
-  --color-notice-border: #e8b04a;
+  --color-notice-bg: #fff6e0;
+  --color-notice-border: #d9a03a;
   --color-notice-text: #6b4a00;
 
-  --color-success-bg: #e8f6f3;
-  --color-success-border: #4fb3a5;
+  --color-success-bg: #e6f6f4;
+  --color-success-border: #3fb3a3;
   --color-success-text: #0d5c53;
 
-  --color-error-bg: #fdeeee;
-  --color-error-border: #d9605f;
-  --color-error-text: #8a1f1f;
+  --color-error-bg: #fdecf1;
+  --color-error-border: #d0567a;
+  --color-error-text: #8a1f3c;
+
+  /* Meaning colours (the accent is "filters change") */
+  --color-row: #a8650c;
+  --color-transition: #b4325a;
+  --color-technical: #5b45c9;
+  --color-variable: #0f7c86;
 
   /* Syntax colors */
-  --syn-keyword: #8a3fbf;
-  --syn-function: #0b7f73;
-  --syn-table: #1e62b8;
+  --syn-keyword: #7a3fbf;
+  --syn-function: #1f5fbf;
+  --syn-table: var(--color-text); /* table names: plain text, so cyan stays "variables" */
   --syn-bracketed: #8a5a00;
-  --syn-string: #b4441c;
+  --syn-string: #b4325a;
   --syn-number: #2f7d32;
   --syn-comment: #6b8f5a;
   --syn-operator: #4a5560;
-  --syn-measure-name: #5d6670;
+  --syn-measure-name: #55657f;
 
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace;
+  --font-display: 'Chakra Petch', 'Bahnschrift', 'Segoe UI', sans-serif;
+  --font-sans: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'SF Mono', Menlo, monospace;
 
   --radius: 8px;
   --gap: 16px;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.07);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent);
   /* Measures stepped into, by level (1, 2, 3, then repeating) */
   --color-frame-1: #6d5bd0;
   --color-frame-1-soft: #efecfb;
@@ -66,45 +124,52 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --color-bg: #18191c;
-    --color-surface: #202124;
-    --color-surface-muted: #27292d;
-    --color-border: #34373c;
-    --color-text: #e4e6e9;
-    --color-text-muted: #9aa1a9;
-    --color-accent: #2dd4bf;
-    --color-accent-hover: #5eead4;
-    --color-accent-contrast: #062824;
-    --color-accent-soft: #123b37;
-    --color-focus: #5eead4;
-    --color-code-bg: #1c1d20;
-    --color-gutter: #6b7178;
-    --color-current: #3b3420;
-    --color-current-line: #232220;
+    --color-bg: #0a111f;
+    --color-grid: rgb(120 170 255 / 0.05);
+    --color-surface: #0f192b;
+    --color-surface-muted: #15223a;
+    --color-border: #22324f;
+    --color-text: #dbe5f4;
+    --color-text-muted: #8a9bb8;
+    --color-accent: #6c9cff;
+    --color-accent-hover: #94b7ff;
+    --color-accent-contrast: #07101f;
+    --color-accent-soft: #16264a;
+    --color-focus: #94b7ff;
+    --color-code-bg: #0c1424;
+    --color-gutter: #5b6b88;
+    --color-current: #3a3216;
+    --color-current-line: #161d2c;
 
-    --color-notice-bg: #2a2212;
-    --color-notice-border: #8a6a24;
-    --color-notice-text: #f1d18a;
+    --color-notice-bg: #2a2010;
+    --color-notice-border: #c08a2e;
+    --color-notice-text: #f2c46d;
 
-    --color-success-bg: #10302c;
-    --color-success-border: #1f7a6e;
+    --color-success-bg: #0f2e2c;
+    --color-success-border: #2a8f84;
     --color-success-text: #8fe3d6;
 
-    --color-error-bg: #2c1515;
-    --color-error-border: #9a3b3b;
-    --color-error-text: #f3a9a9;
+    --color-error-bg: #2c1420;
+    --color-error-border: #b04a6c;
+    --color-error-text: #f6a9c0;
 
-    --syn-keyword: #c586c0;
-    --syn-function: #4ec9b0;
-    --syn-table: #7cb7f0;
-    --syn-bracketed: #e5c07b;
-    --syn-string: #ce9178;
+    --color-row: #f2b24c;
+    --color-transition: #f26b93;
+    --color-technical: #a993ff;
+    --color-variable: #45d0c8;
+
+    --syn-keyword: #c792ea;
+    --syn-function: #82aaff;
+    --syn-table: var(--color-text);
+    --syn-bracketed: #f2c46d;
+    --syn-string: #f78c6c;
     --syn-number: #b5cea8;
     --syn-comment: #6a9955;
-    --syn-operator: #c8cdd2;
-    --syn-measure-name: #9aa1a9;
+    --syn-operator: #c8d3e5;
+    --syn-measure-name: #8a9bb8;
 
     --shadow: none;
+    --glow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent), 0 0 18px color-mix(in srgb, var(--color-accent) 14%, transparent);
     /* Measures stepped into, by level (1, 2, 3, then repeating) */
     --color-frame-1: #a99cf0;
     --color-frame-1-soft: #2a2540;
@@ -118,45 +183,52 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --color-bg: #18191c;
-  --color-surface: #202124;
-  --color-surface-muted: #27292d;
-  --color-border: #34373c;
-  --color-text: #e4e6e9;
-  --color-text-muted: #9aa1a9;
-  --color-accent: #2dd4bf;
-  --color-accent-hover: #5eead4;
-  --color-accent-contrast: #062824;
-  --color-accent-soft: #123b37;
-  --color-focus: #5eead4;
-  --color-code-bg: #1c1d20;
-  --color-gutter: #6b7178;
-  --color-current: #3b3420;
-  --color-current-line: #232220;
+  --color-bg: #0a111f;
+  --color-grid: rgb(120 170 255 / 0.05);
+  --color-surface: #0f192b;
+  --color-surface-muted: #15223a;
+  --color-border: #22324f;
+  --color-text: #dbe5f4;
+  --color-text-muted: #8a9bb8;
+  --color-accent: #6c9cff;
+  --color-accent-hover: #94b7ff;
+  --color-accent-contrast: #07101f;
+  --color-accent-soft: #16264a;
+  --color-focus: #94b7ff;
+  --color-code-bg: #0c1424;
+  --color-gutter: #5b6b88;
+  --color-current: #3a3216;
+  --color-current-line: #161d2c;
 
-  --color-notice-bg: #2a2212;
-  --color-notice-border: #8a6a24;
-  --color-notice-text: #f1d18a;
+  --color-notice-bg: #2a2010;
+  --color-notice-border: #c08a2e;
+  --color-notice-text: #f2c46d;
 
-  --color-success-bg: #10302c;
-  --color-success-border: #1f7a6e;
+  --color-success-bg: #0f2e2c;
+  --color-success-border: #2a8f84;
   --color-success-text: #8fe3d6;
 
-  --color-error-bg: #2c1515;
-  --color-error-border: #9a3b3b;
-  --color-error-text: #f3a9a9;
+  --color-error-bg: #2c1420;
+  --color-error-border: #b04a6c;
+  --color-error-text: #f6a9c0;
 
-  --syn-keyword: #c586c0;
-  --syn-function: #4ec9b0;
-  --syn-table: #7cb7f0;
-  --syn-bracketed: #e5c07b;
-  --syn-string: #ce9178;
+  --color-row: #f2b24c;
+  --color-transition: #f26b93;
+  --color-technical: #a993ff;
+  --color-variable: #45d0c8;
+
+  --syn-keyword: #c792ea;
+  --syn-function: #82aaff;
+  --syn-table: var(--color-text);
+  --syn-bracketed: #f2c46d;
+  --syn-string: #f78c6c;
   --syn-number: #b5cea8;
   --syn-comment: #6a9955;
-  --syn-operator: #c8cdd2;
-  --syn-measure-name: #9aa1a9;
+  --syn-operator: #c8d3e5;
+  --syn-measure-name: #8a9bb8;
 
   --shadow: none;
+  --glow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent), 0 0 18px color-mix(in srgb, var(--color-accent) 14%, transparent);
   /* Measures stepped into, by level (1, 2, 3, then repeating) */
   --color-frame-1: #a99cf0;
   --color-frame-1-soft: #2a2540;
@@ -179,7 +251,11 @@ body {
 }
 
 body {
-  background: var(--color-bg);
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 15px;
