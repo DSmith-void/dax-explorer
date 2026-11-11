@@ -391,7 +391,7 @@ function FromVisual({
             </p>
           ) : (
             <>
-          <p className="field-label">{visual.groupBy.length > 0 ? 'Pick the row you are looking at:' : 'The value:'}</p>
+          <p className="field-label">{visual.groupBy.length > 0 ? 'Pick the row you are looking at (in a chart: one row per bar or point):' : 'The value:'}</p>
           <div className="table-scroll visual-rows">
             <table className="token-table">
               <thead>
@@ -438,11 +438,23 @@ function FromVisual({
               type="button"
               className={visual.groupBy.length > 0 && rows.cells.length > 0 ? 'secondary-button' : 'primary-button'}
               onClick={() => use(false)}
-              title="The visual's filters (slicers, page and report filters) without choosing one of its rows"
+              title="The filters from outside the visual (slicers, filter pane), without the visual's own fields"
             >
-              Use the visual's filters{visual.groupBy.length > 0 ? ' only' : ''}
+              {visual.groupBy.length > 0 ? 'Measure on its own' : "Use the visual's filters"}
             </button>
           </div>
+          {visual.groupBy.length > 0 && (
+            <p className="data-bar-muted">
+              <strong>Measure on its own</strong>: with the slicers and filter pane, without{' '}
+              {visual.groupBy.map((c, i) => (
+                <span key={columnText(c)}>
+                  {i > 0 && ', '}
+                  <code>{c.column}</code>
+                </span>
+              ))}
+              . The same number a card with just the measure would show.
+            </p>
+          )}
         </>
       )}
     </section>
