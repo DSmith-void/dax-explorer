@@ -20,15 +20,11 @@ const ROLE_TEXT: Record<ArgRole, string> = {
   keyword: 'an option word',
 };
 
-/** Brief: short. Detailed: full plain-language explanations, plus the technical view (DAX's own terms and the queries). */
-export type DetailLevel = 'brief' | 'detailed';
-
 interface ContextInspectorPanelProps {
   result: AnalysisResult | null;
   binding: BindResult | null;
   analysis: ContextAnalysis | null;
   selectedId: number | null;
-  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
   /** Opens a measure from the connected model in the editor. */
   onOpenMeasure: (name: string, expression: string) => void;
@@ -39,7 +35,6 @@ export function ContextInspectorPanel({
   binding,
   analysis,
   selectedId,
-  detail,
   onSelectNode,
   onOpenMeasure,
 }: ContextInspectorPanelProps) {
@@ -54,7 +49,6 @@ export function ContextInspectorPanel({
           result={result}
           binding={binding}
           step={analysis?.steps.get(node.id) ?? null}
-          detail={detail}
           onSelectNode={onSelectNode}
           onOpenMeasure={onOpenMeasure}
         />
@@ -115,23 +109,11 @@ interface DetailsProps {
   result: AnalysisResult;
   binding: BindResult | null;
   step: Step | null;
-  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
   onOpenMeasure: (name: string, expression: string) => void;
 }
 
-/** In Brief mode: just the resulting filters, as one box. */
-function BriefFilters({ node, step, binding, source }: { node: AstNode; step: Step; binding: BindResult | null; source: string }) {
-  const showInner = step.innerContext && step.operations.length > 0;
-  return (
-    <section className="inspector-section">
-      <h3>{showInner ? innerHeading(node, binding, source) : 'Filters in effect here'}</h3>
-      {showInner ? <ContextView context={step.innerContext!} compareTo={step.context} /> : <ContextView context={step.context} />}
-    </section>
-  );
-}
-
-function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode, onOpenMeasure }: DetailsProps) {
+function SelectedNodeDetails({ node, result, binding, step, onSelectNode, onOpenMeasure }: DetailsProps) {
   const root = result.parse?.root ?? null;
   const presentation = presentNode(node, result.text, binding);
   const positionAt = createLineMap(result.text);
@@ -148,14 +130,10 @@ function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode
         <dd>
           <strong className="inspector-label">{presentation.label}</strong> <span className="ast-kind">{presentation.kind}</span>
         </dd>
-        {detail !== 'brief' && (
-          <>
-            <dt>Position</dt>
+                    <dt>Position</dt>
             <dd>
               Line {from.line}, col {from.column} → line {to.line}, col {to.column}
             </dd>
-          </>
-        )}
         {resolution && (
           <>
             <dt>Type</dt>
@@ -187,17 +165,7 @@ function SelectedNodeDetails({ node, result, binding, step, detail, onSelectNode
         </section>
       )}
 
-      {detail === 'brief' ? (
-        <>
-          {step && <BriefFilters node={node} step={step} binding={binding} source={result.text} />}
-          <details className="more-details">
-            <summary>Show the full explanation</summary>
-            <div className="inspector">{renderFull()}</div>
-          </details>
-        </>
-      ) : (
-        renderFull()
-      )}
+      {renderFull()}
     </div>
   );
 

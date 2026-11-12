@@ -53,11 +53,6 @@
   color: var(--color-accent);
 }
 
-.measure-picker select {
-  min-width: 14rem;
-  max-width: 22rem;
-  font-weight: 550;
-}
 
 .icon-button {
   display: inline-grid;
@@ -299,7 +294,8 @@
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(18rem, 27rem) minmax(0, 1fr);
+  /* The code pane's width is adjustable (--left-col); a splitter sits between the two. */
+  grid-template-columns: var(--left-col, 27rem) var(--splitter-width) minmax(0, 1fr);
   gap: 0;
   margin: 0 var(--gap) var(--gap);
   border: 1px solid var(--color-border);
@@ -341,6 +337,10 @@
 @media (max-width: 1000px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace > .splitter {
+    display: none;
   }
 
   .summary-cards {
@@ -617,7 +617,8 @@
  * On wide screens each column fills the height and scrolls on its own, so the page never does. */
 .step-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  /* Adjustable: the columns' shares, strips for folded ones, splitters between (see columnsTemplate). */
+  grid-template-columns: var(--step-cols, minmax(0, 1.1fr) 0 minmax(0, 1fr) 0 minmax(0, 1fr));
   align-items: start;
 }
 
@@ -645,6 +646,10 @@
 @media (max-width: 1300px) {
   .step-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .step-grid > .splitter {
+    display: none;
   }
 
   .step-col {
@@ -677,8 +682,11 @@
   color: inherit;
 }
 
-/* A colour per kind of information: the step and filters (accent), technical, variables. */
-.tone-step > .step-box-header,
+/* A colour per kind of information: filters (the accent), technical, variables; the step itself is neutral. */
+.tone-step > .step-box-header {
+  color: var(--color-text);
+}
+
 .tone-filter > .step-box-header {
   color: var(--color-accent);
 }
@@ -3091,4 +3099,295 @@ button.crumb:hover {
 
 .code-value.is-fresh {
   box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+/* --- Measure picker: a button and a panel (tree by table and display folder, with a search) --- */
+.measure-picker {
+  position: relative;
+}
+
+.picker-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 14rem;
+  max-width: 24rem;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.picker-button:hover {
+  border-color: var(--color-accent);
+}
+
+.picker-label {
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.measure-panel {
+  left: 0;
+  right: auto;
+  gap: 8px;
+  padding: 10px;
+  width: min(26rem, calc(100vw - 2 * var(--gap)));
+}
+
+.picker-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.picker-list .picker-list {
+  padding-left: 16px;
+}
+
+.picker-list button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-list button:hover {
+  background: var(--color-surface-muted);
+}
+
+.picker-list button.is-current {
+  color: var(--color-accent);
+  font-weight: 700;
+  background: var(--color-accent-soft);
+}
+
+.picker-folder {
+  font-weight: 700;
+}
+
+.picker-caret {
+  width: 1ch;
+  color: var(--color-text-muted);
+}
+
+.picker-count,
+.picker-path {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.picker-count {
+  margin-left: auto;
+}
+
+.picker-path {
+  flex-basis: 100%;
+}
+
+/* --- Adjustable sections, like Power BI's panes: splitters, folded strips, fold buttons --- */
+:root {
+  --strip-width: 30px;
+  --splitter-width: 6px;
+}
+
+.splitter {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  touch-action: none;
+}
+
+.splitter::after {
+  content: '';
+  position: absolute;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.splitter-vertical {
+  width: var(--splitter-width);
+  margin: 0 calc(var(--splitter-width) / -2);
+  cursor: col-resize;
+}
+
+.splitter-vertical::after {
+  inset: 0 calc(var(--splitter-width) / 2 - 1px);
+}
+
+.splitter-horizontal {
+  flex: 0 0 var(--splitter-width);
+  margin: calc(var(--splitter-width) / -2) 0;
+  cursor: row-resize;
+}
+
+.splitter-horizontal::after {
+  inset: calc(var(--splitter-width) / 2 - 1px) 0;
+}
+
+.splitter:hover::after,
+.splitter:focus-visible::after {
+  background: var(--color-accent);
+}
+
+.splitter:focus-visible {
+  outline: none;
+}
+
+/* A folded section: a thin strip with its title, top to bottom. */
+.pane-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: var(--strip-width);
+  min-height: 0;
+  padding: 10px 0;
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.pane-strip:hover {
+  color: var(--color-accent);
+}
+
+.pane-strip-chevron {
+  font-weight: 700;
+}
+
+.pane-strip-title {
+  writing-mode: vertical-rl;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.step-grid > .pane-strip {
+  align-self: stretch;
+  border-left: 1px solid var(--color-border);
+}
+
+@media (max-width: 1300px) {
+  .step-grid > .pane-strip {
+    flex-direction: row;
+    width: auto;
+    padding: 6px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .step-grid > .pane-strip .pane-strip-title {
+    writing-mode: horizontal-tb;
+  }
+}
+
+.collapse-button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.collapse-button:hover {
+  border-color: var(--color-border);
+  color: var(--color-accent);
+}
+
+/* Headers that fold their box. */
+.box-toggle {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.box-caret {
+  width: 1ch;
+  font-size: 0.75rem;
+}
+
+.step-box.is-folded {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* The code / story split: the code takes its share; folded parts shrink to their header. */
+@media (min-width: 1001px) {
+  .left-pane > .code-pane[style] {
+    flex: 0 0 auto;
+    max-height: none;
+    min-height: 4rem;
+  }
+
+  .left-pane > .code-pane.is-folded {
+    flex: 0 0 auto;
+  }
+
+  .left-pane:has(> .story-pane .box-toggle[aria-expanded='false']) > .code-pane:not(.is-folded) {
+    flex: 1 1 auto;
+    max-height: none;
+  }
+
+  .left-pane > .story-pane:has(.box-toggle[aria-expanded='false']) {
+    flex: 0 0 auto;
+  }
+}
+
+/* A folded section keeps its symbol and colour. */
+.pane-strip .icon {
+  flex: none;
+}
+
+.pane-strip.strip-accent {
+  color: var(--color-accent);
+}
+
+.pane-strip.strip-technical {
+  color: var(--color-technical);
+}
+
+.pane-strip:hover {
+  background: color-mix(in srgb, currentColor 8%, var(--color-surface-muted));
+}
+
+.code-empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--color-text-muted);
 }

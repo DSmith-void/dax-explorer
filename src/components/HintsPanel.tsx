@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { HINT_KIND_LABEL, type Hint, type HintKind } from '../engine/patterns/hints';
 import { findNode, type AstNode, type Expr } from '../engine/parser/ast';
-import type { DetailLevel } from './ContextInspectorPanel';
 import { Panel } from './Panel';
 
 interface HintsPanelProps {
@@ -9,7 +8,6 @@ interface HintsPanelProps {
   root: Expr | null;
   /** The measure these hints are about, when it is one that was stepped into. */
   measureName: string | null;
-  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
 }
 
@@ -21,7 +19,7 @@ const GROUPS: { kind: HintKind; intro: string }[] = [
 ];
 
 /** Pattern checks: common mistakes, slow patterns, and what DAX does silently. */
-export function HintsPanel({ hints, root, measureName, detail, onSelectNode }: HintsPanelProps) {
+export function HintsPanel({ hints, root, measureName, onSelectNode }: HintsPanelProps) {
   return (
     <Panel id="hints" title={measureName ? `Hints for ${measureName}` : 'Hints'}>
       <div className="hints-body">
@@ -39,7 +37,7 @@ export function HintsPanel({ hints, root, measureName, detail, onSelectNode }: H
                 </h3>
                 <ul className="hint-list">
                   {group.map((hint, i) => (
-                    <HintItem key={`${hint.check}-${hint.nodeId}-${i}`} hint={hint} root={root} detail={detail} onSelectNode={onSelectNode} />
+                    <HintItem key={`${hint.check}-${hint.nodeId}-${i}`} hint={hint} root={root} onSelectNode={onSelectNode} />
                   ))}
                 </ul>
               </section>
@@ -51,7 +49,7 @@ export function HintsPanel({ hints, root, measureName, detail, onSelectNode }: H
   );
 }
 
-function HintItem({ hint, root, detail, onSelectNode }: { hint: Hint; root: Expr | null; detail: DetailLevel; onSelectNode: (node: AstNode) => void }) {
+function HintItem({ hint, root, onSelectNode }: { hint: Hint; root: Expr | null; onSelectNode: (node: AstNode) => void }) {
   const [copied, setCopied] = useState(false);
   const node = findNode(root, hint.nodeId);
   const copy = async (text: string) => {
@@ -67,26 +65,22 @@ function HintItem({ hint, root, detail, onSelectNode }: { hint: Hint; root: Expr
       <button type="button" className="link-button hint-title" onClick={() => node && onSelectNode(node)} title="Show this in the code">
         {hint.title}
       </button>
-      {detail === 'detailed' && (
-        <>
-          <p className="hint-why">{hint.why}</p>
-          {hint.suggestion && (
-            <div className="hint-suggestion">
-              <p className="field-label">Instead</p>
-              <div className="hint-code-row">
-                <code>{hint.suggestion.dax}</code>
-                {/* Only a rewrite that works as it is can be copied (not "(leave …)" or "<a column …>"). */}
-                {!/^\(|<|…/.test(hint.suggestion.dax) && (
-                  <button type="button" className="secondary-button" onClick={() => void copy(hint.suggestion!.dax)}>
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                )}
-              </div>
-              <p className="hint-why">{hint.suggestion.note}</p>
-            </div>
-          )}
-        </>
+        <p className="hint-why">{hint.why}</p>
+        {hint.suggestion && (
+        <div className="hint-suggestion">
+          <p className="field-label">Instead</p>
+          <div className="hint-code-row">
+            <code>{hint.suggestion.dax}</code>
+            {/* Only a rewrite that works as it is can be copied (not "(leave …)" or "<a column …>"). */}
+            {!/^\(|<|…/.test(hint.suggestion.dax) && (
+              <button type="button" className="secondary-button" onClick={() => void copy(hint.suggestion!.dax)}>
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            )}
+          </div>
+          <p className="hint-why">{hint.suggestion.note}</p>
+        </div>
       )}
-    </li>
-  );
+  </li>
+);
 }

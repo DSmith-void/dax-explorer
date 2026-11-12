@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import type { AnalysisResult } from '../app/analysis';
 import { frameTint, type Frame } from '../app/frames';
 import type { InputMode } from '../engine/definition';
@@ -29,6 +29,12 @@ interface CodePaneProps {
   onSelectFrame: (frame: Frame) => void;
   /** Values worked out so far, shown in the code. */
   annotations?: readonly CodeAnnotation[];
+  /** Buttons at the end of the header (collapse, hide). */
+  actions?: ReactNode;
+  /** Only the header shows. */
+  collapsed?: boolean;
+  /** Its share of the pane's height, when the story is shown too. */
+  style?: CSSProperties;
 }
 
 const MODE_OPTIONS: { value: InputMode; label: string; title: string }[] = [
@@ -54,11 +60,14 @@ export function CodePane({
   frames,
   onSelectFrame,
   annotations,
+  actions,
+  collapsed = false,
+  style,
 }: CodePaneProps) {
   const shown = editing ? undefined : frames[frames.length - 1];
   const tint = shown ? frameTint(shown.level) : 0;
   return (
-    <section className={`code-pane${tint ? ` frame-tint-${tint}` : ''}`} aria-label="DAX">
+    <section className={`code-pane${tint ? ` frame-tint-${tint}` : ''}${collapsed ? ' is-folded' : ''}`} aria-label="DAX" style={style}>
       {shown && shown.level > 0 && (
         // Keyed by the measure, so the highlight replays each time the code switches to another measure.
         <nav key={shown.key} className="frame-breadcrumb" aria-label="Measures stepped into">
@@ -90,6 +99,7 @@ export function CodePane({
             <button type="button" className="primary-button" onClick={onExplain} disabled={text.trim().length === 0}>
               Explain
             </button>
+            {actions}
           </>
         ) : (
           <>
@@ -100,11 +110,12 @@ export function CodePane({
                 <Icon name="edit" /> Edit
               </button>
             )}
+            {actions}
           </>
         )}
       </header>
 
-      {editing ? (
+      {!collapsed && (editing ? (
         <>
           <label className="visually-hidden" htmlFor="dax-editor">
             DAX
@@ -142,8 +153,12 @@ export function CodePane({
           annotations={annotations}
         />
       ) : (
-        <pre className="code-view code-view-plain">{result?.text ?? text}</pre>
-      )}
+        (result?.text ?? text).trim() === '' ? (
+          <p className="code-empty">Choose a measure from the list above, or press Edit to write your own DAX.</p>
+        ) : (
+          <pre className="code-view code-view-plain">{result?.text ?? text}</pre>
+        )
+      ))}
     </section>
   );
 }

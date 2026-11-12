@@ -95,11 +95,11 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
         </section>
 
         <section>
-          <h3>Brief or Detailed</h3>
+          <h3>Technical, and arranging the screen</h3>
           <p>
-            Brief keeps explanations short; Detailed adds the full reasoning and a Technical box with DAX&apos;s own terms (filter context, row
-            context, context transition) and the exact query behind each value, to copy into DAX Studio. Everything runs on this
-            computer.
+            The Technical box uses DAX&apos;s own terms (filter context, row context, context transition) and shows the exact query
+            behind each value, to copy into DAX Studio. Drag the borders between sections to resize them, or fold a section away with
+            its ‹ button. Everything runs on this computer.
           </p>
         </section>
       </div>

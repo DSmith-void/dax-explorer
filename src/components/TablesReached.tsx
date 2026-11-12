@@ -8,7 +8,7 @@ interface TablesReachedProps {
   context: EvalContext;
   /** Tables the measure's code names: always shown, even in a big model. */
   usedTables: readonly string[];
-  /** Folded to one line (Brief). */
+  /** Folded to one line. */
   folded: boolean;
 }
 

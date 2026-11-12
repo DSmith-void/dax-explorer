@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { CodePane } from '../components/CodePane';
-import { ContextInspectorPanel, type DetailLevel } from '../components/ContextInspectorPanel';
+import { ContextInspectorPanel } from '../components/ContextInspectorPanel';
 import { DataSourceBar } from '../components/DataSourceBar';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { ExpressionTreePanel } from '../components/ExpressionTreePanel';
@@ -12,7 +12,6 @@ import { RelationshipContext } from '../components/relationshipContext';
 import { relationshipFromInfo, type RelationshipModel } from '../engine/context/relationships';
 import { INITECH_MODEL } from '../samples/initechModel';
 import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
-import { SegmentedControl } from '../components/SegmentedControl';
 import { TimelineBar } from '../components/StepControls';
 import { StepPanel, StoryList } from '../components/StepPanel';
 import type { CodeAnnotation } from '../components/CodeView';
@@ -30,6 +29,8 @@ import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../sample
 import { analyze, type AnalysisResult } from './analysis';
 import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
 import { useNewerTab } from './newerTab';
+import { clamp, LEFT_MAX, LEFT_MIN, useLayout } from './layout';
+import { CollapseButton, PaneStrip, Splitter } from '../components/Splitter';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
 import { measureDefinitionText, toModelSnapshot } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
@@ -41,17 +42,11 @@ type Choices = Record<string, ReferenceType>;
 type Tab = 'step' | 'hints' | 'part' | 'tree' | 'problems';
 
 const isResolutionMode = (value: unknown): value is ResolutionMode => value === 'convention' || value === 'strict';
-const isDetailLevel = (value: unknown): value is DetailLevel => value === 'brief' || value === 'detailed';
 const isChoices = (value: unknown): value is Choices =>
   typeof value === 'object' &&
   value !== null &&
   !Array.isArray(value) &&
   Object.values(value).every((v) => v === 'measure' || v === 'column');
-
-const DETAIL_OPTIONS: { value: DetailLevel; label: string; title: string }[] = [
-  { value: 'brief', label: 'Brief', title: 'Short explanations' },
-  { value: 'detailed', label: 'Detailed', title: 'Full explanations, plus the technical view: DAX terms and the query behind each value' },
-];
 
 /** True when a key press belongs to a form control (typing, choosing), not to stepping. */
 function isFormTarget(target: EventTarget | null): boolean {
@@ -77,11 +72,12 @@ export function App() {
     isResolutionMode,
   );
   const [userChoices, setUserChoices] = usePersistentState<Choices>('dax-explorer-reference-choices', {}, isChoices);
-  // Detailed by default: this is a learning tool. Remembered once changed.
-  const [detail, setDetail] = usePersistentState<DetailLevel>('dax-explorer-detail', 'detailed', isDetailLevel);
   const editorRef = useRef<HTMLTextAreaElement>(null);
 
   // The optional local helper (Power BI Desktop connection). Created once; the token is read from the address bar.
+  // Sizes and folded sections of the workspace (like Power BI's panes), remembered in this browser.
+  const { layout, update } = useLayout();
+  const leftPane = useRef<HTMLDivElement>(null);
   const [helperToken] = useState(takeHelperToken);
   const [helperClient] = useState(() => createHelperClient(helperToken));
   // A second click on Power BI's ribbon opens a new tab; this one then no longer shows the current report.
@@ -107,7 +103,7 @@ export function App() {
       connectedModel
         ? connectedModel.model.measures
             .filter((m) => !m.isHidden)
-            .map((m) => ({ name: m.name, text: measureDefinitionText(m.name, m.expression) }))
+            .map((m) => ({ name: m.name, text: measureDefinitionText(m.name, m.expression), table: m.table, folder: m.displayFolder }))
             .sort((a, b) => a.name.localeCompare(b.name))
         : [],
     [connectedModel],
@@ -299,6 +295,16 @@ export function App() {
     // Report filters belong to one model: forget them when the connection changes.
     if (connectedModel?.model.databaseName !== model?.databaseName || connectedModel?.connection.port !== connection?.port) {
       setReportFilters([]);
+      // Newly connected: a built-in example makes way for the model's own measures (DAX you wrote stays).
+      if (model && result && SAMPLE_MEASURES.some((s) => s.expression === result.text)) {
+        setResult(null);
+        setDaxText('');
+        setInputMode('measure-definition');
+        setExpanded(new Set());
+        setStepIndex(0);
+        setSelectedNodeId(null);
+        setEditing(false);
+      }
     }
     setConnectedModel(model && connection ? { model, connection } : null);
   }
@@ -396,7 +402,6 @@ export function App() {
             client={helperClient}
             onModelChange={handleModelChange}
           />
-          <SegmentedControl label="Explanations" options={DETAIL_OPTIONS} value={detail} onChange={setDetail} />
           <ThemeToggle value={theme} onChange={setTheme} />
           <button type="button" className="icon-button help-button" onClick={() => setHelpOpen(true)} title="How to read DAX Explorer">
             <span aria-hidden="true">?</span>
@@ -420,8 +425,14 @@ export function App() {
         }}
       />
 
-      <main className="workspace">
-        <div className="left-pane">
+      <main
+        className="workspace"
+        style={{ '--left-col': layout.leftOpen ? `${layout.left}px` : 'var(--strip-width)' } as CSSProperties}
+      >
+        {!layout.leftOpen ? (
+          <PaneStrip title="Code and story" icon="code" onOpen={() => update({ leftOpen: true })} />
+        ) : (
+        <div className="left-pane" ref={leftPane}>
         <CodePane
           editing={editing}
           onEdit={handleEdit}
@@ -439,11 +450,53 @@ export function App() {
           onSelectNode={handleSelectNode}
           concept={matchingSample?.concept ?? null}
           annotations={editing ? [] : codeAnnotations}
+          collapsed={!layout.codeOpen && !editing}
+          style={layout.codeOpen && layout.storyOpen && !editing && timeline.length > 0 ? { flexBasis: `${layout.code * 100}%` } : undefined}
+          actions={
+            <>
+              {!editing && (
+                <CollapseButton
+                  direction="up"
+                  title={layout.codeOpen ? 'the code' : 'nothing'}
+                  onClick={() => update((l) => ({ codeOpen: !l.codeOpen }))}
+                />
+              )}
+              <CollapseButton title="the code and story" onClick={() => update({ leftOpen: false })} />
+            </>
+          }
         />
+        {!editing && timeline.length > 0 && layout.codeOpen && layout.storyOpen && (
+          <Splitter
+            orientation="horizontal"
+            label="Border between the code and the story"
+            onDrag={(px) => {
+              const height = leftPane.current?.clientHeight ?? 600;
+              update((l) => ({ code: clamp(l.code + px / height, 0.15, 0.85) }));
+            }}
+            onReset={() => update({ code: 0.55 })}
+          />
+        )}
         {!editing && timeline.length > 0 && (
-          <StoryList entries={timeline} index={index} onStep={goToStep} values={stepValues} connected={connectedModel !== null} />
+          <StoryList
+            entries={timeline}
+            index={index}
+            onStep={goToStep}
+            values={stepValues}
+            connected={connectedModel !== null}
+            open={layout.storyOpen}
+            onToggle={() => update((l) => ({ storyOpen: !l.storyOpen }))}
+          />
         )}
         </div>
+        )}
+        {layout.leftOpen && (
+          <Splitter
+            orientation="vertical"
+            label="Border between the code and the explanation"
+            onDrag={(px) => update((l) => ({ left: clamp(l.left + px, LEFT_MIN, LEFT_MAX) }))}
+            onReset={() => update({ left: 432 })}
+          />
+        )}
 
         <section className="inspector-pane" aria-label="Explanation">
           <div className="tabs" role="tablist" aria-label="Explanation views">
@@ -474,7 +527,6 @@ export function App() {
                 entries={timeline}
                 index={index}
                 onStep={goToStep}
-                detail={detail}
                 onSelectNode={handleSelectNode}
                 values={stepValues}
                 connected={connectedModel !== null}
@@ -484,6 +536,8 @@ export function App() {
                 hintsAt={(entry) => (entry.frame === activeFrame && entry.nodeId !== null ? hints.filter((h) => h.nodeId === entry.nodeId) : [])}
                 onShowHints={() => setTab('hints')}
                 runTimings={connectedModel ? (kind, dax, clearCache) => helperClient.timings(kind, dax, clearCache) : null}
+                layout={layout}
+                onLayout={update}
               />
             )}
             {tab === 'hints' && (
@@ -491,7 +545,6 @@ export function App() {
                 hints={hints}
                 root={root}
                 measureName={activeFrame && activeFrame.level > 0 ? activeFrame.name : null}
-                detail={detail}
                 onSelectNode={handleSelectNode}
               />
             )}
@@ -501,7 +554,6 @@ export function App() {
                 binding={binding}
                 analysis={contextAnalysis}
                 selectedId={selectedNode?.id ?? current?.nodeId ?? null}
-                detail={detail}
                 onSelectNode={handleSelectNode}
                 onOpenMeasure={(name, expression) => explain(measureDefinitionText(name, expression), 'measure-definition')}
               />
@@ -526,7 +578,6 @@ export function App() {
                 result={activeResult}
                 binding={binding}
                 analysis={contextAnalysis}
-                detail={detail}
                 inputChangedSinceAnalysis={editing && result !== null && (result.text !== daxText || result.mode !== inputMode)}
                 onSelectNode={handleSelectNode}
               />

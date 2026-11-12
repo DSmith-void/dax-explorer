@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { summarizeTimings, timingRequest, type TimingResult } from '../app/timings';
 import { HINT_KIND_LABEL, type Hint } from '../engine/patterns/hints';
 import { scrollWithin } from './scrollWithin';
+import { moveBorder, type Layout } from '../app/layout';
+import { CollapseButton, PaneStrip, Splitter } from './Splitter';
 import { framePath, frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
 import { TablesReached } from './TablesReached';
 import { DateStrip } from './DateStrip';
@@ -14,7 +16,6 @@ import type { TimelineKind } from '../engine/context/timeline';
 import type { AstNode } from '../engine/parser/ast';
 import { findNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
-import type { DetailLevel } from './ContextInspectorPanel';
 import { ContextView } from './ContextView';
 import { Icon, type IconName } from './Icons';
 import { DIFF_MEANING, DIFF_SYMBOL, stepParts, type DiffLine, type StepParts } from '../engine/context/stepParts';
@@ -29,7 +30,6 @@ interface StepPanelProps {
   entries: readonly FlatEntry[];
   index: number;
   onStep: (index: number) => void;
-  detail: DetailLevel;
   onSelectNode: (node: AstNode) => void;
   /** Real values from the connected report. */
   values: StepValues;
@@ -41,6 +41,9 @@ interface StepPanelProps {
   /** Pattern checks about this step's code. */
   hintsAt: (entry: FlatEntry) => readonly Hint[];
   onShowHints: () => void;
+  /** Column widths and folded sections (adjustable, like Power BI's panes). */
+  layout: Layout;
+  onLayout: (change: Partial<Layout> | ((current: Layout) => Partial<Layout>)) => void;
   /** "Run with timings" on the connected report; null when not connected. */
   runTimings: ((kind: 'scalar' | 'table', dax: string, clearCache: boolean) => Promise<TimingResult>) | null;
 }
@@ -76,22 +79,82 @@ const KIND_LABEL: Record<TimelineKind, string> = {
 /** Kinds whose analyzer notes add to the summary (the others have no notes of their own). */
 const HAS_NOTES = new Set<TimelineKind>(['variable', 'variable-use', 'measure', 'reference', 'column', 'filter-input', 'iterate', 'function', 'unknown']);
 
-function Box({ title, icon, count, className, children }: { title: string; icon: IconName; count?: number; className?: string; children: ReactNode }) {
+function Box({
+  title,
+  icon,
+  count,
+  className,
+  children,
+  open = true,
+  onToggle,
+  actions,
+}: {
+  title: string;
+  icon: IconName;
+  count?: number;
+  className?: string;
+  children: ReactNode;
+  /** With onToggle: the box can be folded to its header. */
+  open?: boolean;
+  onToggle?: () => void;
+  /** Buttons at the end of the header (hide the column). */
+  actions?: ReactNode;
+}) {
   return (
-    <section className={['step-box', className].filter(Boolean).join(' ')}>
+    <section className={['step-box', className, open ? '' : 'is-folded'].filter(Boolean).join(' ')}>
       <header className="step-box-header">
-        <Icon name={icon} />
-        <h3>{title}</h3>
+        {onToggle ? (
+          <button type="button" className="box-toggle" aria-expanded={open} onClick={onToggle} title={open ? `Fold ${title}` : `Unfold ${title}`}>
+            <span className="box-caret" aria-hidden="true">
+              {open ? '▾' : '▸'}
+            </span>
+            <Icon name={icon} />
+            <h3>{title}</h3>
+          </button>
+        ) : (
+          <>
+            <Icon name={icon} />
+            <h3>{title}</h3>
+          </>
+        )}
         {count !== undefined && <span className="count-badge">{count}</span>}
+        {actions}
       </header>
-      <div className="step-box-body">{children}</div>
+      {open && <div className="step-box-body">{children}</div>}
     </section>
   );
 }
 
 /** The "Step" tab: what happens at the current step, the filters, the variables, and the story so far. */
-export function StepPanel({ entries, index, onStep, detail, onSelectNode, values, connected, stepInto, isExpanded, onExpand, hintsAt, onShowHints, runTimings }: StepPanelProps) {
+/** The Step tab's columns: open ones share the width as set; folded ones are a strip; borders between open ones. */
+function columnsTemplate(layout: Layout): string {
+  const col = (i: number) => (layout.colsOpen[i] ? `minmax(0, ${layout.cols[i]}fr)` : 'var(--strip-width)');
+  const border = (i: number) => (layout.colsOpen[i] && layout.colsOpen[i + 1] ? 'var(--splitter-width)' : '0px');
+  return `${col(0)} ${border(0)} ${col(1)} ${border(1)} ${col(2)}`;
+}
+
+/** The draggable border between two Step columns (only when both are open). */
+function ColumnBorder({ left, layout, onLayout, grid }: { left: number; layout: Layout; onLayout: StepPanelProps['onLayout']; grid: RefObject<HTMLDivElement | null> }) {
+  if (!layout.colsOpen[left] || !layout.colsOpen[left + 1]) return <span aria-hidden="true" />;
+  return (
+    <Splitter
+      orientation="vertical"
+      label="Border between columns"
+      onDrag={(px) => {
+        const width = grid.current?.clientWidth ?? 1000;
+        onLayout((l) => {
+          const open = l.cols.reduce((sum, c, i) => sum + (l.colsOpen[i] ? c : 0), 0);
+          return { cols: moveBorder(l.cols, left, (px / width) * open) };
+        });
+      }}
+      onReset={() => onLayout({ cols: [36, 33, 31] })}
+    />
+  );
+}
+
+export function StepPanel({ entries, index, onStep, onSelectNode, values, connected, stepInto, isExpanded, onExpand, hintsAt, onShowHints, runTimings, layout, onLayout }: StepPanelProps) {
   const current = entries[index];
+  const grid = useRef<HTMLDivElement>(null);
   if (!current) {
     return <p className="empty-note">Nothing to step through yet. Pick a measure, or write your own DAX and press Explain.</p>;
   }
@@ -99,7 +162,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
   const root = frame.result.parse?.root ?? null;
   const source = frame.result.text;
   const lineAt = createLineMap(source);
-  const notes = detail !== 'brief' && current.nodeId !== null && HAS_NOTES.has(current.kind)
+  const notes = current.nodeId !== null && HAS_NOTES.has(current.kind)
     ? (frame.analysis?.steps.get(current.nodeId)?.notes ?? []).filter((n) => n !== current.summary)
     : [];
   const changed = current.innerContext !== undefined && current.operations.length > 0;
@@ -112,9 +175,10 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
   const tint = frameTint(frame.level);
 
   return (
-    <div className="step-grid">
+    <div className="step-grid" ref={grid} style={{ '--step-cols': columnsTemplate(layout) } as CSSProperties}>
+      {layout.colsOpen[0] ? (
       <div className="step-col">
-      <Box title="This step" icon="steps" className={`step-box-current tone-step${tint ? ` frame-tint-${tint}` : ''}`}>
+      <Box title="This step" icon="steps" className={`step-box-current tone-step${tint ? ` frame-tint-${tint}` : ''}`} actions={<CollapseButton title="the This step column" onClick={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 0 ? false : o)) as Layout['colsOpen'] }))} />}>
         <Where entry={current} parts={parts} rowFor={(id) => values.rows.get(rowKey(frame.key, id))} onSelectNode={onSelectNode} root={root} />
         <p className="step-kind">
           <span className="kind-badge">{KIND_LABEL[current.kind]}</span>
@@ -123,7 +187,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
           )}
         </p>
         <h4 className="step-title">{current.title}</h4>
-        <Diff entry={current} parts={parts} detail={detail} root={root} onSelectNode={onSelectNode} />
+        <Diff entry={current} parts={parts} root={root} onSelectNode={onSelectNode} />
         {hintsAt(current).length > 0 && (
           <ul className="step-hints">
             {hintsAt(current).map((hint, i) => (
@@ -145,7 +209,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         />
         {target && <StepIntoControl target={target} isExpanded={isExpanded} onExpand={onExpand} />}
         {/* Why: the step's sentence when there is no change to show (otherwise "what changes" says it), then
-            the notes, in Detailed, for what the changes don't say. */}
+            the notes, for what the changes don't say. */}
         {parts.diff.length === 0 && <p className="step-why">{current.summary}</p>}
         {notes.map((note, i) => (
           <p key={i} className="step-note">
@@ -170,9 +234,13 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
         </nav>
       </Box>
       </div>
-
+      ) : (
+        <PaneStrip title="This step" icon="steps" tone="muted" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 0 ? true : o)) as Layout['colsOpen'] }))} />
+      )}
+      <ColumnBorder left={0} layout={layout} onLayout={onLayout} grid={grid} />
+      {layout.colsOpen[1] ? (
       <div className="step-col">
-      <Box title={changed ? 'Filters: before → after' : 'Filters at this step'} icon="filter" className="tone-filter">
+      <Box title={changed ? 'Filters: before → after' : 'Filters at this step'} icon="filter" className="tone-filter" actions={<CollapseButton title="the Filters column" onClick={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 1 ? false : o)) as Layout['colsOpen'] }))} />}>
         {changed ? (
           <div className="filters-compare">
             <div>
@@ -188,14 +256,25 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
           <ContextView context={current.context} />
         )}
         <DateStrip entry={current} range={values.dateRangeFor(current)} stateOf={values.stateOf} connected={connected} />
-        <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={detail === 'brief'} />
+        <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={false} />
       </Box>
       </div>
-
+      ) : (
+        <PaneStrip title="Filters" icon="filter" tone="accent" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 1 ? true : o)) as Layout['colsOpen'] }))} />
+      )}
+      <ColumnBorder left={1} layout={layout} onLayout={onLayout} grid={grid} />
+      {layout.colsOpen[2] ? (
       <div className="step-col">
-      {detail !== 'brief' && <TechnicalBox entry={current} query={query} runTimings={runTimings} />}
+              <TechnicalBox
+          entry={current}
+          query={query}
+          runTimings={runTimings}
+          open={layout.technicalOpen}
+          onToggle={() => onLayout((l) => ({ technicalOpen: !l.technicalOpen }))}
+          actions={<CollapseButton title="the Technical and Variables column" onClick={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 2 ? false : o)) as Layout['colsOpen'] }))} />}
+        />
 
-      <Box title={frame.level > 0 ? `Variables in ${frame.name}` : 'Variables'} icon="variable" count={variables.length} className="tone-variable">
+      <Box title={frame.level > 0 ? `Variables in ${frame.name}` : 'Variables'} icon="variable" count={variables.length} className="tone-variable" open={layout.variablesOpen} onToggle={() => onLayout((l) => ({ variablesOpen: !l.variablesOpen }))}>
         {variables.length === 0 ? (
           <p className="empty-note">No variables stored yet.</p>
         ) : (
@@ -213,6 +292,9 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
       </Box>
 
       </div>
+      ) : (
+        <PaneStrip title="Technical and Variables" icon="logo" tone="technical" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 2 ? true : o)) as Layout['colsOpen'] }))} />
+      )}
     </div>
   );
 }
@@ -223,10 +305,12 @@ interface StoryListProps {
   onStep: (index: number) => void;
   values: StepValues;
   connected: boolean;
+  open: boolean;
+  onToggle: () => void;
 }
 
 /** Every step, in order, with the measures stepped into in tinted bands: the way to jump around. */
-export function StoryList({ entries, index, onStep, values, connected }: StoryListProps) {
+export function StoryList({ entries, index, onStep, values, connected, open, onToggle }: StoryListProps) {
   // Keep the current step in view while stepping through a long measure.
   const pane = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -235,11 +319,16 @@ export function StoryList({ entries, index, onStep, values, connected }: StoryLi
   return (
     <section className="story-pane" aria-label="The story so far" ref={pane}>
       <header className="step-box-header">
-        <Icon name="steps" />
-        <h3>The story so far</h3>
+        <button type="button" className="box-toggle" aria-expanded={open} onClick={onToggle} title={open ? 'Fold the story so far' : 'Unfold the story so far'}>
+          <span className="box-caret" aria-hidden="true">
+            {open ? '▾' : '▸'}
+          </span>
+          <Icon name="steps" />
+          <h3>The story so far</h3>
+        </button>
         <span className="count-badge">{entries.length === 0 ? 0 : `${index + 1} / ${entries.length}`}</span>
       </header>
-      <ol className="story-list">
+      {open && (<ol className="story-list">
         {entries.map((e) => {
           const eTint = frameTint(e.frame.level);
           return (
@@ -263,7 +352,7 @@ export function StoryList({ entries, index, onStep, values, connected }: StoryLi
             </li>
           );
         })}
-      </ol>
+      </ol>)}
     </section>
   );
 }
@@ -293,7 +382,21 @@ function StepIntoControl({ target, isExpanded, onExpand }: { target: StepInto; i
 }
 
 /** For experienced users: the context in DAX's own terms, and the exact query behind the value. */
-function TechnicalBox({ entry, query, runTimings }: { entry: FlatEntry; query: StepQuery; runTimings: StepPanelProps['runTimings'] }) {
+function TechnicalBox({
+  entry,
+  query,
+  runTimings,
+  open,
+  onToggle,
+  actions,
+}: {
+  entry: FlatEntry;
+  query: StepQuery;
+  runTimings: StepPanelProps['runTimings'];
+  open: boolean;
+  onToggle: () => void;
+  actions: ReactNode;
+}) {
   const [copied, setCopied] = useState<string | null>(null);
   const reach = useFilterReach(entry.innerContext ?? entry.context)?.reach;
   const reached = reach?.tables.filter((t) => t.state === 'reached') ?? [];
@@ -315,7 +418,7 @@ function TechnicalBox({ entry, query, runTimings }: { entry: FlatEntry; query: S
     }
   };
   return (
-    <Box title="Technical" icon="logo" className="step-box-technical tone-technical">
+    <Box title="Technical" icon="logo" className="step-box-technical tone-technical" open={open} onToggle={onToggle} actions={actions}>
       <dl className="technical-list">
         <dt>Filter context{entry.innerContext ? ' (inside)' : ''}</dt>
         <dd>
@@ -522,7 +625,7 @@ function Where({ entry, parts, rowFor, onSelectNode, root }: { entry: FlatEntry;
 }
 
 /** What changes at this step: one line per change, in the order DAX makes them, with a key to the symbols. */
-function Diff({ entry, parts, detail, root, onSelectNode }: { entry: FlatEntry; parts: StepParts; detail: DetailLevel; root: AstNode | null; onSelectNode: (node: AstNode) => void }) {
+function Diff({ entry, parts, root, onSelectNode }: { entry: FlatEntry; parts: StepParts; root: AstNode | null; onSelectNode: (node: AstNode) => void }) {
   const filters = useReportFilters();
   if (entry.kind === 'start' || entry.kind === 'result' || entry.kind === 'enter' || entry.kind === 'return') return null;
   const kinds = [...new Set(parts.diff.map((d) => d.kind))];
@@ -555,7 +658,7 @@ function Diff({ entry, parts, detail, root, onSelectNode }: { entry: FlatEntry; 
           ))}
         </ul>
       )}
-      {detail !== 'brief' && kinds.length > 0 && (
+      {kinds.length > 0 && (
         <p className="diff-key">
           {kinds.map((k) => (
             <span key={k}>
