@@ -1,103 +1,104 @@
-# DAX Execution Explorer
+# DAX Explorer
 
-A learning and debugging tool that will visually explain how a DAX expression is evaluated: filter context,
-row context, context transition, CALCULATE modifiers, virtual tables, and more.
+Step through how a DAX measure is calculated, one step at a time, with the real values from your
+Power BI report at every step.
 
-> **Status: early preview (milestone 5).** DAX is parsed into a clickable expression tree, references are
-> classified as measures or columns with their source of evidence, and a **symbolic context engine** shows, for
-> every node, the filter and row context it is evaluated in and what it changes: CALCULATE filters and
-> modifiers (REMOVEFILTERS, ALL, ALLEXCEPT, KEEPFILTERS), iterators, context transition, and when variables are
-> evaluated. Filters coming from the report are shown as **F**. Relationships and anything else not modeled is
-> labeled as such rather than guessed. You can **step through** a measure in the logical order DAX defines
-> (not the order the Power BI engine physically runs a query in), with the code, filters and variables shown at
-> each step.
+![DAX Explorer stepping through a measure](docs/preview.gif)
 
-## Design principles
+DAX is hard to learn because the most important part is invisible: which filters apply at each point
+of a calculation, when DAX goes row by row, and when a row turns into a filter. DAX Explorer makes that
+visible, like a debugger for measures. It is meant for people learning DAX and for experienced users
+tracking down a wrong number.
 
-- **Deterministic semantics.** What an expression means is decided by explicit rules and tests, never by an AI model.
-- **Never guess.** Unsupported or uncertain behavior is reported as such.
-- **Known vs. unavailable.** Results distinguish what is certain from what needs model metadata, query/visual
-  context, or actual data.
-- **Local first.** Runs entirely in the browser. No backend, no accounts, no data leaves the page.
-- **Synthetic examples only.** All samples use a made-up company, Initech (Sales, Product, Customer, Date, Plant).
+## What it does
 
-## Requirements
+- **Steps, like a debugger.** Press Next to go through a measure in the order DAX evaluates it. Each
+  step says where it runs (inside which CALCULATE or loop), **what changes** (filters added, replaced
+  or removed, a row becoming a filter, a relationship switched on), and its value.
+- **Real values from Power BI Desktop.** Connect to a report you have open and each step shows its
+  value, worked out by Power BI's own engine. Values appear next to the code as you step, debugger style.
+- **Step into measures.** When a measure calls another, step into it and back out again.
+- **Report filters ("F").** Choose filters by hand, or take them from a visual: pick the visual and the
+  row you are looking at, and the steps explain that exact number.
+- **Filters between tables.** A small map shows which tables a filter reaches through relationships,
+  including USERELATIONSHIP, CROSSFILTER and TREATAS, with date ranges for time intelligence.
+- **Hints.** Likely mistakes (the variable trap, a filter that replaces your slicer, the sort-by-column
+  trap), slow patterns (FILTER over a whole table, a measure per row of a fact table) and what DAX does
+  without being asked.
+- **Run with timings.** See how long a step takes, split into reading data and calculating, from the
+  engine's own trace.
+- **A Power BI External Tools button**, so DAX Explorer opens already connected to the report you are in.
 
-- Node.js 24 (pinned in `.node-version`; the minimum supported by the toolchain is 22.12)
-- npm
+DAX Explorer **never guesses**. What a measure does is decided by explicit, tested rules; anything the
+app can't work out is marked "not checked" instead of being made up.
 
 ## Getting started
 
+DAX Explorer has two parts: the app (React and TypeScript) and a small local helper (`DaxExplorer.exe`,
+.NET) that serves the app and talks to Power BI Desktop.
+
+Requirements:
+
+- Windows, with Power BI Desktop for real values
+- Node.js 24 (see `.node-version`)
+- the .NET 10 SDK, to build the helper (see `helper/global.json`)
+
+Build and run:
+
 ```sh
 npm install
-npm run dev       # start the local dev server
+npm run package   # creates release/DaxExplorer/DaxExplorer.exe
 ```
 
-## DAX Explorer with your own data (Windows)
+Then start `release/DaxExplorer/DaxExplorer.exe`. It opens DAX Explorer in your browser and stays in
+the taskbar's notification area. From the data button you can:
 
-Without a connection the app explains DAX using built-in examples. To work with your own Power BI
-model, use **DAX Explorer** (`DaxExplorer.exe`): a small local program that serves the app and
-connects to reports open in Power BI Desktop on the same computer.
+- **Use sample data**: opens the made-up Initech report in Power BI Desktop and connects to it.
+- **Connect** to a report you have open in Power BI Desktop. Nothing is read until you choose one.
+- **Add to External Tools**: adds a DAX Explorer button to Power BI Desktop's External Tools ribbon
+  (Windows asks for administrator rights once).
 
-Build it once (requires the .NET 10 SDK; see `helper/global.json`):
+Without a connection, DAX Explorer still explains DAX using its built-in examples.
 
-```sh
-npm run package      # creates release/DaxExplorer/DaxExplorer.exe (+ the app next to it)
-```
+### How it stays local and safe
 
-Then double-click `release/DaxExplorer/DaxExplorer.exe`. It opens the app in your browser. In the
-**Data** bar:
-
-- **Use sample data** opens the made-up Initech report in Power BI Desktop and connects to it once it
-  has loaded. (Power BI Desktop must be installed. DAX Explorer opens a fresh copy from your local app
-  data each time, so changes saved in Desktop never alter the original.)
-- **Use my data** lists the reports open in Power BI Desktop; pick one and press **Connect**. Nothing is
-  read until you do. The packaged program is self-contained: it runs on Windows PCs without
-.NET installed.
-
-How it stays safe:
-
-- It listens on `127.0.0.1` only (this computer, never the network) and rejects other host names.
-- Each start creates a random token, passed to the page in the URL fragment (`#token=…`, never sent
-  over the network); every data request must carry it, so other websites cannot read your model.
+- The helper listens on `127.0.0.1` only (this computer, never the network) and checks host names.
+- Each start creates a random token, passed to the page in the address fragment; every request must
+  carry it, so other websites can't read your model.
 - It only runs read-only DAX queries, keeps model information in memory, and logs no model details.
-- It only connects to ports that are running Power BI Desktop reports.
+- It only connects to reports open in Power BI Desktop, and only when you choose one.
 
-For UI development with hot reload **and** a Power BI connection, use `npm run dev:connected`: it
-starts the helper and the dev server together with a shared random token (Ctrl+C stops both).
-`npm run dev` alone works too, without the connection.
+## The Initech sample
 
-Helper tests: `dotnet test helper` (set `DAXEXPLORER_LIVE_TESTS=1` to also run the live test
-against a single open synthetic report).
+All examples use **Initech**, a made-up company (Sales, Product, Customer, Plant, Date), shipped as a
+Power BI project in `samples/Initech`. Every table is calculated from DAX in the project itself, so it
+has no data sources and nothing to refresh.
 
-## Scripts
+## Development
 
-| Script            | What it does                                           |
-| ----------------- | ------------------------------------------------------ |
-| `npm run dev`     | Start the Vite dev server with hot reload              |
-| `npm run dev:connected` | Dev server plus the local helper (Power BI Desktop connection) |
-| `npm run package` | Build `release/DaxExplorer/DaxExplorer.exe` (Windows)  |
-| `npm run build`   | Type-check (`tsc -b`) and build static files to `dist/` |
-| `npm run preview` | Serve the production build locally                     |
-| `npm run lint`    | Lint with oxlint                                       |
-| `npm test`        | Run the unit tests once (Vitest)                       |
-| `npm run test:watch` | Re-run tests automatically as files change          |
+| Script                  | What it does                                                   |
+| ----------------------- | -------------------------------------------------------------- |
+| `npm run dev`           | The app with hot reload (built-in examples only)               |
+| `npm run dev:connected` | The app with hot reload plus the helper (Power BI connection)  |
+| `npm run package`       | Build `release/DaxExplorer/DaxExplorer.exe`                    |
+| `npm run build`         | Type-check and build the app to `dist/`                        |
+| `npm run lint`          | Lint with oxlint                                               |
+| `npm test`              | Run the app's tests (Vitest)                                   |
+| `dotnet test helper`    | Run the helper's tests                                         |
 
-## Project layout
+Project layout:
 
-- `src/engine/` — the DAX engine: measure-header split, lexer, parser, function catalog, binder and the
-  symbolic context analyzer.
-  Pure TypeScript with **no UI dependencies**; the linter enforces this.
-- `src/app/`, `src/components/`, `src/styles/` — the React user interface.
-- `src/samples/` — synthetic sample measures.
-- `samples/Initech/` — the synthetic Initech sample as a Power BI project (PBIP/TMDL). Every table is
-  calculated from DAX formulas in the project itself, so it has no data sources and nothing to refresh.
-- `helper/` — optional .NET 10 local helper that connects to Power BI Desktop (C#, ADOMD.NET).
+- `src/engine/`: the DAX engine (lexer, parser, function catalog, binder, the context analysis, the
+  steps and the hints). Plain TypeScript with no UI dependencies; the linter enforces this.
+- `src/app/`, `src/components/`, `src/styles/`: the React user interface.
+- `helper/`: the local helper (C#, ASP.NET, ADOMD.NET and AMO).
+- `samples/Initech/`: the synthetic sample report.
 
-## Tech stack
+## Credits
 
-React, TypeScript (strict), Vite, Vitest, and plain CSS with custom properties for light/dark themes.
+The fonts are Chakra Petch, Atkinson Hyperlegible and JetBrains Mono, under the SIL Open Font License
+(licence files in `public/fonts`).
 
 ## License
 
-Not yet chosen.
+[MIT](LICENSE)

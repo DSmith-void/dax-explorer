@@ -1,6 +1,7 @@
 {
-  "name": "dax-visualizer",
-  "description": "DAX Execution Explorer: visually explains how DAX expressions are evaluated.",
+  "name": "dax-explorer",
+  "description": "DAX Explorer: step through how a DAX measure is calculated, with real values from Power BI Desktop.",
+  "license": "MIT",
   "private": true,
   "version": "0.1.0",
   "type": "module",

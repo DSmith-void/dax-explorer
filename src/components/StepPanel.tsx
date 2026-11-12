@@ -613,7 +613,9 @@ function Where({ entry, parts, rowFor, onSelectNode, root }: { entry: FlatEntry;
             {row && (
               <>
                 <span className="crumb-sep" aria-hidden="true">▸</span>
-                <span className="crumb crumb-row">row: {row.values.map((v) => formatQueryValue(v)).join(' · ')}</span>
+                <span className="crumb crumb-row" title={row.columns.map((c, i) => `${c} = ${formatQueryValue(row.values[i] ?? null)}`).join(', ')}>
+                  row: {row.values.map((v) => formatQueryValue(v)).join(' · ')}
+                </span>
               </>
             )}
           </span>

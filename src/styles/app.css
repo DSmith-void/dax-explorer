@@ -2937,12 +2937,27 @@ button.hint-title:hover {
 }
 
 .crumb {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 100%;
   padding: 1px 8px;
+  overflow: hidden;
   border: 1px solid currentColor;
   border-radius: 999px;
   background: transparent;
   font: inherit;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A long one (a picked row with many columns) is cut short; hovering shows it all. */
+.crumb-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.crumb-row {
+  max-width: 16rem;
 }
 
 button.crumb {
@@ -3571,4 +3586,29 @@ button.crumb:hover {
 
 .hint-code-row .link-button:hover {
   text-decoration: underline;
+}
+
+/* Grid items default to their content's width, so one long unbreakable piece (a picked row's values) would
+   widen the whole column; let the step box's parts shrink and wrap instead. */
+.step-box-body > *,
+.step-diff,
+.diff li > * {
+  min-width: 0;
+}
+
+.value-block {
+  overflow-wrap: anywhere;
+}
+
+/* In the breadcrumb, the loop and CALCULATE names stay whole; only a long row label gives way. */
+.crumb-loop,
+.crumb-calculate,
+.crumb-measure,
+.crumb-report {
+  flex-shrink: 0;
+}
+
+.crumb-row {
+  flex-shrink: 1;
+  min-width: 4rem;
 }
