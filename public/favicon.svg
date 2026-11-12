@@ -1,11 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#2f5bd3"/>
-  <g stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round">
-    <path d="M16 9v5M16 14l-7 6M16 14l7 6"/>
-  </g>
-  <g fill="#ffffff">
-    <circle cx="16" cy="8" r="3"/>
-    <circle cx="9" cy="22" r="3"/>
-    <circle cx="23" cy="22" r="3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- DAX Explorer: a magnifying glass made of a measure's brackets, [ ]: looking into DAX measures. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3567e6"/>
+      <stop offset="1" stop-color="#1f4cc4"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#tile)"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 12h-9v32h9M36 12h9v32h-9" stroke-width="5.5"/>
+    <circle cx="29" cy="28" r="7.5" stroke-width="4"/>
+    <path d="M45 44l10 10" stroke-width="7.5"/>
   </g>
 </svg>

@@ -31,13 +31,10 @@
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 30px;
   height: 30px;
-  border: 1.5px solid var(--color-accent);
-  border-radius: 8px;
-  color: var(--color-accent);
+  border-radius: 7px;
   box-shadow: var(--glow);
 }
 

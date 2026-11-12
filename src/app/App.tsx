@@ -369,9 +369,8 @@ export function App() {
       )}
       <header className="toolbar">
         <div className="brand">
-          <span className="brand-mark">
-            <Icon name="logo" />
-          </span>
+          {/* The app's icon (the same file as the favicon): a lens made of a measure's brackets. */}
+          <img className="brand-mark" src="/favicon.svg" alt="" width="30" height="30" />
           <h1>
             DAX <span>Explorer</span>
           </h1>

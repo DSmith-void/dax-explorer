@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The icon on Power BI's External Tools ribbon (made from public/favicon.svg). -->
+    <!-- The icon on Power BI's External Tools ribbon: public/favicon.svg drawn at 64 px. -->
     <EmbeddedResource Include="Assets/external-tool-icon.png" LogicalName="DaxExplorer.Helper.Assets.external-tool-icon.png" />
     <!-- The tray icon and the program icon (the same picture). -->
     <EmbeddedResource Include="Assets/dax-explorer.ico" LogicalName="DaxExplorer.Helper.Assets.dax-explorer.ico" />
