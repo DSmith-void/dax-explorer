@@ -60,27 +60,54 @@ function HintItem({ hint, root, onSelectNode }: { hint: Hint; root: Expr | null;
       setCopied(false);
     }
   };
+  // One line says why; the full explanation and the note on the rewrite fold away under "More".
+  const more = [hint.why, hint.suggestion?.note ?? ''].filter(Boolean);
+  // Only a rewrite that works as it is can be copied (not "(leave …)" or "<a column …>").
+  const copyable = hint.suggestion !== undefined && !/^\(|<|…/.test(hint.suggestion.dax);
   return (
     <li className={`hint hint-${hint.kind}`}>
-      <button type="button" className="link-button hint-title" onClick={() => node && onSelectNode(node)} title="Show this in the code">
-        {hint.title}
-      </button>
-        <p className="hint-why">{hint.why}</p>
-        {hint.suggestion && (
-        <div className="hint-suggestion">
-          <p className="field-label">Instead</p>
-          <div className="hint-code-row">
-            <code>{hint.suggestion.dax}</code>
-            {/* Only a rewrite that works as it is can be copied (not "(leave …)" or "<a column …>"). */}
-            {!/^\(|<|…/.test(hint.suggestion.dax) && (
-              <button type="button" className="secondary-button" onClick={() => void copy(hint.suggestion!.dax)}>
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-            )}
-          </div>
-          <p className="hint-why">{hint.suggestion.note}</p>
+      <span className="hint-title">{hint.title}</span>
+      {hint.code && (
+        <button type="button" className="hint-code" title={hint.code} onClick={() => node && onSelectNode(node)}>
+          {oneLine(hint.code)}
+        </button>
+      )}
+      <p className="hint-why">{hint.short}</p>
+      {hint.suggestion && (
+        <div className="hint-code-row">
+          <span className="field-label">Instead</span>
+          <code title={hint.suggestion.dax}>{shape(hint.suggestion.dax)}</code>
+          {copyable && (
+            <button type="button" className="link-button" onClick={() => void copy(hint.suggestion!.dax)}>
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          )}
         </div>
       )}
-  </li>
-);
+      {more.length > 0 && (
+        <details className="hint-more">
+          <summary>More</summary>
+          {more.map((text, i) => (
+            <p key={i} className="hint-why">
+              {text}
+            </p>
+          ))}
+        </details>
+      )}
+    </li>
+  );
+}
+
+
+/** Code on one line (spaces collapsed); the hover shows it in full. */
+function oneLine(code: string): string {
+  return code.replace(/\s+/g, ' ').trim();
+}
+
+/** A rewrite by its shape when it is long: "KEEPFILTERS(…)". Copy still copies it in full. */
+function shape(dax: string): string {
+  const flat = oneLine(dax);
+  if (flat.length <= 48) return flat;
+  const call = /^([A-Z][A-Z0-9.]*)\(/.exec(flat);
+  return call ? `${call[1]}(…)` : `${flat.slice(0, 47)}…`;
 }

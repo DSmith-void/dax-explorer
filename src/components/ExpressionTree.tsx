@@ -47,7 +47,7 @@ function TreeNode(props: TreeNodeProps) {
           {role && <span className="ast-role">{role}</span>}
           <span className="ast-label">{presentation.label}</span>
           <span className="ast-kind">{presentation.kind}</span>
-          {presentation.tag && (
+          {presentation.tag && resolution?.source !== 'model' && (
             <span className={`certainty-tag tone-${presentation.tag.tone}`} title={presentation.tag.title}>
               {presentation.tag.text}
             </span>

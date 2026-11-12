@@ -47,7 +47,8 @@ describe('FILTER over a whole table as a CALCULATE filter', () => {
 describe('a measure inside an iterator over a whole fact table', () => {
   it('Sales is a fact table: one calculation per row, and duplicate rows counted twice', () => {
     const hint = one(hints('M = SUMX(Sales, [Total Sales])'), 'measure-over-table');
-    expect(hint.title).toBe('[Total Sales] is calculated once for every row of Sales.');
+    expect(hint.title).toBe('[Total Sales] runs once per row of Sales');
+    expect(hint.code).toBe('SUMX(Sales, [Total Sales])');
     expect(hint.why).toContain('counted twice');
     // The general "done silently" note for the same measure is not repeated.
     expect(checks(hints('M = SUMX(Sales, [Total Sales])'))).not.toContain('context-transition');
@@ -62,7 +63,7 @@ describe('a measure inside an iterator over a whole fact table', () => {
 
 describe('turning BLANK into 0', () => {
   it('finds + 0, COALESCE and IF(ISBLANK) in the result, also through a returned variable', () => {
-    expect(one(hints('M = [Total Sales] + 0'), 'blank-to-zero').title).toBe('Adding 0 turns BLANK into 0.');
+    expect(one(hints('M = [Total Sales] + 0'), 'blank-to-zero').title).toBe('Adding 0 turns BLANK into 0');
     expect(one(hints('M = COALESCE([Total Sales], 0)'), 'blank-to-zero').title).toContain('COALESCE');
     expect(one(hints('M = VAR s = [Total Sales] VAR r = IF(ISBLANK(s), 0, s) RETURN r'), 'blank-to-zero').title).toContain('IF(ISBLANK');
   });
@@ -107,7 +108,8 @@ describe('a CALCULATE filter replaces the filter on the same column', () => {
   it('with a report filter on that column: a warning naming it, with KEEPFILTERS', () => {
     const hint = one(hints(measure, { reportFilters: RED }), 'replaces-report-filter');
     expect(hint.kind).toBe('warning');
-    expect(hint.title).toBe('Product[Category] = "Gadgets" replaces the report\'s filter Product[Category] = "Widgets".');
+    expect(hint.title).toBe('Replaces your filter Product[Category] = "Widgets"');
+    expect(hint.code).toBe('Product[Category] = "Gadgets"');
     expect(hint.why).toContain('Filters on other columns of Product still apply.');
     expect(hint.suggestion?.dax).toBe('KEEPFILTERS(Product[Category] = "Gadgets")');
   });
@@ -115,7 +117,10 @@ describe('a CALCULATE filter replaces the filter on the same column', () => {
   it('without one: done silently, said once', () => {
     const hint = one(hints(measure), 'replaces-filter');
     expect(hint.kind).toBe('silent');
-    expect(hint.why).toContain('If a slicer or the report filters Product[Category], this result ignores it.');
+    expect(hint.title).toBe('Replaces any filter on Category');
+    expect(hint.why).toBe(
+      `DAX first removes any filter on Product[Category], then applies this one. Filters on other columns of Product still apply. (DAX reads it as FILTER(ALL('Product'[Category]), Product[Category] = "Gadgets").)`,
+    );
     const other: ReportFilter[] = [{ kind: 'values', column: { table: 'Plant', column: 'Plant Name' }, values: ['Austin'] }];
     expect(checks(hints(measure, { reportFilters: other }))).toContain('replaces-filter');
   });
@@ -142,7 +147,7 @@ describe('a filter on a column sorted by another column', () => {
   it("Month is sorted by Month Number: the Month Number filter stays; suggests removing it", () => {
     const hint = one(hints(`M = CALCULATE([Total Sales], 'Date'[Month] = "Jan")`), 'sort-by-column');
     expect(hint.kind).toBe('warning');
-    expect(hint.title).toBe(`'Date'[Month] = "Jan" leaves the filter on Date[Month Number] in place (Month is sorted by it).`);
+    expect(hint.title).toBe('Leaves the Month Number filter in place');
     expect(hint.suggestion?.dax).toBe("REMOVEFILTERS('Date'[Month Number])");
   });
 
@@ -174,14 +179,14 @@ describe('done silently', () => {
 
   it('a whole-table filter also filters the tables it looks up (expanded table)', () => {
     const hint = one(hints('M = CALCULATE([Total Sales], FILTER(Sales, Sales[Quantity] > 1))'), 'expanded-table');
-    expect(hint.title).toMatch(/^Filtering the whole Sales table also filters /);
+    expect(hint.title).toMatch(/^Filtering Sales also filters /);
     expect(hint.title).toContain('Product');
     expect(checks(hints('M = CALCULATE([Total Sales], FILTER(Sales, Sales[Quantity] > 1))', { model: null }))).not.toContain('expanded-table');
   });
 
   it("a date table's other filters are removed automatically", () => {
     const hint = one(hints(`M = CALCULATE([Total Sales], 'Date'[Date] >= DATE(2026, 1, 1))`), 'date-table-filters-removed');
-    expect(hint.title).toBe('All other filters on Date are removed automatically.');
+    expect(hint.title).toBe('Other filters on Date are removed automatically');
   });
 
   it('ALLSELECTED depends on the visual', () => {
@@ -208,5 +213,27 @@ describe("the Hints tab's badge", () => {
     expect(badge.kind).toBe('warning');
     expect(badge.count).toBe(mixed.length);
     expect(badge.breakdown).toBe('1 to check, 1 slow, 1 worth knowing, 1 done silently');
+  });
+});
+
+describe('one-line reasons', () => {
+  it('every hint has a short reason (one line, at most 90 characters)', () => {
+    const all = [
+      ...hints('M = CALCULATE([Total Sales], FILTER(Sales, Sales[Quantity] > 1))'),
+      ...hints('M = SUMX(Sales, [Total Sales])'),
+      ...hints('M = VAR s = [Total Sales] RETURN CALCULATE(s, Product[Category] = "Gadgets") / [Order Count] + 0', { reportFilters: RED }),
+      ...hints('M = CALCULATE([Total Sales], Product[Category] = "Gadgets")'),
+      ...hints(`M = CALCULATE([Total Sales], 'Date'[Month] = "Jan")`),
+      ...hints(`M = CALCULATE([Total Sales], 'Date'[Date] >= DATE(2026, 1, 1))`),
+      ...hints('M = IFERROR([Total Sales] / [Order Count], 0)'),
+      ...hints('M = CALCULATE([Total Sales], ALLSELECTED(Product))'),
+      ...hints('M = AVERAGEX(Customer, [Total Sales])'),
+    ];
+    const checks = new Set(all.map((h) => h.check));
+    expect(checks.size).toBeGreaterThanOrEqual(12);
+    for (const h of all) {
+      expect(h.short.length, `${h.check}: ${h.short}`).toBeLessThanOrEqual(90);
+      expect(h.short, h.check).not.toContain('\n');
+    }
   });
 });

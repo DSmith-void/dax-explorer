@@ -18,9 +18,8 @@ import { findNode } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
 import { ContextView } from './ContextView';
 import { Icon, type IconName } from './Icons';
-import { DIFF_MEANING, DIFF_SYMBOL, stepParts, type DiffLine, type StepParts } from '../engine/context/stepParts';
-import { reportFilterColumns, reportFilterStatus, reportFilterText, type ReportFilter } from '../engine/context/reportFilters';
-import type { EvalContext } from '../engine/context/model';
+import { stepParts, type StepParts } from '../engine/context/stepParts';
+import { DiffList } from './DiffList';
 import { pillLabel } from './pillLabel';
 import { useReportFilters } from './reportFiltersContext';
 import { StepValue } from './StepValue';
@@ -235,7 +234,7 @@ export function StepPanel({ entries, index, onStep, onSelectNode, values, connec
       </Box>
       </div>
       ) : (
-        <PaneStrip title="This step" icon="steps" tone="muted" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 0 ? true : o)) as Layout['colsOpen'] }))} />
+        <PaneStrip title="This step" icon="steps" tone="accent" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 0 ? true : o)) as Layout['colsOpen'] }))} />
       )}
       <ColumnBorder left={0} layout={layout} onLayout={onLayout} grid={grid} />
       {layout.colsOpen[1] ? (
@@ -260,7 +259,7 @@ export function StepPanel({ entries, index, onStep, onSelectNode, values, connec
       </Box>
       </div>
       ) : (
-        <PaneStrip title="Filters" icon="filter" tone="accent" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 1 ? true : o)) as Layout['colsOpen'] }))} />
+        <PaneStrip title="Filters" icon="filter" tone="filter" onOpen={() => onLayout((l) => ({ colsOpen: l.colsOpen.map((o, j) => (j === 1 ? true : o)) as Layout['colsOpen'] }))} />
       )}
       <ColumnBorder left={1} layout={layout} onLayout={onLayout} grid={grid} />
       {layout.colsOpen[2] ? (
@@ -624,65 +623,12 @@ function Where({ entry, parts, rowFor, onSelectNode, root }: { entry: FlatEntry;
   );
 }
 
-/** What changes at this step: one line per change, in the order DAX makes them, with a key to the symbols. */
+/** What changes at this step: one line per change, in the order DAX makes them. */
 function Diff({ entry, parts, root, onSelectNode }: { entry: FlatEntry; parts: StepParts; root: AstNode | null; onSelectNode: (node: AstNode) => void }) {
-  const filters = useReportFilters();
   if (entry.kind === 'start' || entry.kind === 'result' || entry.kind === 'enter' || entry.kind === 'return') return null;
-  const kinds = [...new Set(parts.diff.map((d) => d.kind))];
-  return (
-    <div className="step-diff">
-      <p className="step-subheading">What changes</p>
-      {parts.diff.length === 0 ? (
-        <p className="diff-none">· Nothing: the filters stay as they are.</p>
-      ) : (
-        <ul className="diff">
-          {parts.diff.map((line, i) => (
-            <li key={i} className={`diff-${line.kind}`}>
-              <span className="diff-symbol" title={DIFF_MEANING[line.kind]} aria-label={DIFF_MEANING[line.kind]}>
-                {DIFF_SYMBOL[line.kind]}
-              </span>
-              <code>{line.text}</code>
-              <span className="diff-note">
-                {line.note}
-                {replacedReportFilters(line, entry.context, filters)}
-                {line.nodeId !== null && findNode(root, line.nodeId) && (
-                  <>
-                    {' '}
-                    <button type="button" className="link-button diff-link" onClick={() => onSelectNode(findNode(root, line.nodeId!)!)}>
-                      show in code
-                    </button>
-                  </>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {kinds.length > 0 && (
-        <p className="diff-key">
-          {kinds.map((k) => (
-            <span key={k}>
-              <b>{DIFF_SYMBOL[k]}</b> {DIFF_MEANING[k].replace(/ \(.*\)$/, '').toLowerCase()}
-            </span>
-          ))}
-        </p>
-      )}
-    </div>
-  );
+  return <DiffList lines={parts.diff} context={entry.context} root={root} onSelectNode={onSelectNode} />;
 }
 
-/** For a filter that replaces: the report filters on the same columns that it overrides here. */
-function replacedReportFilters(line: DiffLine, context: EvalContext, filters: readonly ReportFilter[]): string {
-  if (line.kind !== 'replace' || !line.target || line.target.kind === 'unknown') return '';
-  const target = line.target;
-  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-  const hit = filters.filter(
-    (f) =>
-      reportFilterStatus(f, context.filter.removals) === 'applies' &&
-      reportFilterColumns(f).some((c) => (target.kind === 'table' ? same(c.table, target.table) : target.columns.some((t) => same(t.table, c.table) && same(t.column, c.column)))),
-  );
-  return hit.length === 0 ? '' : `; the report's filter ${hit.map(reportFilterText).join(', ')} no longer applies inside`;
-}
 
 /** A step's value in the story list, once it has been calculated (single values only). */
 function StoryValue({ query, state }: { query: StepQuery; state: ValueState }) {

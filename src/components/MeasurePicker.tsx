@@ -19,20 +19,11 @@ interface MeasurePickerProps {
  */
 export function MeasurePicker({ value, samples, onSelectSample, modelMeasures, onSelectModelMeasure }: MeasurePickerProps) {
   const { open, setOpen, container } = usePopover<HTMLDivElement>();
-  const [search, setSearch] = useState('');
   const connected = modelMeasures.length > 0;
   const current = modelMeasures.find((m) => m.text === value);
   const sample = connected ? undefined : samples.find((s) => s.expression === value);
   // Nothing chosen yet: an invitation; DAX written by hand: "Custom DAX" (next to "Write your own DAX").
   const label = current?.name ?? sample?.title ?? (value.trim() === '' ? (connected ? 'Choose a measure' : 'Choose an example') : 'Custom DAX');
-  const tree = useMemo(() => measureTree(modelMeasures), [modelMeasures]);
-  const results = useMemo(() => searchMeasures(modelMeasures, search), [modelMeasures, search]);
-
-  const pick = (measure: PickerMeasure) => {
-    onSelectModelMeasure(measure.text);
-    setOpen(false);
-    setSearch('');
-  };
 
   return (
     <div className="measure-picker" ref={container}>
@@ -45,68 +36,104 @@ export function MeasurePicker({ value, samples, onSelectSample, modelMeasures, o
       </button>
       {open && (
         <div className="data-panel measure-panel" role="dialog" aria-label={connected ? 'Measures in your model' : 'Built-in examples'}>
-          {connected ? (
-            <>
-              <input
-                type="search"
-                className="text-input"
-                placeholder={`Search ${modelMeasures.length} measures`}
-                aria-label="Search measures"
-                value={search}
-                autoFocus
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && results[0]) pick(results[0].measure);
-                }}
-              />
-              {search.trim() ? (
-                results.length === 0 ? (
-                  <p className="data-bar-muted">No measure name contains "{search.trim()}".</p>
-                ) : (
-                  <ul className="picker-list">
-                    {results.map((r) => (
-                      <li key={`${r.measure.table}|${r.measure.name}`}>
-                        <button type="button" className={r.measure === current ? 'is-current' : undefined} onClick={() => pick(r.measure)}>
-                          <span>{r.measure.name}</span>
-                          {r.path && <span className="picker-path">{r.path}</span>}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )
-              ) : (
-                <ul className="picker-list picker-tree">
-                  {tree.map((node, i) => (
-                    <TreeNode key={i} node={node} current={current} onPick={pick} />
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : (
-            <>
-              <p className="data-panel-title">Built-in examples</p>
-              <ul className="picker-list">
-                {samples.map((s) => (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      className={s === sample ? 'is-current' : undefined}
-                      onClick={() => {
-                        onSelectSample(s);
-                        setOpen(false);
-                      }}
-                    >
-                      <span>{s.title}</span>
-                      <span className="picker-path">{s.concept}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+          <MeasureBrowser
+            value={value}
+            samples={samples}
+            modelMeasures={modelMeasures}
+            autoFocus
+            onSelectSample={(s) => {
+              onSelectSample(s);
+              setOpen(false);
+            }}
+            onSelectModelMeasure={(text) => {
+              onSelectModelMeasure(text);
+              setOpen(false);
+            }}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The list to choose from: connected, a search and the measures by table and display folder; not
+ * connected, the built-in examples. Used by the picker and by the start panel.
+ */
+export function MeasureBrowser({
+  value,
+  samples,
+  onSelectSample,
+  modelMeasures,
+  onSelectModelMeasure,
+  autoFocus = false,
+}: MeasurePickerProps & { autoFocus?: boolean }) {
+  const [search, setSearch] = useState('');
+  const connected = modelMeasures.length > 0;
+  const current = modelMeasures.find((m) => m.text === value);
+  const sample = connected ? undefined : samples.find((s) => s.expression === value);
+  const tree = useMemo(() => measureTree(modelMeasures), [modelMeasures]);
+  const results = useMemo(() => searchMeasures(modelMeasures, search), [modelMeasures, search]);
+
+  const pick = (measure: PickerMeasure) => {
+    onSelectModelMeasure(measure.text);
+    setSearch('');
+  };
+
+  if (!connected) {
+    return (
+      <>
+        <p className="data-panel-title">Built-in examples</p>
+        <ul className="picker-list">
+          {samples.map((s) => (
+            <li key={s.id}>
+              <button type="button" className={s === sample ? 'is-current' : undefined} onClick={() => onSelectSample(s)}>
+                <span>{s.title}</span>
+                <span className="picker-path">{s.concept}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </>
+    );
+  }
+  return (
+    <>
+      <input
+        type="search"
+        className="text-input"
+        placeholder={`Search ${modelMeasures.length} measures`}
+        aria-label="Search measures"
+        value={search}
+        autoFocus={autoFocus}
+        onChange={(e) => setSearch(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && results[0]) pick(results[0].measure);
+        }}
+      />
+      {search.trim() ? (
+        results.length === 0 ? (
+          <p className="data-bar-muted">No measure name contains "{search.trim()}".</p>
+        ) : (
+          <ul className="picker-list">
+            {results.map((r) => (
+              <li key={`${r.measure.table}|${r.measure.name}`}>
+                <button type="button" className={r.measure === current ? 'is-current' : undefined} onClick={() => pick(r.measure)}>
+                  <span>{r.measure.name}</span>
+                  {r.path && <span className="picker-path">{r.path}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : (
+        <ul className="picker-list picker-tree">
+          {tree.map((node, i) => (
+            <TreeNode key={i} node={node} current={current} onPick={pick} />
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

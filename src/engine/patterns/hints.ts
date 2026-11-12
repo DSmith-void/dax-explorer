@@ -30,9 +30,13 @@ export interface Hint {
   kind: HintKind;
   /** The code it is about. */
   nodeId: number;
-  /** One short sentence. */
+  /** One short sentence: what it is. */
   title: string;
-  /** Why it matters, in plain words (jargon in brackets). */
+  /** One short line: why it matters (shown with the title). */
+  short: string;
+  /** The code it is about, as written (shown once, on one line). */
+  code?: string;
+  /** The full explanation, in plain words (jargon in brackets): shown on request. */
   why: string;
   /** A rewrite, with what to keep in mind about it. */
   suggestion?: { dax: string; note: string };
@@ -94,9 +98,11 @@ export function findHints(input: HintInput): Hint[] {
       if (!columns.every((c) => c.kind === 'ColumnRef' && same(c.table, table.name))) continue;
       hints.push({
         check: 'filter-whole-table',
+        short: `Checks every row of ${table.name}; a filter on the column is faster.`,
         kind: 'cost',
         nodeId: filter.id,
-        title: `FILTER goes through every row of ${table.name} to filter one or two columns.`,
+        title: `FILTER over the whole ${table.name} table`,
+        code: text(filter),
         why:
           `${text(filter)} is checked row by row over the whole ${table.name} table, and the result filters the whole table, ` +
           `including the tables ${table.name} is related to (its expanded table). A filter on the column itself is faster ` +
@@ -128,9 +134,11 @@ export function findHints(input: HintInput): Hint[] {
       measures.forEach((m) => perRowMeasure.add(m.nodeId));
       hints.push({
         check: 'measure-over-table',
+        short: `One calculation per row of ${table.name}: slow, and identical rows count twice.`,
         kind: 'cost',
         nodeId: call.id,
-        title: `${first ? text(first) : 'A measure'} is calculated once for every row of ${table.name}.`,
+        title: `${first ? text(first) : 'A measure'} runs once per row of ${table.name}`,
+        code: text(call),
         why:
           `${call.name.toUpperCase()} goes through every row of ${table.name}, and for each row the measure turns that ` +
           `row into filters (context transition). On a large table that is slow. It can also be wrong: if ${table.name} ` +
@@ -151,9 +159,11 @@ export function findHints(input: HintInput): Hint[] {
     if (!zero) continue;
     hints.push({
       check: 'blank-to-zero',
+      short: 'Visuals then show a row for every combination, even with no data.',
       kind: 'cost',
       nodeId: result.id,
-      title: `${zero} turns BLANK into 0.`,
+      title: `${zero} turns BLANK into 0`,
+      code: text(result),
       why:
         `Power BI leaves out rows whose measures are all BLANK. With a 0 instead, a visual shows a row for every ` +
         `combination of its fields (every product for every day, say), even where there is no data: slower, and ` +
@@ -172,9 +182,11 @@ export function findHints(input: HintInput): Hint[] {
     if (insideCall(root, node.id, ['DIVIDE', 'IFERROR', 'IF'])) continue;
     hints.push({
       check: 'divide-operator',
+      short: 'DIVIDE gives BLANK instead.',
       kind: 'note',
       nodeId: node.id,
-      title: `Dividing by ${text(node.right)} with "/": when it is 0 or BLANK, the result is infinity (∞), not BLANK.`,
+      title: `Dividing with "/" can give infinity (∞)`,
+      code: text(node),
       why: `When ${text(node.right)} is 0 or BLANK, "/" returns infinity (∞), or NaN when both sides are 0, and a visual shows that. DIVIDE returns BLANK instead.`,
       suggestion: {
         dax: `DIVIDE(${text(node.left)}, ${text(node.right)})`,
@@ -189,9 +201,11 @@ export function findHints(input: HintInput): Hint[] {
     const division = value?.kind === 'BinaryOp' && value.operator === '/' ? value : null;
     hints.push({
       check: 'iferror',
+      short: 'Catching errors is slow and hides real problems.',
       kind: 'cost',
       nodeId: call.id,
-      title: `${call.name.toUpperCase()} catches errors after they happen.`,
+      title: `${call.name.toUpperCase()} catches errors after they happen`,
+      code: text(call),
       why: `Catching errors is slow (the engine can't work on many rows at once), and it hides real problems too. Avoid the error instead.`,
       suggestion: division
         ? {
@@ -205,7 +219,7 @@ export function findHints(input: HintInput): Hint[] {
   // --- 6. The variable trap (found by the context analysis).
   for (const insight of analysis?.insights ?? []) {
     if (insight.kind !== 'variable-fixed') continue;
-    hints.push({ check: 'variable-fixed', kind: 'warning', nodeId: insight.nodeId, title: insight.summary, why: insight.message });
+    hints.push({ check: 'variable-fixed', kind: 'warning', nodeId: insight.nodeId, title: insight.summary, short: 'A variable keeps the value it got where it was stored.', why: insight.message });
   }
 
   // --- 7. A CALCULATE filter replaces the report's filter on the same column.
@@ -223,28 +237,34 @@ export function findHints(input: HintInput): Hint[] {
       const removals = [...step.context.filter.removals, ...step.operations.flatMap((o) => (o.kind === 'remove-filters' ? [o.removal] : []))];
       const replaced = (input.reportFilters ?? []).filter((f) => on(f) && reportFilterStatus(f, removals, input.model) === 'applies');
       const what = table ? `the ${table} table` : columns.map(columnText).join(', ');
+      const shortWhat = table ? `the ${table} table` : [...new Set(columns.map((c) => c.column))].join(', ');
       const others = table ? '' : ` Filters on other columns${columns.length === 1 ? ` of ${columns[0].table}` : ''} still apply.`;
       const keep = { dax: `KEEPFILTERS(${text(arg)})`, note: `Keeps the report's filter and adds this one on top: only rows that pass both are included.` };
+      // How DAX reads a condition on columns: FILTER(ALL(the columns), the condition). Not needed for FILTER(ALL(…)), which is already that.
+      const readsAs =
+        columns.length > 0 && !(arg.kind === 'FunctionCall' && arg.name.toUpperCase() === 'FILTER')
+          ? ` (DAX reads it as FILTER(ALL(${columns.map(columnDax).join(', ')}), ${oneLine(text(arg))}).)`
+          : '';
       if (replaced.length > 0) {
         hints.push({
           check: 'replaces-report-filter',
+          short: 'So that report filter has no effect inside this CALCULATE.',
           kind: 'warning',
           nodeId: arg.id,
-          title: `${text(arg)} replaces the report's filter ${replaced.map(reportFilterText).join(', ')}.`,
-          why:
-            `Inside this CALCULATE, ${text(arg)} takes the place of any filter on ${what}, so ` +
-            `${replaced.map(reportFilterText).join(', ')} from the report has no effect on this result.${others}`,
+          title: `Replaces your filter ${replaced.map(reportFilterText).join(', ')}`,
+          code: text(arg),
+          why: `DAX first removes any filter on ${what}, then applies this one, so ${replaced.map(reportFilterText).join(', ')} from the report has no effect here.${others}${readsAs}`,
           suggestion: keep,
         });
       } else {
         hints.push({
           check: 'replaces-filter',
+          short: 'A slicer or report filter on these columns is ignored here.',
           kind: 'silent',
           nodeId: arg.id,
-          title: `${text(arg)} replaces any filter on ${what}.`,
-          why:
-            `A filter like this works as FILTER(ALL(…), …): DAX first removes any filter already on ${what}, then applies ` +
-            `this one. If a slicer or the report filters ${what}, this result ignores it.${others}`,
+          title: `Replaces any filter on ${shortWhat}`,
+          code: text(arg),
+          why: `DAX first removes any filter on ${what}, then applies this one.${others}${readsAs}`,
           suggestion: keep,
         });
       }
@@ -274,9 +294,11 @@ export function findHints(input: HintInput): Hint[] {
         if (!sort || handled(sort.by)) continue;
         hints.push({
           check: 'sort-by-column',
+          short: `In a visual by ${sort.column.column}, only the matching row keeps a value.`,
           kind: 'warning',
           nodeId: arg.id,
-          title: `${text(arg)} leaves the filter on ${columnText(sort.by)} in place (${sort.column.column} is sorted by it).`,
+          title: `Leaves the ${sort.by.column} filter in place`,
+          code: text(arg),
           why:
             `In Power BI, ${columnText(sort.column)} is sorted by ${columnText(sort.by)}, so a visual that shows ` +
             `${sort.column.column} also groups by ${sort.by.column}, and filters both. ${text(arg)} replaces the filter on ` +
@@ -294,7 +316,7 @@ export function findHints(input: HintInput): Hint[] {
   // --- 8. Context transition (found by the context analysis), unless check 2 already covers it.
   for (const insight of analysis?.insights ?? []) {
     if (insight.kind !== 'context-transition' || perRowMeasure.has(insight.nodeId)) continue;
-    hints.push({ check: 'context-transition', kind: 'silent', nodeId: insight.nodeId, title: insight.summary, why: insight.message });
+    hints.push({ check: 'context-transition', kind: 'silent', nodeId: insight.nodeId, title: insight.summary, short: "The current row becomes a filter, so only that row's data counts.", why: insight.message });
   }
 
   // --- 9. A filter on a whole table also filters the tables it is related to (its expanded table).
@@ -307,9 +329,11 @@ export function findHints(input: HintInput): Hint[] {
       const arg = findNode(root, op.nodeId);
       hints.push({
         check: 'expanded-table',
+        short: `Related tables are filtered to the rows ${table} still refers to.`,
         kind: 'silent',
         nodeId: op.nodeId,
-        title: `Filtering the whole ${table} table also filters ${listText(reached)}.`,
+        title: `Filtering ${table} also filters ${listText(reached)}`,
+        code: arg ? text(arg) : undefined,
         why:
           `${arg ? text(arg) : 'This filter'} filters ${table} as a whole table. A whole table includes the tables it ` +
           `looks up through relationships (its expanded table: ${listText(reached)}), so those are filtered too, to the ` +
@@ -326,9 +350,11 @@ export function findHints(input: HintInput): Hint[] {
       const arg = findNode(root, op.nodeId);
       hints.push({
         check: 'date-table-filters-removed',
+        short: `So filters on its month or year columns don't get in the way.`,
         kind: 'silent',
         nodeId: op.nodeId,
-        title: `All other filters on ${table} are removed automatically.`,
+        title: `Other filters on ${table} are removed automatically`,
+        code: arg ? text(arg) : undefined,
         why:
           `${arg ? text(arg) : 'This filter'} filters a date column, and ${op.because}. In that case DAX also removes ` +
           `every other filter on ${table} (as if REMOVEFILTERS(${table}) were written), so filters on its month or year ` +
@@ -341,9 +367,11 @@ export function findHints(input: HintInput): Hint[] {
   for (const call of calls.filter((c) => named(c, 'ALLSELECTED'))) {
     hints.push({
       check: 'allselected',
+      short: 'The same measure can give different results in different visuals.',
       kind: 'silent',
       nodeId: call.id,
-      title: `${text(call)} depends on the visual the measure is in.`,
+      title: 'Depends on the visual it is in',
+      code: text(call),
       why:
         `ALLSELECTED removes the visual's own rows and columns but keeps the filters from outside it (slicers, the ` +
         `filter pane). So the same measure can give different results in different visuals.`,
@@ -464,6 +492,11 @@ function replacesOnPurpose(arg: AstNode): boolean {
     return table?.kind === 'FunctionCall' && ['ALL', 'ALLNOBLANKROW', 'REMOVEFILTERS'].includes(table.name.toUpperCase());
   }
   return false;
+}
+
+/** Code on one line (spaces collapsed). */
+function oneLine(code: string): string {
+  return code.replace(/\s+/g, ' ').trim();
 }
 
 function listText(items: string[]): string {

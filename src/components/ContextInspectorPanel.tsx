@@ -5,9 +5,9 @@ import type { ContextAnalysis, Step } from '../engine/context/model';
 import { findNode, type AstNode, type FunctionCall } from '../engine/parser/ast';
 import { createLineMap } from '../engine/source';
 import { presentNode, resolutionTag } from './astPresentation';
-import { CalculateSteps } from './CalculateSteps';
 import { ContextView } from './ContextView';
-import { OperationList } from './OperationList';
+import { DiffList } from './DiffList';
+import { stepParts } from '../engine/context/stepParts';
 import { Panel } from './Panel';
 
 const ROLE_TEXT: Record<ArgRole, string> = {
@@ -42,20 +42,20 @@ export function ContextInspectorPanel({
   const node = selectedId !== null ? findNode(root, selectedId) : null;
 
   return (
-    <Panel id="context-inspector" title="Context Inspector" status={result ? 'Symbolic' : 'Planned'}>
+    <Panel id="context-inspector" title="Selected part">
       {result && node ? (
         <SelectedNodeDetails
           node={node}
           result={result}
           binding={binding}
+          analysis={analysis}
           step={analysis?.steps.get(node.id) ?? null}
           onSelectNode={onSelectNode}
           onOpenMeasure={onOpenMeasure}
         />
       ) : (
         <p className="placeholder-lead">
-          {result ? 'Click any part of the expression tree' : 'After analyzing, click any part of the expression tree'} to see
-          which filters are in effect at that point, whether DAX is going row by row, and what that part changes.
+          Click any part of the code or the expression tree to see what it changes and which filters apply there.
         </p>
       )}
       <Glossary />
@@ -108,143 +108,100 @@ interface DetailsProps {
   node: AstNode;
   result: AnalysisResult;
   binding: BindResult | null;
+  analysis: ContextAnalysis | null;
   step: Step | null;
   onSelectNode: (node: AstNode) => void;
   onOpenMeasure: (name: string, expression: string) => void;
 }
 
-function SelectedNodeDetails({ node, result, binding, step, onSelectNode, onOpenMeasure }: DetailsProps) {
+function SelectedNodeDetails({ node, result, binding, analysis, step, onSelectNode, onOpenMeasure }: DetailsProps) {
   const root = result.parse?.root ?? null;
   const presentation = presentNode(node, result.text, binding);
   const positionAt = createLineMap(result.text);
-  const from = positionAt(node.span.start);
-  const to = positionAt(node.span.end);
-  const text = result.text.slice(node.span.start, node.span.end);
   const declaration = node.kind === 'VariableRef' ? findNode(root, node.declarationId) : null;
   const resolution = binding?.references.get(node.id);
+  const tag = resolution ? resolutionTag(resolution) : null;
+  // The same "what changes" as the Step tab. A filter argument's change belongs to its CALCULATE, which
+  // stepParts finds when the part is treated as a filter argument.
+  const parts =
+    step && root
+      ? stepParts(
+          { index: 0, kind: step.operations.length > 0 ? 'function' : 'filter-input', nodeId: node.id, title: '', summary: step.summary ?? '', context: step.context, innerContext: step.innerContext, operations: step.operations, depth: 0 },
+          root,
+          binding,
+          analysis,
+          result.text,
+        )
+      : null;
+  const notes = step ? step.notes.filter((n) => n !== step.summary) : [];
+  const filters = step ? (step.innerContext && step.operations.length > 0 ? step.innerContext : step.context) : null;
 
   return (
     <div className="inspector">
-      <dl className="inspector-facts">
-        <dt>Selected</dt>
-        <dd>
-          <strong className="inspector-label">{presentation.label}</strong> <span className="ast-kind">{presentation.kind}</span>
-        </dd>
-                    <dt>Position</dt>
-            <dd>
-              Line {from.line}, col {from.column} → line {to.line}, col {to.column}
-            </dd>
-        {resolution && (
-          <>
-            <dt>Type</dt>
-            <dd>
-              <strong>{resolution.type ?? 'unknown'}</strong>{' '}
-              <span className={`certainty-tag tone-${resolutionTag(resolution).tone}`}>{resolutionTag(resolution).text}</span>
-              <div className="inspector-detail">{resolution.detail}</div>
-            </dd>
-          </>
+      <p className="step-kind">
+        <span className="kind-badge">{presentation.kind}</span>
+        <span className="step-where">line {positionAt(node.span.start).line}</span>
+        {resolution && tag && tag.tone !== 'certain' && (
+          <span className={`certainty-tag tone-${tag.tone}`} title={resolution.detail}>
+            {resolution.type ?? 'measure or column?'}: {tag.text}
+          </span>
         )}
-      </dl>
-      {text.trim() !== '' && <pre className="inspector-source">{text}</pre>}
+      </p>
+      <h4 className="step-title">{presentation.label}</h4>
 
-      {step?.summary && <p className="inspector-summary">{step.summary}</p>}
+      {parts && <DiffList lines={parts.diff} context={step!.context} root={root} onSelectNode={onSelectNode} />}
+      {step?.summary && (parts?.diff.length ?? 0) === 0 && <p className="step-why">{step.summary}</p>}
+      {notes.map((note) => (
+        <p key={note} className="step-note">
+          {note}
+        </p>
+      ))}
 
-      {resolution?.definition && (
+      {filters && (
         <section className="inspector-section">
-          <h3>How [{resolution.definition.name}] is defined in your model</h3>
-          <pre className="inspector-source">{resolution.definition.expression.trim()}</pre>
-          <div>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => onOpenMeasure(resolution.definition!.name, resolution.definition!.expression)}
-            >
-              Open [{resolution.definition.name}] in the editor
-            </button>
-          </div>
+          <h3>{step?.innerContext && step.operations.length > 0 ? innerHeading(node, binding, result.text) : 'Filters here'}</h3>
+          <ContextView context={filters} compareTo={filters === step?.innerContext ? step.context : undefined} />
         </section>
       )}
 
-      {renderFull()}
-    </div>
-  );
-
-  function renderFull() {
-    return (
-      <>
-      {step && (
-        <>
-          <section className="inspector-section">
-            <h3>Filters in effect here</h3>
-            <ContextView context={step.context} />
+      {step?.alternatives && (
+        <div className="alternatives">
+          <section className="alternative">
+            <h3>If {presentation.label} is a measure</h3>
+            <p>{step.alternatives.ifMeasure.notes.join(' ')}</p>
           </section>
+          <section className="alternative">
+            <h3>If {presentation.label} is a column</h3>
+            <p>{step.alternatives.ifColumn.notes.join(' ')}</p>
+          </section>
+        </div>
+      )}
 
-          {isCalculate(node, binding) ? (
-            <CalculateSteps node={node} step={step} source={result.text} onSelectNode={onSelectNode} />
-          ) : (
-            step.operations.length > 0 && (
-              <section className="inspector-section">
-                <h3>What this changes</h3>
-                <OperationList operations={step.operations} root={root} source={result.text} onSelectNode={onSelectNode} />
-              </section>
-            )
-          )}
-
-          {step.innerContext && step.operations.length > 0 && (
-            <section className="inspector-section">
-              <h3>{innerHeading(node, binding, result.text)}</h3>
-              <ContextView context={step.innerContext} compareTo={step.context} />
-            </section>
-          )}
-
-          {step.notes.length > 0 && (
-            <ul className="inspector-notes">
-              {step.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          )}
-
-          {step.alternatives && (
-            <div className="alternatives">
-              <section className="alternative">
-                <h3>If {presentation.label} is a measure</h3>
-                {step.alternatives.ifMeasure.operations.length > 0 ? (
-                  <>
-                    <OperationList operations={step.alternatives.ifMeasure.operations} root={root} source={result.text} onSelectNode={onSelectNode} />
-                    <ContextView context={step.alternatives.ifMeasure.innerContext} compareTo={step.context} />
-                  </>
-                ) : null}
-                <p>{step.alternatives.ifMeasure.notes.join(' ')}</p>
-              </section>
-              <section className="alternative">
-                <h3>If {presentation.label} is a column</h3>
-                <p>{step.alternatives.ifColumn.notes.join(' ')}</p>
-              </section>
-            </div>
-          )}
-        </>
+      {resolution?.definition && (
+        <section className="inspector-section">
+          <h3>[{resolution.definition.name}] in your model</h3>
+          <pre className="inspector-source">{resolution.definition.expression.trim()}</pre>
+          <div>
+            <button type="button" className="secondary-button" onClick={() => onOpenMeasure(resolution.definition!.name, resolution.definition!.expression)}>
+              Explain [{resolution.definition.name}]
+            </button>
+          </div>
+        </section>
       )}
 
       {node.kind === 'FunctionCall' && <FunctionDetails node={node} result={result} binding={binding} onSelectNode={onSelectNode} />}
 
       {declaration && (
         <p className="inspector-note">
-          Refers to the variable defined at{' '}
+          Stored at{' '}
           <button type="button" className="link-button" onClick={() => onSelectNode(declaration)}>
             VAR {node.kind === 'VariableRef' ? node.name : ''} (line {positionAt(declaration.span.start).line})
           </button>
           .
         </p>
       )}
-      </>
-    );
-  }
-}
-
-function isCalculate(node: AstNode, binding: BindResult | null): node is FunctionCall {
-  const name = node.kind === 'FunctionCall' ? binding?.calls.get(node.id)?.spec?.name : undefined;
-  return name === 'CALCULATE' || name === 'CALCULATETABLE';
+    </div>
+  );
 }
 
 /** The argument's own source text (shortened), which reads better in a list than a tree label like ">". */

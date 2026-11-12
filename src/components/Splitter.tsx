@@ -59,7 +59,7 @@ export function Splitter({ orientation, label, onDrag, onReset }: SplitterProps)
  * A collapsed section: a thin strip with its symbol and title, in the section's colour, like a collapsed
  * Power BI pane. Click to open it.
  */
-export function PaneStrip({ title, icon, tone = 'muted', onOpen }: { title: string; icon: IconName; tone?: 'accent' | 'technical' | 'muted'; onOpen: () => void }) {
+export function PaneStrip({ title, icon, tone = 'muted', onOpen }: { title: string; icon: IconName; tone?: 'accent' | 'filter' | 'technical' | 'muted'; onOpen: () => void }) {
   return (
     <button type="button" className={`pane-strip strip-${tone}`} onClick={onOpen} title={`Show ${title}`} aria-label={`Show ${title}`}>
       <span className="pane-strip-chevron" aria-hidden="true">

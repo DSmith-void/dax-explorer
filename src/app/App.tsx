@@ -16,6 +16,7 @@ import { TimelineBar } from '../components/StepControls';
 import { StepPanel, StoryList } from '../components/StepPanel';
 import type { CodeAnnotation } from '../components/CodeView';
 import { HintsPanel } from '../components/HintsPanel';
+import { StartPanel } from '../components/StartPanel';
 import { formatQueryValue } from '../components/valueFormat';
 import { SummaryCards } from '../components/SummaryCards';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -29,6 +30,7 @@ import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../sample
 import { analyze, type AnalysisResult } from './analysis';
 import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
 import { useNewerTab } from './newerTab';
+import { listProblems, problemCount } from './problems';
 import { clamp, LEFT_MAX, LEFT_MIN, useLayout } from './layout';
 import { CollapseButton, PaneStrip, Splitter } from '../components/Splitter';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
@@ -161,7 +163,8 @@ export function App() {
         : [],
     [activeResult, root, binding, contextAnalysis, reportFilters, relationships],
   );
-  const problemCount = (activeResult?.diagnostics.length ?? 0) + (binding?.diagnostics.length ?? 0);
+  // What is wrong, or what the app couldn't be sure of, in the measure the current step is in.
+  const problems = useMemo(() => listProblems(activeResult, binding, contextAnalysis), [activeResult, binding, contextAnalysis]);
   const matchingSample = result && activeFrame?.level === 0 ? SAMPLE_MEASURES.find((s) => s.expression === result.text) : undefined;
 
   // "Listen to Power BI Desktop while connected": off unless the user turns it on (remembered).
@@ -346,7 +349,7 @@ export function App() {
     { id: 'hints', label: 'Hints', count: badge?.count ?? 0, tone: badge?.kind, countTitle: badge?.breakdown },
     { id: 'part', label: 'Selected part' },
     { id: 'tree', label: 'Expression tree' },
-    { id: 'problems', label: 'Problems', count: problemCount },
+    { id: 'problems', label: 'Problems', count: problemCount(problems) },
   ];
 
   return (
@@ -498,6 +501,18 @@ export function App() {
         )}
 
         <section className="inspector-pane" aria-label="Explanation">
+          {!result && !editing ? (
+            // Nothing loaded yet (for example right after connecting): choose a measure here.
+            <StartPanel
+              report={connectedModel ? (connectedModel.connection.reportName ?? 'your report') : null}
+              samples={SAMPLE_MEASURES}
+              onSelectSample={handleSelectSample}
+              modelMeasures={modelMeasures}
+              onSelectModelMeasure={(text) => explain(text, 'measure-definition')}
+              onWriteYourOwn={handleWriteYourOwn}
+            />
+          ) : (
+          <>
           <div className="tabs" role="tablist" aria-label="Explanation views">
             {tabs.map((t) => (
               <button
@@ -575,13 +590,14 @@ export function App() {
             {tab === 'problems' && (
               <DiagnosticsPanel
                 result={activeResult}
-                binding={binding}
-                analysis={contextAnalysis}
+                problems={problems}
                 inputChangedSinceAnalysis={editing && result !== null && (result.text !== daxText || result.mode !== inputMode)}
                 onSelectNode={handleSelectNode}
               />
             )}
           </div>
+          </>
+          )}
         </section>
       </main>
 

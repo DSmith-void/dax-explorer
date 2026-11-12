@@ -679,13 +679,13 @@
   color: inherit;
 }
 
-/* A colour per kind of information: filters (the accent), technical, variables; the step itself is neutral. */
+/* A colour per kind of information: the step (the accent), filters, technical, variables. */
 .tone-step > .step-box-header {
-  color: var(--color-text);
+  color: var(--color-accent);
 }
 
 .tone-filter > .step-box-header {
-  color: var(--color-accent);
+  color: var(--color-filter);
 }
 
 .tone-technical > .step-box-header {
@@ -2783,7 +2783,7 @@ select {
   text-decoration: none;
 }
 
-.hint-title:hover {
+button.hint-title:hover {
   text-decoration: underline;
 }
 
@@ -2962,7 +2962,7 @@ button.crumb:hover {
 }
 
 .crumb-calculate {
-  color: var(--color-accent);
+  color: var(--color-filter);
 }
 
 .crumb-loop,
@@ -3379,6 +3379,10 @@ button.crumb:hover {
   color: var(--color-technical);
 }
 
+.pane-strip.strip-filter {
+  color: var(--color-filter);
+}
+
 .pane-strip:hover {
   background: color-mix(in srgb, currentColor 8%, var(--color-surface-muted));
 }
@@ -3387,4 +3391,184 @@ button.crumb:hover {
   margin: 0;
   padding: 16px;
   color: var(--color-text-muted);
+}
+
+/* --- Problems: the same rows as Hints, coloured by kind --- */
+.problem-kind-error {
+  color: var(--color-error-border);
+}
+
+.problem-kind-warning,
+.problem-kind-unchecked {
+  color: var(--color-notice-border);
+}
+
+.problem-kind-assumed {
+  color: var(--color-accent);
+}
+
+.problem-error {
+  border-left-color: var(--color-error-border);
+}
+
+.problem-warning,
+.problem-unchecked {
+  border-left-color: var(--color-notice-border);
+}
+
+.problem-assumed {
+  border-left-color: var(--color-accent);
+}
+
+.problem-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.problem-line {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.problems-none {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-success-border);
+  border-radius: var(--radius);
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+}
+
+.hint-more > summary {
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.hint-more[open] {
+  display: grid;
+  gap: 4px;
+}
+
+.hint-code-row .field-label {
+  margin: 0;
+}
+
+/* --- Start panel: shown when nothing is loaded yet --- */
+.start-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 1fr);
+  gap: 24px;
+  align-content: start;
+  padding: 20px 24px;
+  overflow: auto;
+}
+
+.start-choose {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.start-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.start-browser {
+  display: grid;
+  gap: 8px;
+  max-height: 60vh;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.start-or {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.start-how {
+  align-self: start;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.start-how h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.start-how ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 1100px) {
+  .start-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A hint: title, its code once (one line), one short reason, the rewrite by its shape. */
+.hint .hint-title {
+  font-weight: 600;
+}
+
+.hint-code {
+  display: block;
+  width: 100%;
+  padding: 3px 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-code-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hint-code:hover {
+  border-color: var(--color-accent);
+}
+
+.hint .hint-code-row code {
+  padding: 1px 6px;
+  font-size: 0.78rem;
+}
+
+.hint-code-row .link-button {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.hint-code-row .link-button:hover {
+  text-decoration: underline;
 }

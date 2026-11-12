@@ -28,8 +28,8 @@ const MODE_OPTIONS: { value: ResolutionMode; label: string; title: string }[] = 
 ];
 
 const MODE_HINTS: Record<ResolutionMode, string> = {
-  convention: 'Names like [Total Sales] are assumed to be measures, and names like Sales[Amount] columns, unless the DAX proves otherwise.',
-  strict: 'Nothing is assumed: a name stays "unknown" until the DAX proves what it is or you choose.',
+  convention: '[Name] is taken to be a measure and Table[Name] a column; set one yourself with its measure / column buttons.',
+  strict: 'Nothing is assumed: a name stays unknown until the DAX shows what it is, or you choose.',
 };
 
 interface ExpressionTreePanelProps {
@@ -61,10 +61,9 @@ export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
 
   if (!result) {
     return (
-      <Panel id="expression-tree" title="Expression Tree" status="Syntax + references" actions={modeSwitch}>
+      <Panel id="expression-tree" title="Expression tree" actions={modeSwitch}>
         <p className="placeholder-lead">
-          Press <strong>Analyze DAX</strong> to see the structure of the expression: function calls, references,
-          variables and operators.
+          Choose a measure to see its structure: functions, names, variables and operators.
         </p>
         <ul className="placeholder-example" aria-label="Example of an expression tree">
           {EXAMPLE_NODES.map((node, index) => (
@@ -83,21 +82,13 @@ export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
   const tokenCount = result.lex ? result.lex.tokens.filter((t) => t.kind !== 'EndOfInput').length : 0;
 
   return (
-    <Panel id="expression-tree" title="Expression Tree" status="Syntax + references" actions={modeSwitch}>
+    <Panel id="expression-tree" title="Expression tree" actions={modeSwitch}>
       {root ? (
         <>
           <p className="placeholder-lead">
-            Click any part to highlight it in the editor and see its details below.{' '}
-            {props.connectedReport ? (
-              <>
-                Names are checked against your connected report (<strong>{props.connectedReport}</strong>), so measures and
-                columns it knows are certain.
-              </>
-            ) : (
-              <>
-                {MODE_HINTS[referenceMode]} Use the <em>measure</em> / <em>column</em> buttons to set a name yourself.
-              </>
-            )}
+            {props.connectedReport
+              ? 'Click a part to see it in the code. Names are checked against your report.'
+              : `Click a part to see it in the code. ${MODE_HINTS[referenceMode]}`}
           </p>
           <ExpressionTree
             root={root}
@@ -121,8 +112,8 @@ export function ExpressionTreePanel(props: ExpressionTreePanelProps) {
       ) : (
         <p className="placeholder-lead">
           {result.lex
-            ? 'There is no expression to show. See Diagnostics below.'
-            : 'Nothing was parsed because the measure header could not be found. See Diagnostics below.'}
+            ? 'There is no expression to show. See the Problems tab.'
+            : 'Nothing was read: the measure needs a name and "=" on its first line. See the Problems tab.'}
         </p>
       )}
       {result.lex && tokenCount > 0 && (

@@ -86,7 +86,8 @@
   --color-error-border: #d0567a;
   --color-error-text: #8a1f3c;
 
-  /* Meaning colours (the accent is "filters change") */
+  /* Meaning colours: the step (the accent), filters, row by row, a row becomes a filter, technical, variables */
+  --color-filter: #15803d;
   --color-row: #a8650c;
   --color-transition: #b4325a;
   --color-technical: #5b45c9;
@@ -153,7 +154,9 @@
     --color-error-border: #b04a6c;
     --color-error-text: #f6a9c0;
 
-    --color-row: #f2b24c;
+    --color-filter: #4ade80;
+    --color-filter: #4ade80;
+  --color-row: #f2b24c;
     --color-transition: #f26b93;
     --color-technical: #a993ff;
     --color-variable: #45d0c8;
@@ -212,6 +215,7 @@
   --color-error-border: #b04a6c;
   --color-error-text: #f6a9c0;
 
+  --color-filter: #4ade80;
   --color-row: #f2b24c;
   --color-transition: #f26b93;
   --color-technical: #a993ff;
