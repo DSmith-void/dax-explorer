@@ -594,8 +594,23 @@
   font-weight: 650;
 }
 
-.count-badge.is-warning {
+.count-badge.is-warning,
+.count-badge.tone-warning {
   color: var(--color-notice-border);
+}
+
+/* The Hints tab's badge, coloured by the most important kind of hint present. */
+.count-badge.tone-cost {
+  color: var(--color-error-border);
+}
+
+.count-badge.tone-note {
+  color: var(--color-accent);
+}
+
+/* "Done silently": how DAX works under the hood, the Technical box's colour. */
+.count-badge.tone-silent {
+  color: var(--color-technical);
 }
 
 /* --- Step tab: two columns, like a debugger: the step | filters, technical, variables.
@@ -2718,7 +2733,7 @@ select {
 }
 
 .hint-kind-silent {
-  color: var(--color-text-muted);
+  color: var(--color-technical);
 }
 
 .hint-list {
@@ -2749,6 +2764,10 @@ select {
 
 .hint-note {
   border-left-color: var(--color-accent);
+}
+
+.hint-silent {
+  border-left-color: var(--color-technical);
 }
 
 .hint-title {

@@ -54,6 +54,22 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const sameColumn = (a: ColumnName, b: ColumnName) => same(a.table, b.table) && same(a.column, b.column);
 const columnText = (c: ColumnName) => `${c.table}[${c.column}]`;
 
+/** Words for the badge's breakdown, by kind. */
+const BADGE_WORDS: Record<HintKind, string> = { warning: 'to check', cost: 'slow', note: 'worth knowing', silent: 'done silently' };
+
+/**
+ * The Hints tab's badge: every hint counts; the colour is the most important kind present (check this,
+ * then slow, then worth knowing, then done silently), and the breakdown is for the hover text.
+ */
+export function hintBadge(hints: readonly Hint[]): { count: number; kind: HintKind; breakdown: string } | null {
+  if (hints.length === 0) return null;
+  const kind = ORDER.find((k) => hints.some((h) => h.kind === k))!;
+  const breakdown = ORDER.filter((k) => hints.some((h) => h.kind === k))
+    .map((k) => `${hints.filter((h) => h.kind === k).length} ${BADGE_WORDS[k]}`)
+    .join(', ');
+  return { count: hints.length, kind, breakdown };
+}
+
 export function findHints(input: HintInput): Hint[] {
   const { root, binding, analysis, source } = input;
   if (!root) return [];

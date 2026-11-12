@@ -8,7 +8,7 @@ import type { RelationshipModel } from '../context/relationships';
 import { splitMeasureDefinition } from '../definition';
 import { tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
-import { findHints, type Hint } from './hints';
+import { findHints, hintBadge, type Hint } from './hints';
 
 function hints(definition: string, options: { reportFilters?: ReportFilter[]; model?: RelationshipModel | null } = {}): Hint[] {
   const start = splitMeasureDefinition(definition).header!.expressionStart;
@@ -195,5 +195,18 @@ describe('order', () => {
     const kinds = list.map((h) => h.kind);
     expect(kinds).toEqual([...kinds].sort((a, b) => ['warning', 'cost', 'note', 'silent'].indexOf(a) - ['warning', 'cost', 'note', 'silent'].indexOf(b)));
     expect(checks(list)).toEqual(expect.arrayContaining(['variable-fixed', 'replaces-report-filter', 'blank-to-zero', 'divide-operator']));
+  });
+});
+
+describe("the Hints tab's badge", () => {
+  it('counts every hint, coloured by the most important kind, with a breakdown', () => {
+    expect(hintBadge([])).toBeNull();
+    const silentOnly = hints('M = CALCULATE([Total Sales], Product[Category] = "Gadgets")');
+    expect(hintBadge(silentOnly)).toEqual({ count: 1, kind: 'silent', breakdown: '1 done silently' });
+    const mixed = hints('M = VAR s = [Total Sales] RETURN CALCULATE(s, Product[Category] = "Gadgets") / [Order Count] + 0');
+    const badge = hintBadge(mixed)!;
+    expect(badge.kind).toBe('warning');
+    expect(badge.count).toBe(mixed.length);
+    expect(badge.breakdown).toBe('1 to check, 1 slow, 1 worth knowing, 1 done silently');
   });
 });

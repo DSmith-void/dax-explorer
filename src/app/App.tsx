@@ -23,7 +23,7 @@ import type { ReportFilter } from '../engine/context/reportFilters';
 import type { InputMode } from '../engine/definition';
 import { createModelIndex } from '../engine/model';
 import { findNode, type AstNode } from '../engine/parser/ast';
-import { findHints } from '../engine/patterns/hints';
+import { findHints, hintBadge } from '../engine/patterns/hints';
 import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
 import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
@@ -310,10 +310,11 @@ export function App() {
     }
   }
 
-  const tabs: { id: Tab; label: string; count?: number }[] = [
+  const badge = hintBadge(hints);
+  const tabs: { id: Tab; label: string; count?: number; tone?: string; countTitle?: string }[] = [
     { id: 'step', label: 'Step by step' },
-    // The count leaves out what DAX does silently: those are explanations, not things to fix.
-    { id: 'hints', label: 'Hints', count: hints.filter((h) => h.kind !== 'silent').length },
+    // Every hint counts; the colour says how much it matters (violet: only things DAX does silently).
+    { id: 'hints', label: 'Hints', count: badge?.count ?? 0, tone: badge?.kind, countTitle: badge?.breakdown },
     { id: 'part', label: 'Selected part' },
     { id: 'tree', label: 'Expression tree' },
     { id: 'problems', label: 'Problems', count: problemCount },
@@ -434,7 +435,12 @@ export function App() {
                 onClick={() => setTab(t.id)}
               >
                 {t.label}
-                {t.count !== undefined && t.count > 0 && <span className="count-badge is-warning">{t.count}</span>}
+                {t.count !== undefined && t.count > 0 && (
+                  <span className={`count-badge ${t.tone ? `tone-${t.tone}` : 'is-warning'}`} title={t.countTitle}>
+                    {t.count}
+                    {t.countTitle && <span className="visually-hidden">: {t.countTitle}</span>}
+                  </span>
+                )}
               </button>
             ))}
           </div>
