@@ -14,13 +14,23 @@ interface CodeViewProps {
   /** The code of the current step, highlighted. */
   highlight: Span | null;
   onSelectNode: (node: AstNode) => void;
+  /** Values worked out so far, shown right after the code that produced them (debugger style). */
+  annotations?: readonly CodeAnnotation[];
+}
+
+export interface CodeAnnotation {
+  /** Where the code that produced it ends, in the whole text. */
+  offset: number;
+  text: string;
+  /** Worked out at the current step. */
+  fresh: boolean;
 }
 
 /**
  * The DAX, read-only, with line numbers and colors. The current step's code is highlighted;
  * clicking a piece of code selects the smallest expression there.
  */
-export function CodeView({ text, tokens, expressionStart, root, highlight, onSelectNode }: CodeViewProps) {
+export function CodeView({ text, tokens, expressionStart, root, highlight, onSelectNode, annotations = [] }: CodeViewProps) {
   const lines = useMemo(() => codeLines(text, tokens, expressionStart), [text, tokens, expressionStart]);
   const container = useRef<HTMLDivElement>(null);
 
@@ -56,10 +66,24 @@ export function CodeView({ text, tokens, expressionStart, root, highlight, onSel
                       </span>
                     );
                   })}
+              {/* Values whose code ends on this line, after it (several on one line follow each other). */}
+              {annotations
+                .filter((a) => segments.length > 0 && a.offset > segments[0].start && a.offset <= lineEnd(segments))
+                .map((a) => (
+                  <span key={a.offset} className={`code-value${a.fresh ? ' is-fresh' : ''}`} aria-label={`value: ${a.text}`}>
+                    {a.text}
+                  </span>
+                ))}
             </span>
           </li>
         ))}
       </ol>
     </div>
   );
+}
+
+/** Where a line's code ends, in the whole text. */
+function lineEnd(segments: readonly { start: number; text: string }[]): number {
+  const last = segments[segments.length - 1];
+  return last.start + last.text.length;
 }

@@ -2913,3 +2913,182 @@ select {
 .panel-more[open] > summary {
   margin-bottom: 4px;
 }
+
+/* --- The step told as structure: where, what changes, then why --- */
+.step-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.crumb-item {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.crumb {
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  white-space: nowrap;
+}
+
+button.crumb {
+  cursor: pointer;
+}
+
+button.crumb:hover {
+  background: var(--color-surface-muted);
+}
+
+.crumb-report {
+  color: var(--color-text-muted);
+}
+
+.crumb-measure {
+  color: var(--color-frame-1);
+}
+
+.crumb-calculate {
+  color: var(--color-accent);
+}
+
+.crumb-loop,
+.crumb-row {
+  color: var(--color-row);
+}
+
+.crumb-sep {
+  color: var(--color-text-muted);
+}
+
+.step-diff {
+  display: grid;
+  gap: 6px;
+}
+
+.step-diff .step-subheading {
+  margin: 0;
+}
+
+.diff {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diff li {
+  display: grid;
+  grid-template-columns: 1.5em minmax(0, 1fr);
+  gap: 2px 6px;
+  align-items: baseline;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  box-shadow: inset 3px 0 0 var(--diff-color, var(--color-border));
+}
+
+.diff code {
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.diff-symbol {
+  color: var(--diff-color);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  text-align: center;
+  cursor: help;
+}
+
+.diff-note {
+  grid-column: 2;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.diff-link {
+  font-size: 0.75rem;
+}
+
+.diff-add {
+  --diff-color: var(--color-success-border);
+}
+
+.diff-replace {
+  --diff-color: var(--color-accent);
+}
+
+.diff-remove {
+  --diff-color: var(--color-text-muted);
+}
+
+.diff-row {
+  --diff-color: var(--color-transition);
+}
+
+.diff-loop {
+  --diff-color: var(--color-row);
+}
+
+.diff-relationship {
+  --diff-color: var(--color-technical);
+}
+
+.diff-unknown {
+  --diff-color: var(--color-notice-border);
+}
+
+.diff-none {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.diff-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.diff-key b {
+  font-family: var(--font-mono);
+}
+
+.step-why {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-border);
+}
+
+/* Values worked out so far, after the code that produced them (debugger style). */
+.code-value {
+  margin-left: 10px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.code-value::before {
+  content: '▸ ';
+  opacity: 0.7;
+}
+
+.code-value.is-fresh {
+  box-shadow: 0 0 0 1px var(--color-accent);
+}

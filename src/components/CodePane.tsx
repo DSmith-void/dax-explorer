@@ -4,7 +4,7 @@ import { frameTint, type Frame } from '../app/frames';
 import type { InputMode } from '../engine/definition';
 import type { AstNode } from '../engine/parser/ast';
 import type { Span } from '../engine/source';
-import { CodeView } from './CodeView';
+import { CodeView, type CodeAnnotation } from './CodeView';
 import { Icon } from './Icons';
 import { SegmentedControl } from './SegmentedControl';
 
@@ -27,6 +27,8 @@ interface CodePaneProps {
   /** The chain of measures stepped into, from the measure being explained to the one shown. */
   frames: readonly Frame[];
   onSelectFrame: (frame: Frame) => void;
+  /** Values worked out so far, shown in the code. */
+  annotations?: readonly CodeAnnotation[];
 }
 
 const MODE_OPTIONS: { value: InputMode; label: string; title: string }[] = [
@@ -51,6 +53,7 @@ export function CodePane({
   concept,
   frames,
   onSelectFrame,
+  annotations,
 }: CodePaneProps) {
   const shown = editing ? undefined : frames[frames.length - 1];
   const tint = shown ? frameTint(shown.level) : 0;
@@ -136,6 +139,7 @@ export function CodePane({
           root={result.parse?.root ?? null}
           highlight={highlight}
           onSelectNode={onSelectNode}
+          annotations={annotations}
         />
       ) : (
         <pre className="code-view code-view-plain">{result?.text ?? text}</pre>

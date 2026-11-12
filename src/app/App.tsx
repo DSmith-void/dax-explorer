@@ -15,7 +15,9 @@ import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
 import { SegmentedControl } from '../components/SegmentedControl';
 import { TimelineBar } from '../components/StepControls';
 import { StepPanel, StoryList } from '../components/StepPanel';
+import type { CodeAnnotation } from '../components/CodeView';
 import { HintsPanel } from '../components/HintsPanel';
+import { formatQueryValue } from '../components/valueFormat';
 import { SummaryCards } from '../components/SummaryCards';
 import { ThemeToggle } from '../components/ThemeToggle';
 import type { ReferenceType, ResolutionMode } from '../engine/binder/binder';
@@ -183,6 +185,27 @@ export function App() {
     rootFrame,
     reportFilters,
   });
+
+  // Values worked out so far in this measure, shown in its code next to what produced them (debugger style).
+  const codeAnnotations: CodeAnnotation[] = [];
+  if (activeFrame && root && connectedModel) {
+    const byNode = new Map<number, CodeAnnotation>();
+    for (const e of timeline.slice(0, index + 1)) {
+      if (e.frame !== activeFrame || e.nodeId === null || ['start', 'enter', 'return', 'result', 'filter-input'].includes(e.kind)) continue;
+      const node = findNode(root, e.nodeId);
+      const query = stepValues.queryFor(e);
+      const state = stepValues.stateOf(query);
+      if (!node || state.status !== 'ready') continue;
+      const value =
+        query.kind === 'scalar'
+          ? formatQueryValue(state.result.rows[0]?.[0] ?? null)
+          : `${(state.count ?? state.result.rows.length).toLocaleString()} rows`;
+      const forRow = query.kind === 'scalar' && e.context.rows.length > 0 ? ' (this row)' : '';
+      const end = node.kind === 'VarDeclaration' ? node.value.span.end : node.span.end;
+      byNode.set(end, { offset: end, text: value + forRow, fresh: e === current });
+    }
+    codeAnnotations.push(...byNode.values());
+  }
 
   /** Shows or hides the steps inside a measure. Hiding them while inside goes back to the step that calls it. */
   function handleExpand(key: string, open: boolean) {
@@ -415,6 +438,7 @@ export function App() {
           highlight={editing ? null : (highlightNode?.span ?? null)}
           onSelectNode={handleSelectNode}
           concept={matchingSample?.concept ?? null}
+          annotations={editing ? [] : codeAnnotations}
         />
         {!editing && timeline.length > 0 && (
           <StoryList entries={timeline} index={index} onStep={goToStep} values={stepValues} connected={connectedModel !== null} />

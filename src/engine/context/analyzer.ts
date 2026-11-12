@@ -536,9 +536,8 @@ export function analyzeContext(
       const step = steps.get(arg.id);
       if (step) {
         step.summary = `Removes any filter on ${c.removals.map(removalText).join('; ')} (only inside this ${spec.name}).`;
-        step.notes = [
-          `Removes any filter on ${c.removals.map(removalText).join('; ')}, but only for the calculation inside this ${spec.name}.`,
-        ];
+        // The step's "what changes" says it; no note repeats it.
+        step.notes = [];
       }
     }
     for (const { arg, c } of classified) {
@@ -551,7 +550,7 @@ export function analyzeContext(
         const detail = relationshipChangeDetail(c.change);
         // When the model says DAX rejects it, the one-line summary says so too.
         step.summary = detail.includes('shows an error') ? `${text}: ${detail.replace(/^But /, '').replace(/^[A-Z](?=[a-z])/, (x) => x.toLowerCase())}` : `${text} (only inside this ${spec.name}).`;
-        step.notes = [`${text}, but only for the calculation inside this ${spec.name}. ${detail}`.trim()];
+        step.notes = detail ? [detail] : [];
       }
     }
     for (const { arg, c } of classified) {
@@ -581,9 +580,7 @@ export function analyzeContext(
             ? `Adds ${entryText(c.entry)} on top of the existing filters (only inside this ${spec.name}).`
             : `Sets ${entryText(c.entry)} (only inside this ${spec.name}).`;
         step.notes = [
-          c.entry.mode === 'intersect'
-            ? `Because of KEEPFILTERS, this filter is added on top of the filters already in effect. Only rows that pass both are included.`
-            : `This filter replaces any filter already on the same column, but only for the calculation inside this ${spec.name}.`,
+          ...(c.entry.mode === 'intersect' ? ['Only rows that pass both this filter and the ones already there are included.'] : []),
           `Its condition is checked using the filters from before the ${spec.name} (shown above).`,
         ];
       }
@@ -947,7 +944,7 @@ export function analyzeContext(
         operations: [] as Operation[],
         innerContext: ctx,
         summary: `${label}, with the filters shown.`,
-        notes: [`Nothing goes row by row here, so no filter is added.`],
+        notes: [],
       };
     }
     const transition = contextTransition(ctx, nodeId);

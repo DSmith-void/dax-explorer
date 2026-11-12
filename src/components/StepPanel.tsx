@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentProps, type CSSProperties, t
 import { summarizeTimings, timingRequest, type TimingResult } from '../app/timings';
 import { HINT_KIND_LABEL, type Hint } from '../engine/patterns/hints';
 import { scrollWithin } from './scrollWithin';
-import { frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
+import { framePath, frameTables, frameTint, type FlatEntry, type StepInto } from '../app/frames';
 import { TablesReached } from './TablesReached';
 import { DateStrip } from './DateStrip';
 import { useFilterReach } from './relationshipContext';
@@ -17,7 +17,11 @@ import { createLineMap } from '../engine/source';
 import type { DetailLevel } from './ContextInspectorPanel';
 import { ContextView } from './ContextView';
 import { Icon, type IconName } from './Icons';
-import { OperationList } from './OperationList';
+import { DIFF_MEANING, DIFF_SYMBOL, stepParts, type DiffLine, type StepParts } from '../engine/context/stepParts';
+import { reportFilterColumns, reportFilterStatus, reportFilterText, type ReportFilter } from '../engine/context/reportFilters';
+import type { EvalContext } from '../engine/context/model';
+import { pillLabel } from './pillLabel';
+import { useReportFilters } from './reportFiltersContext';
 import { StepValue } from './StepValue';
 import { formatQueryValue } from './valueFormat';
 
@@ -99,6 +103,7 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
     ? (frame.analysis?.steps.get(current.nodeId)?.notes ?? []).filter((n) => n !== current.summary)
     : [];
   const changed = current.innerContext !== undefined && current.operations.length > 0;
+  const parts = stepParts(current, root, frame.binding, frame.analysis, source);
   // Variables belong to one measure: only this measure's, stored so far.
   const variables = entries.slice(0, index + 1).filter((e) => e.kind === 'variable' && e.frame === frame);
   const node = current.nodeId !== null ? findNode(root, current.nodeId) : null;
@@ -110,15 +115,15 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
     <div className="step-grid">
       <div className="step-col">
       <Box title="This step" icon="steps" className={`step-box-current tone-step${tint ? ` frame-tint-${tint}` : ''}`}>
+        <Where entry={current} parts={parts} rowFor={(id) => values.rows.get(rowKey(frame.key, id))} onSelectNode={onSelectNode} root={root} />
         <p className="step-kind">
           <span className="kind-badge">{KIND_LABEL[current.kind]}</span>
-          {frame.level > 0 && <span className="frame-badge">in {frame.name}</span>}
           {node && current.kind !== 'start' && current.kind !== 'result' && current.kind !== 'return' && (
             <span className="step-where">line {lineAt(node.span.start).line}</span>
           )}
         </p>
         <h4 className="step-title">{current.title}</h4>
-        <p className="step-summary">{current.summary}</p>
+        <Diff entry={current} parts={parts} detail={detail} root={root} onSelectNode={onSelectNode} />
         {hintsAt(current).length > 0 && (
           <ul className="step-hints">
             {hintsAt(current).map((hint, i) => (
@@ -139,21 +144,18 @@ export function StepPanel({ entries, index, onStep, detail, onSelectNode, values
           onPickRow={(id, choice) => values.pickRow(frame.key, id, choice)}
         />
         {target && <StepIntoControl target={target} isExpanded={isExpanded} onExpand={onExpand} />}
-        {current.kind === 'start' && entries.length > 1 && (
-          <p className="step-hint">
-            Press <strong>Next</strong> (or the <kbd>→</kbd> key) to go through the calculation one step at a time.
-          </p>
-        )}
+        {/* Why: the step's sentence when there is no change to show (otherwise "what changes" says it), then
+            the notes, in Detailed, for what the changes don't say. */}
+        {parts.diff.length === 0 && <p className="step-why">{current.summary}</p>}
         {notes.map((note, i) => (
           <p key={i} className="step-note">
             {note}
           </p>
         ))}
-        {changed && (
-          <>
-            <h5 className="step-subheading">What changes, in order</h5>
-            <OperationList operations={current.operations} root={root} source={source} onSelectNode={onSelectNode} />
-          </>
+        {current.kind === 'start' && entries.length > 1 && (
+          <p className="step-hint">
+            Press <strong>Next</strong> (or the <kbd>→</kbd> key) to go through the calculation one step at a time.
+          </p>
         )}
         <nav className="step-nav" aria-label="Steps">
           <button type="button" className="secondary-button" onClick={() => onStep(index - 1)} disabled={index <= 0}>
@@ -476,6 +478,107 @@ function Timings({ query, runTimings }: { query: StepQuery; runTimings: StepPane
       )}
     </div>
   );
+}
+
+/**
+ * Where the step runs: the report's filters (F), the measures stepped into, then the loops (with the row
+ * picked, if any) and CALCULATEs around it. Clicking one goes to its step.
+ */
+function Where({ entry, parts, rowFor, onSelectNode, root }: { entry: FlatEntry; parts: StepParts; rowFor: (iteratorNodeId: number) => RowChoice | undefined; onSelectNode: (node: AstNode) => void; root: AstNode | null }) {
+  const filters = useReportFilters();
+  const measures = framePath(entry.frame).slice(1);
+  const go = (nodeId: number) => {
+    const node = findNode(root, nodeId);
+    if (node) onSelectNode(node);
+  };
+  return (
+    <p className="step-crumbs" aria-label="Where this step runs">
+      <span className="crumb crumb-report" title="The report's filters (F)">F: {pillLabel(filters)}</span>
+      {measures.map((m) => (
+        <span key={m.key} className="crumb-item">
+          <span className="crumb-sep" aria-hidden="true">▸</span>
+          <span className="crumb crumb-measure">{m.name}</span>
+        </span>
+      ))}
+      {parts.where.map((c) => {
+        const row = c.kind === 'loop' ? rowFor(c.nodeId) : undefined;
+        return (
+          <span key={c.nodeId} className="crumb-item">
+            <span className="crumb-sep" aria-hidden="true">▸</span>
+            <button type="button" className={`crumb crumb-${c.kind}`} onClick={() => go(c.nodeId)}>
+              {c.text}
+            </button>
+            {row && (
+              <>
+                <span className="crumb-sep" aria-hidden="true">▸</span>
+                <span className="crumb crumb-row">row: {row.values.map((v) => formatQueryValue(v)).join(' · ')}</span>
+              </>
+            )}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
+/** What changes at this step: one line per change, in the order DAX makes them, with a key to the symbols. */
+function Diff({ entry, parts, detail, root, onSelectNode }: { entry: FlatEntry; parts: StepParts; detail: DetailLevel; root: AstNode | null; onSelectNode: (node: AstNode) => void }) {
+  const filters = useReportFilters();
+  if (entry.kind === 'start' || entry.kind === 'result' || entry.kind === 'enter' || entry.kind === 'return') return null;
+  const kinds = [...new Set(parts.diff.map((d) => d.kind))];
+  return (
+    <div className="step-diff">
+      <p className="step-subheading">What changes</p>
+      {parts.diff.length === 0 ? (
+        <p className="diff-none">· Nothing: the filters stay as they are.</p>
+      ) : (
+        <ul className="diff">
+          {parts.diff.map((line, i) => (
+            <li key={i} className={`diff-${line.kind}`}>
+              <span className="diff-symbol" title={DIFF_MEANING[line.kind]} aria-label={DIFF_MEANING[line.kind]}>
+                {DIFF_SYMBOL[line.kind]}
+              </span>
+              <code>{line.text}</code>
+              <span className="diff-note">
+                {line.note}
+                {replacedReportFilters(line, entry.context, filters)}
+                {line.nodeId !== null && findNode(root, line.nodeId) && (
+                  <>
+                    {' '}
+                    <button type="button" className="link-button diff-link" onClick={() => onSelectNode(findNode(root, line.nodeId!)!)}>
+                      show in code
+                    </button>
+                  </>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {detail !== 'brief' && kinds.length > 0 && (
+        <p className="diff-key">
+          {kinds.map((k) => (
+            <span key={k}>
+              <b>{DIFF_SYMBOL[k]}</b> {DIFF_MEANING[k].replace(/ \(.*\)$/, '').toLowerCase()}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** For a filter that replaces: the report filters on the same columns that it overrides here. */
+function replacedReportFilters(line: DiffLine, context: EvalContext, filters: readonly ReportFilter[]): string {
+  if (line.kind !== 'replace' || !line.target || line.target.kind === 'unknown') return '';
+  const target = line.target;
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const hit = filters.filter(
+    (f) =>
+      reportFilterStatus(f, context.filter.removals) === 'applies' &&
+      reportFilterColumns(f).some((c) => (target.kind === 'table' ? same(c.table, target.table) : target.columns.some((t) => same(t.table, c.table) && same(t.column, c.column)))),
+  );
+  return hit.length === 0 ? '' : `; the report's filter ${hit.map(reportFilterText).join(', ')} no longer applies inside`;
 }
 
 /** A step's value in the story list, once it has been calculated (single values only). */

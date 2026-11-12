@@ -45,9 +45,9 @@ describe('samples', () => {
     const { step } = run(SAMPLE_MEASURES[0].expression, CONVENTION, true);
     expect(describeContext(step('[Total Sales]', 0).context)).toEqual([ALL_REPORT_FILTERS]);
     expect(describeContext(step('[Total Sales]', 1).context)).toEqual(["The report's filters, except any filter on Product[Category]"]);
-    expect(step('REMOVEFILTERS(Product[Category])').notes[0]).toBe(
-      'Removes any filter on Product[Category], but only for the calculation inside this CALCULATE.',
-    );
+    // Its "what changes" line says it; no note repeats it.
+    expect(step('REMOVEFILTERS(Product[Category])').summary).toBe('Removes any filter on Product[Category] (only inside this CALCULATE).');
+    expect(step('REMOVEFILTERS(Product[Category])').notes).toEqual([]);
   });
 
   it('average per customer: the current row becomes a filter inside AVERAGEX', () => {
@@ -208,9 +208,8 @@ describe('going row by row, and rows becoming filters', () => {
   it('a measure outside any row-by-row function adds nothing', () => {
     const { step } = run('[Total Sales] * 2');
     expect(step('[Total Sales]').operations).toEqual([]);
-    expect(step('[Total Sales]').notes[0]).toBe(
-      'Nothing goes row by row here, so no filter is added.',
-    );
+    expect(step('[Total Sales]').summary).toBe('[Total Sales], with the filters shown.');
+    expect(step('[Total Sales]').notes).toEqual([]);
   });
 
   it('reads columns of the table being gone through from the current row', () => {
