@@ -457,7 +457,9 @@ export function parametersForCall(spec: FunctionSpec, argumentCount: number): Pa
 
 /** Time-intelligence functions. Each returns a table of dates from the date column it is given. */
 function timeIntelligence(): FunctionSpec[] {
-  const interval = p('interval', 'keyword', { keywords: ['DAY', 'MONTH', 'QUARTER', 'YEAR'] });
+  // WEEK only works with a calendar (calendar-based time intelligence) that has weeks.
+  const interval = p('interval', 'keyword', { keywords: ['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR'] });
+  // A date column, or the name of a calendar (calendar-based time intelligence): 'Date'[Date] or 'Fiscal Calendar'.
   const dates = p('dates', 'column');
   const spec = (name: string, summary: string, params: ParamSpec[], returns: 'table' | 'scalar' = 'table'): FunctionSpec => ({
     name,
@@ -484,6 +486,11 @@ function timeIntelligence(): FunctionSpec[] {
     total('TOTALYTD', 'year'),
     total('TOTALQTD', 'quarter'),
     total('TOTALMTD', 'month'),
+    // The week functions need a calendar with weeks.
+    toDate('DATESWTD', 'week'),
+    total('TOTALWTD', 'week'),
+    around('PREVIOUSWEEK', 'before', 'week'),
+    around('NEXTWEEK', 'after', 'week'),
     spec('SAMEPERIODLASTYEAR', 'The same dates as the current filter, one year earlier.', [dates]),
     spec('DATEADD', 'The dates in the current filter, moved by a number of days, months, quarters or years.', [dates, p('number of intervals', 'scalar'), interval]),
     spec('PARALLELPERIOD', 'The whole months, quarters or years in the current filter, moved by a number of them.', [dates, p('number of intervals', 'scalar'), interval]),

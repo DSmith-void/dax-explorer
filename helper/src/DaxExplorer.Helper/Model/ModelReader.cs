@@ -15,12 +15,39 @@ public static class ModelReader
     {
         var database = SelectSingleDatabase(connection);
         connection.ChangeDatabase(database);
+        var tables = Query(connection, "EVALUATE INFO.VIEW.TABLES()");
+        var columns = Query(connection, "EVALUATE INFO.VIEW.COLUMNS()");
         return ModelBuilder.Build(
             database,
-            Query(connection, "EVALUATE INFO.VIEW.TABLES()"),
-            Query(connection, "EVALUATE INFO.VIEW.COLUMNS()"),
+            tables,
+            columns,
             Query(connection, "EVALUATE INFO.VIEW.MEASURES()"),
-            Query(connection, "EVALUATE INFO.VIEW.RELATIONSHIPS()"));
+            Query(connection, "EVALUATE INFO.VIEW.RELATIONSHIPS()"),
+            ReadCalendars(connection, tables, columns));
+    }
+
+    /// <summary>
+    /// Calendars (calendar-based time intelligence, preview). Models below compatibility level 1701 can't have
+    /// any, and their engine refuses the INFO.CALENDAR* functions: then there are none.
+    /// </summary>
+    private static List<CalendarInfo> ReadCalendars(AdomdConnection connection, List<Row> tables, List<Row> columns)
+    {
+        List<Row> calendars;
+        try
+        {
+            calendars = Query(connection, "EVALUATE INFO.CALENDARS()");
+        }
+        catch (AdomdException)
+        {
+            return [];
+        }
+        if (calendars.Count == 0) return [];
+        return ModelBuilder.BuildCalendars(
+            tables,
+            columns,
+            calendars,
+            Query(connection, "EVALUATE INFO.CALENDARCOLUMNGROUPS()"),
+            Query(connection, "EVALUATE INFO.CALENDARCOLUMNREFERENCES()"));
     }
 
     /// <summary>

@@ -219,8 +219,13 @@ describe('reference resolution: connected model', () => {
       { table: 'Sales Order', name: 'Net Price' },
     ],
     measures: [{ table: 'Sales', name: 'Total Sales', expression: 'SUM(Sales[Amount])' }],
+    calendars: ['Fiscal Calendar'],
   });
   const WITH_MODEL: BindOptions = { mode: 'strict', userChoices: {}, model };
+
+  it("accepts a calendar's name where a table is written (calendar-based time intelligence)", () => {
+    expect(bind(rootOf("SAMEPERIODLASTYEAR('Fiscal Calendar')"), WITH_MODEL).diagnostics).toEqual([]);
+  });
 
   it('makes measures and columns certain, even in strict mode', () => {
     expect(resolutions("DIVIDE([total sales], 'Sales Order'[Net Price])", WITH_MODEL)).toEqual([
@@ -267,7 +272,7 @@ describe('reference resolution: connected model', () => {
   it('warns about tables the model does not have', () => {
     const result = bind(rootOf('COUNTROWS(Salse)'), WITH_MODEL);
     expect(result.diagnostics).toMatchObject([{ code: 'table-not-in-model' }]);
-    expect(result.diagnostics[0].message).toContain('no table named Salse');
+    expect(result.diagnostics[0].message).toContain('no table or calendar named Salse');
   });
 
   it('does not treat keyword arguments as tables', () => {

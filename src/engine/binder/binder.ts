@@ -97,11 +97,12 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
       occurrences.push({ node, requirement });
       return;
     }
-    if (node.kind === 'TableRef' && options.model && !options.model.hasTable(node.name)) {
+    // A calendar's name is written like a table: SAMEPERIODLASTYEAR('Fiscal Calendar').
+    if (node.kind === 'TableRef' && options.model && !options.model.hasTable(node.name) && !options.model.hasCalendar(node.name)) {
       result.diagnostics.push({
         severity: 'warning',
         code: 'table-not-in-model',
-        message: `There is no table named ${node.quoted ? `'${node.name}'` : node.name} in the connected model. Check the spelling, or that you are connected to the right report.`,
+        message: `There is no table or calendar named ${node.quoted ? `'${node.name}'` : node.name} in the connected model. Check the spelling, or that you are connected to the right report.`,
         span: node.span,
       });
       return;

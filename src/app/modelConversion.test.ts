@@ -19,6 +19,7 @@ describe('model conversion', () => {
       tables: ['Sales'],
       columns: [{ table: 'Sales', name: 'Amount' }],
       measures: [{ table: 'Sales', name: 'Total Sales', expression: '\n  SUM(Sales[Amount])  ' }],
+      calendars: [],
     });
   });
 

@@ -8,6 +8,8 @@ export interface ModelSnapshot {
   tables: readonly string[];
   columns: readonly { table: string; name: string }[];
   measures: readonly { table: string; name: string; expression: string }[];
+  /** Calendar names (calendar-based time intelligence); time-intelligence functions accept them like tables. */
+  calendars?: readonly string[];
 }
 
 export interface ModelMeasure {
@@ -23,6 +25,7 @@ export interface ModelIndex {
   /** Tables that have a column with this name. */
   tablesWithColumn(column: string): string[];
   hasTable(table: string): boolean;
+  hasCalendar(name: string): boolean;
 }
 
 const key = (name: string) => name.toLowerCase();
@@ -37,7 +40,9 @@ export function createModelIndex(snapshot: ModelSnapshot): ModelIndex {
     tablesByColumn.set(key(c.name), list);
   }
   const tables = new Set(snapshot.tables.map(key));
+  const calendars = new Set((snapshot.calendars ?? []).map(key));
   return {
+    hasCalendar: (name) => calendars.has(key(name)),
     measure: (name) => measures.get(key(name)),
     hasColumn: (table, column) => columns.has(`${key(table)}[${key(column)}]`),
     tablesWithColumn: (column) => tablesByColumn.get(key(column)) ?? [],

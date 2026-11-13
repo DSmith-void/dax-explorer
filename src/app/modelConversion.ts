@@ -7,6 +7,7 @@ export function toModelSnapshot(model: ModelMetadata): ModelSnapshot {
     tables: model.tables.map((t) => t.name),
     columns: model.columns.map((c) => ({ table: c.table, name: c.name })),
     measures: model.measures.map((m) => ({ table: m.table, name: m.name, expression: m.expression })),
+    calendars: (model.calendars ?? []).map((c) => c.name),
   };
 }
 

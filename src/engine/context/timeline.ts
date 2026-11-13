@@ -73,7 +73,7 @@ export interface TimelineEntry {
 }
 
 /** TOTALYTD and friends: CALCULATE with the matching DATES…TD filter. */
-const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD' };
+const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD', TOTALWTD: 'DATESWTD' };
 
 /** What each iterator does with the results of its rows. */
 const COMBINES: Record<string, string> = {

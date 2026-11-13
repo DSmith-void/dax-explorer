@@ -287,7 +287,7 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
 }
 
 /** TOTALYTD and friends: CALCULATE with the matching DATES…TD filter. */
-const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD' };
+const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD', TOTALWTD: 'DATESWTD' };
 
 /** The first date, last date and number of dates of a date column, separated by "|". */
 export function dateRangeProbe(column: ColumnName): string {
@@ -308,13 +308,14 @@ export function dateRangeQueries(
   const dated = entry.operations.find((op) => op.kind === 'add-filter' && op.entry.dates);
   const dates = dated?.kind === 'add-filter' ? dated.entry.dates : undefined;
   const node = findNode(options.root, entry.nodeId);
-  if (!dates || node?.kind !== 'FunctionCall' || !node.args[0]) return null;
-  const probe = dateRangeProbe(dates.column);
+  if (!dates?.column || node?.kind !== 'FunctionCall' || !node.args[0]) return null;
+  const column = dates.column;
+  const probe = dateRangeProbe(column);
   const at = (nodeId: number): StepQuery =>
     buildStepQuery({ ...entry, kind: 'function', nodeId }, { ...options, replace: { nodeId, dax: probe } });
-  const c = columnDax(dates.column);
+  const c = columnDax(column);
   return {
-    column: dates.column,
+    column,
     functionName: dates.functionName,
     before: at(node.id),
     after: at(node.args[0].id),

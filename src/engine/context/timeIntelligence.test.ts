@@ -99,3 +99,71 @@ describe('date ranges for the date strip', () => {
     expect(dateRangeQueries(calculate, options)).toBeNull();
   });
 });
+
+describe('calendar-based time intelligence', () => {
+  // A made-up calendar on the Initech Date table, shaped like Power BI's (checked live on Initech):
+  // units with a primary column and associated columns, plus time-related columns tagged without a unit.
+  const WITH_CALENDAR: RelationshipModel = {
+    ...INITECH_MODEL,
+    source: 'report',
+    calendars: [
+      {
+        name: 'Fiscal Calendar',
+        table: 'Date',
+        groups: [
+          { unit: 'Year', primary: 'Year', associated: [] },
+          { unit: 'Month', primary: 'Year Month', associated: [] },
+          { unit: 'Date', primary: 'Date', associated: [] },
+          { unit: 'TimeRelated', primary: null, associated: ['Is Weekend'] },
+        ],
+      },
+      { name: 'Year Only', table: 'Date', groups: [{ unit: 'Year', primary: 'Year', associated: [] }] },
+    ],
+  };
+  const calendarFilter = (definition: string, model: RelationshipModel | null = WITH_CALENDAR) =>
+    explain(definition, model).calculate.operations.map(technicalOperation);
+
+  it("replaces the filters on the calendar's columns, and names the calendar", () => {
+    expect(calendarFilter("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Fiscal Calendar'))")).toEqual([
+      "Filter Date[Year], Date[Year Month], Date[Date] = the same dates as the current filter, one year earlier, by the calendar 'Fiscal Calendar': overwrites existing filters on the same columns",
+    ]);
+  });
+
+  it('keeps the filters on the rest of the Date table: no automatic REMOVEFILTERS(Date), unlike a date column', () => {
+    // Checked in Power BI Desktop: a Month Number filter survives PARALLELPERIOD(calendar) but not PARALLELPERIOD('Date'[Date]).
+    const ops = explain("M = CALCULATE([Total Sales], PARALLELPERIOD('Fiscal Calendar', -1, YEAR))", WITH_CALENDAR).calculate.operations;
+    expect(ops.map((op) => op.kind)).toEqual(['add-filter']);
+  });
+
+  it('clears time-related columns too, except in DATEADD and SAMEPERIODLASTYEAR', () => {
+    expect(calendarFilter("M = CALCULATE([Total Sales], PARALLELPERIOD('Fiscal Calendar', -1, YEAR))")[0]).toContain('Date[Is Weekend]');
+    expect(calendarFilter("M = CALCULATE([Total Sales], DATEADD('Fiscal Calendar', -1, YEAR))")[0]).not.toContain('Date[Is Weekend]');
+  });
+
+  it('TOTALYTD with a calendar is CALCULATE with DATESYTD of the calendar', () => {
+    const { calculate, options } = explain("M = TOTALYTD([Total Sales], 'Fiscal Calendar')", WITH_CALENDAR);
+    expect(technicalOperation(calculate.operations[0])).toContain("by the calendar 'Fiscal Calendar'");
+    expect(buildStepQuery(calculate, options)).toEqual({ kind: 'scalar', dax: "TOTALYTD([Total Sales], 'Fiscal Calendar')" });
+  });
+
+  it("uses the calendar's Date column for the date strip, and has no strip without one", () => {
+    const withDate = explain("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Fiscal Calendar'))", WITH_CALENDAR);
+    expect(dateRangeQueries(withDate.calculate, withDate.options)?.column).toEqual({ table: 'Date', column: 'Date' });
+    const yearOnly = explain("M = CALCULATE([Total Sales], PREVIOUSYEAR('Year Only'))", WITH_CALENDAR);
+    expect(dateRangeQueries(yearOnly.calculate, yearOnly.options)).toBeNull();
+  });
+
+  it('knows the week functions', () => {
+    expect(calendarFilter("M = CALCULATE([Total Sales], DATESWTD('Fiscal Calendar'))")[0]).toContain('every date from the start of the week');
+    expect(calendarFilter("M = CALCULATE([Total Sales], PREVIOUSWEEK('Fiscal Calendar'))")[0]).toContain('the whole week before');
+  });
+
+  it('says which calendar is missing instead of guessing', () => {
+    expect(calendarFilter("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Nope'))")).toEqual([
+      "Not modeled: the connected model has no calendar named 'Nope', so the app can't tell which dates SAMEPERIODLASTYEAR uses",
+    ]);
+    expect(calendarFilter("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Fiscal Calendar'))", null)[0]).toContain(
+      "'Fiscal Calendar' may be a calendar (calendar-based time intelligence); connect to the report to read it",
+    );
+  });
+});

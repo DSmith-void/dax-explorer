@@ -194,6 +194,49 @@ describe('done silently', () => {
   });
 });
 
+describe('calendar-based time intelligence', () => {
+  // A made-up calendar on the Initech Date table (the shape Power BI reports).
+  const WITH_CALENDAR: RelationshipModel = {
+    ...INITECH_MODEL,
+    source: 'report',
+    calendars: [
+      {
+        name: 'Fiscal Calendar',
+        table: 'Date',
+        groups: [
+          { unit: 'Year', primary: 'Year', associated: [] },
+          { unit: 'Month', primary: 'Year Month', associated: [] },
+          { unit: 'Date', primary: 'Date', associated: [] },
+        ],
+      },
+    ],
+  };
+  const calendarHints = (definition: string) => hints(definition, { model: WITH_CALENDAR });
+
+  it('SAMEPERIODLASTYEAR with a calendar moves days by their place, and says what the date column would do', () => {
+    const hint = one(calendarHints("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Fiscal Calendar'))"), 'calendar-shift');
+    expect(hint.kind).toBe('note');
+    expect(hint.why).toContain('15 March 2025 becomes 14 March 2024');
+    expect(hint.why).toContain("SAMEPERIODLASTYEAR('Date'[Date]) keeps the dates");
+  });
+
+  it('DATEADD by MONTH also says that a missing day gives no dates', () => {
+    const hint = one(calendarHints("M = CALCULATE([Total Sales], DATEADD('Fiscal Calendar', -1, MONTH))"), 'calendar-shift');
+    expect(hint.why).toContain('gives no dates at all');
+    expect(hint.why).toContain("DATEADD('Date'[Date], -1, MONTH)");
+  });
+
+  it('is quiet for the date column, for whole-period functions, and for intervals not checked', () => {
+    expect(checks(calendarHints("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Date'[Date]))"))).not.toContain('calendar-shift');
+    expect(checks(calendarHints("M = CALCULATE([Total Sales], PARALLELPERIOD('Fiscal Calendar', -1, YEAR))"))).not.toContain('calendar-shift');
+    expect(checks(calendarHints("M = CALCULATE([Total Sales], DATEADD('Fiscal Calendar', -1, QUARTER))"))).not.toContain('calendar-shift');
+  });
+
+  it("gives no automatic-removal hint: a calendar keeps the table's other filters", () => {
+    expect(checks(calendarHints("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Fiscal Calendar'))"))).not.toContain('date-table-filters-removed');
+  });
+});
+
 describe('order', () => {
   it('warnings first, then slow patterns, notes, and things done silently; within a kind, in code order', () => {
     const list = hints('M = VAR s = [Total Sales] RETURN CALCULATE(s, Product[Category] = "Gadgets") / [Order Count] + 0', { reportFilters: RED });

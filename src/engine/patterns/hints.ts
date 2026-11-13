@@ -378,6 +378,34 @@ export function findHints(input: HintInput): Hint[] {
     });
   }
 
+  // --- 12. A calendar moves single days by their place in it, not by date (checked in Power BI Desktop:
+  //     SAMEPERIODLASTYEAR and DATEADD by YEAR or MONTH, with and without a Month unit in the calendar).
+  if (analysis) {
+    for (const { op } of operationsOf(analysis, 'add-filter')) {
+      const dates = op.entry.dates;
+      if (!dates?.calendar) continue;
+      const call = findNode(root, op.nodeId);
+      const interval = call?.kind === 'FunctionCall' && call.args[2] ? text(call.args[2]).toUpperCase() : '';
+      const isDateAdd = dates.functionName === 'DATEADD';
+      if (dates.functionName !== 'SAMEPERIODLASTYEAR' && !(isDateAdd && (interval === 'YEAR' || interval === 'MONTH'))) continue;
+      const classic = dates.column ? `${dates.functionName}(${columnDax(dates.column)}${isDateAdd && call?.kind === 'FunctionCall' ? `, ${call.args.slice(1).map(text).join(', ')}` : ''})` : null;
+      hints.push({
+        check: 'calendar-shift',
+        short: 'Whole months shift as expected; single days can land a day off.',
+        kind: 'note',
+        nodeId: op.nodeId,
+        title: 'Moves days by their place in the calendar, not by date',
+        code: call ? text(call) : undefined,
+        why:
+          `With a calendar ('${dates.calendar}'), ${dates.functionName} moves what is selected by its position in the calendar. ` +
+          `Whole months and years shift as you would expect. But single days move by their place in the year: across a ` +
+          `leap year, 15 March 2025 becomes 14 March 2024, and 1–31 March 2025 becomes 29 February – 30 March 2024.` +
+          (isDateAdd && interval === 'MONTH' ? ` By MONTH, a day the other month doesn't have (31 December back to November) gives no dates at all.` : '') +
+          (classic ? ` With the date column instead, ${classic} keeps the dates: 15 March stays 15 March.` : ''),
+      });
+    }
+  }
+
   return hints.sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || position(root, a.nodeId) - position(root, b.nodeId));
 }
 

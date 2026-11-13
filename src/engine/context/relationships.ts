@@ -49,10 +49,59 @@ export interface RelationshipModel {
    * groups by both, so it filters both.
    */
   sortBy?: readonly { column: ColumnName; by: ColumnName }[];
+  /** Calendars (calendar-based time intelligence): named sets of a table's columns, by unit of time. */
+  calendars?: readonly Calendar[];
+}
+
+/**
+ * A calendar (Power BI's calendar-based time intelligence, preview). Time-intelligence functions can take its
+ * name instead of a date column: SAMEPERIODLASTYEAR('Fiscal Calendar').
+ */
+export interface Calendar {
+  name: string;
+  /** The table it is defined on; all its columns are in this table. */
+  table: string;
+  groups: readonly CalendarGroup[];
+}
+
+export interface CalendarGroup {
+  /** TOM's TimeUnit name ("Year", "MonthOfYear", "Date"...), or "TimeRelated" for columns tagged without a unit. */
+  unit: string;
+  /** The column Power BI uses for the unit; null for time-related columns. */
+  primary: string | null;
+  associated: readonly string[];
 }
 
 const key = (name: string) => name.toLowerCase();
 const same = (a: string, b: string) => key(a) === key(b);
+
+export function findCalendar(model: RelationshipModel | null, name: string): Calendar | undefined {
+  return model?.calendars?.find((c) => same(c.name, name));
+}
+
+/**
+ * The columns a calendar function filters, from what Power BI does (checked against Power BI Desktop):
+ *  - `result`: the columns of the dates it returns: the primary column of each unit.
+ *  - `cleared`: the columns whose earlier filters it replaces: every column tagged with a unit (primary and
+ *    associated), and the time-related ones too, except for DATEADD and SAMEPERIODLASTYEAR, which keep them.
+ *    Untagged columns of the table keep their filters (Microsoft's documentation).
+ */
+export function calendarColumns(calendar: Calendar, functionName: string): { result: ColumnName[]; cleared: ColumnName[] } {
+  const column = (name: string): ColumnName => ({ table: calendar.table, column: name });
+  const units = calendar.groups.filter((g) => g.unit !== 'TimeRelated');
+  const keepsTimeRelated = functionName === 'DATEADD' || functionName === 'SAMEPERIODLASTYEAR';
+  const clearedGroups = keepsTimeRelated ? units : calendar.groups;
+  return {
+    result: units.flatMap((g) => (g.primary ? [column(g.primary)] : [])),
+    cleared: clearedGroups.flatMap((g) => [...(g.primary ? [g.primary] : []), ...g.associated]).map(column),
+  };
+}
+
+/** The calendar's primary date column (unit "Date"), if it has one. */
+export function calendarDateColumn(calendar: Calendar): ColumnName | null {
+  const primary = calendar.groups.find((g) => g.unit === 'Date')?.primary;
+  return primary ? { table: calendar.table, column: primary } : null;
+}
 
 /** The helper's relationship fields ("Many"/"One", "OneDirection"/"BothDirections"/"Automatic") → Relationship. */
 export function relationshipFromInfo(info: {

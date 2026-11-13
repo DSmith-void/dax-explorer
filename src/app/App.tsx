@@ -128,6 +128,11 @@ export function App() {
         sortBy: connectedModel.model.columns.flatMap((c) =>
           c.sortByColumn ? [{ column: { table: c.table, column: c.name }, by: { table: c.table, column: c.sortByColumn } }] : [],
         ),
+        calendars: (connectedModel.model.calendars ?? []).map((c) => ({
+          name: c.name,
+          table: c.table,
+          groups: c.groups.map((g) => ({ unit: g.unit, primary: g.primaryColumn, associated: g.associatedColumns })),
+        })),
       };
     }
     return isBuiltInExample ? INITECH_MODEL : null;

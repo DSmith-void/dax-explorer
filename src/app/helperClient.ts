@@ -85,6 +85,14 @@ export interface ModelMetadata {
   columns: ColumnInfo[];
   measures: MeasureInfo[];
   relationships: RelationshipInfo[];
+  /** Calendars (calendar-based time intelligence). Older helpers don't send them. */
+  calendars?: CalendarInfo[];
+}
+
+export interface CalendarInfo {
+  name: string;
+  table: string;
+  groups: { unit: string; primaryColumn: string | null; associatedColumns: string[] }[];
 }
 
 /** A value from a query. Dates arrive as { date: "yyyy-MM-ddTHH:mm:ss" }. */

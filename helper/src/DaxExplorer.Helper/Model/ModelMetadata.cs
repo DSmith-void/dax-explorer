@@ -6,7 +6,20 @@ public sealed record ModelMetadata(
     IReadOnlyList<TableInfo> Tables,
     IReadOnlyList<ColumnInfo> Columns,
     IReadOnlyList<MeasureInfo> Measures,
-    IReadOnlyList<RelationshipInfo> Relationships);
+    IReadOnlyList<RelationshipInfo> Relationships,
+    IReadOnlyList<CalendarInfo>? Calendars = null);
+
+/// <summary>
+/// A calendar (Power BI's calendar-based time intelligence, preview): a name, the table it is defined on, and
+/// which of that table's columns stand for which unit of time.
+/// </summary>
+public sealed record CalendarInfo(string Name, string Table, IReadOnlyList<CalendarColumnGroupInfo> Groups);
+
+/// <param name="Unit">The unit of time: "Year", "Quarter", "MonthOfYear", "Date"... (TOM's TimeUnit names), or
+/// "TimeRelated" for columns tagged without a unit.</param>
+/// <param name="PrimaryColumn">The column Power BI uses for the unit; null for time-related columns.</param>
+/// <param name="AssociatedColumns">Other columns of the same unit (e.g. a month name next to the month number).</param>
+public sealed record CalendarColumnGroupInfo(string Unit, string? PrimaryColumn, IReadOnlyList<string> AssociatedColumns);
 
 /// <param name="DataCategory">"Time" when the table is marked as a date table; null when not set (or not reported).</param>
 public sealed record TableInfo(string Name, bool IsHidden, string? Expression, string? DataCategory = null);

@@ -20,7 +20,16 @@ import type {
 } from './model';
 import { INITIAL_CONTEXT } from './model';
 import { visualRemovalCovers } from './reportFilters';
-import { crossfilterError, expandedCovers, findRelationship, wholeTableDateRule, type RelationshipModel } from './relationships';
+import {
+  calendarColumns,
+  calendarDateColumn,
+  crossfilterError,
+  expandedCovers,
+  findCalendar,
+  findRelationship,
+  wholeTableDateRule,
+  type RelationshipModel,
+} from './relationships';
 
 /**
  * Symbolic context analysis.
@@ -46,6 +55,7 @@ const TOTALS = new Map([
   ['TOTALYTD', 'DATESYTD'],
   ['TOTALQTD', 'DATESQTD'],
   ['TOTALMTD', 'DATESMTD'],
+  ['TOTALWTD', 'DATESWTD'],
 ]);
 
 /**
@@ -246,6 +256,9 @@ export function analyzeContext(
           case 'DATESYTD':
           case 'DATESQTD':
           case 'DATESMTD':
+          case 'DATESWTD':
+          case 'PREVIOUSWEEK':
+          case 'NEXTWEEK':
           case 'SAMEPERIODLASTYEAR':
           case 'DATEADD':
           case 'PARALLELPERIOD':
@@ -261,7 +274,12 @@ export function analyzeContext(
           case 'NEXTYEAR':
           case 'FIRSTDATE':
           case 'LASTDATE': {
-            // A table of dates from its date column.
+            // A table of dates from its date column; with a calendar, of the calendar's primary columns.
+            const calendar = args[0]?.kind === 'TableRef' ? findCalendar(model, args[0].name) : undefined;
+            if (calendar) {
+              const { result } = calendarColumns(calendar, name);
+              return result.length > 0 ? { kind: 'columns', columns: result, description } : { kind: 'unknown', description };
+            }
             const column = args[0] ? columnOf(args[0]) : null;
             return column ? { kind: 'columns', columns: [column], description } : { kind: 'unknown', description };
           }
@@ -508,9 +526,10 @@ export function analyzeContext(
     }
 
     // 3. Modifiers. Putting a filter on the date column of a date table also removes every other filter on
-    //    that table: DAX adds this by itself, as a modifier.
+    //    that table: DAX adds this by itself, as a modifier. Not for calendar functions: they keep filters on
+    //    the table's columns the calendars don't tag (checked in Power BI Desktop).
     for (const { arg, c } of classified) {
-      if (c.kind !== 'filter' || c.entry.target.kind !== 'columns') continue;
+      if (c.kind !== 'filter' || c.entry.target.kind !== 'columns' || c.entry.dates?.calendar) continue;
       for (const column of c.entry.target.columns) {
         const because = model ? wholeTableDateRule(model, column) : null;
         if (!because) continue;
@@ -656,16 +675,45 @@ export function analyzeContext(
    * it works out (described as a rule; the actual dates depend on the filters in effect).
    */
   function timeFilter(name: string, args: readonly Expr[], calculate: FunctionCall, calculateName: string, mode: FilterEntry['mode']): FilterArgument {
-    const column = args[0] ? columnOf(args[0]) : null;
+    const origin = { kind: 'calculate' as const, nodeId: calculate.id, functionName: calculateName };
+    const first = args[0];
+    if (first?.kind === 'TableRef') {
+      // Calendar-based time intelligence: SAMEPERIODLASTYEAR('Fiscal Calendar').
+      const calendar = findCalendar(model, first.name);
+      if (!calendar) {
+        const written = first.quoted ? `'${first.name}'` : first.name;
+        return {
+          kind: 'not-modeled',
+          description: model?.source === 'report'
+            ? `the connected model has no calendar named ${written}, so the app can't tell which dates ${name} uses`
+            : `the app can't tell which dates ${name} uses: ${written} may be a calendar (calendar-based time intelligence); connect to the report to read it`,
+        };
+      }
+      const { cleared } = calendarColumns(calendar, name);
+      if (cleared.length === 0) {
+        return { kind: 'not-modeled', description: `the calendar '${calendar.name}' has no columns the app could read` };
+      }
+      return {
+        kind: 'filter',
+        entry: {
+          target: { kind: 'columns', columns: cleared },
+          condition: `= ${dateRuleText(name, args)}, by the calendar '${calendar.name}'`,
+          origin,
+          mode,
+          dates: { functionName: name, column: calendarDateColumn(calendar), calendar: calendar.name },
+        },
+      };
+    }
+    const column = first ? columnOf(first) : null;
     if (!column || column.table === '') {
-      return { kind: 'not-modeled', description: `the app can't tell which date column ${name} uses (it needs a Table[Column] reference)` };
+      return { kind: 'not-modeled', description: `the app can't tell which date column ${name} uses (it needs a Table[Column] reference, or a calendar)` };
     }
     return {
       kind: 'filter',
       entry: {
         target: { kind: 'columns', columns: [column] },
         condition: `= ${dateRuleText(name, args)}`,
-        origin: { kind: 'calculate', nodeId: calculate.id, functionName: calculateName },
+        origin,
         mode,
         dates: { functionName: name, column },
       },
@@ -694,6 +742,8 @@ export function analyzeContext(
         return 'every date from the start of the quarter up to the last date in the current filter';
       case 'DATESMTD':
         return 'every date from the start of the month up to the last date in the current filter';
+      case 'DATESWTD':
+        return 'every date from the start of the week up to the last date in the current filter';
       case 'SAMEPERIODLASTYEAR':
         return 'the same dates as the current filter, one year earlier';
       case 'DATEADD': {
@@ -718,7 +768,7 @@ export function analyzeContext(
       case 'LASTDATE':
         return 'the last date in the current filter';
       default: {
-        const match = /^(PREVIOUS|NEXT)(DAY|MONTH|QUARTER|YEAR)$/.exec(name);
+        const match = /^(PREVIOUS|NEXT)(DAY|WEEK|MONTH|QUARTER|YEAR)$/.exec(name);
         if (!match) return `the dates ${name} works out`;
         const period = match[2].toLowerCase();
         return match[1] === 'PREVIOUS'
@@ -789,6 +839,9 @@ export function analyzeContext(
           case 'DATESYTD':
           case 'DATESQTD':
           case 'DATESMTD':
+          case 'DATESWTD':
+          case 'PREVIOUSWEEK':
+          case 'NEXTWEEK':
           case 'SAMEPERIODLASTYEAR':
           case 'DATEADD':
           case 'PARALLELPERIOD':

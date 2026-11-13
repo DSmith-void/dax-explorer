@@ -35,8 +35,11 @@ export interface FilterEntry {
   mode: 'replace' | 'intersect';
   /** For TREATAS: the tables its values come from (it filters as if through a relationship from them). */
   treatAsFrom?: string[];
-  /** For time-intelligence functions: the function, and the date column whose dates it works out. */
-  dates?: { functionName: string; column: ColumnName };
+  /**
+   * For time-intelligence functions: the function, and the date column whose dates it works out. With a
+   * calendar: the calendar's name, and its date column (null when the calendar has no Date unit).
+   */
+  dates?: { functionName: string; column: ColumnName | null; calendar?: string };
 }
 
 /** USERELATIONSHIP or CROSSFILTER inside CALCULATE: which relationship is used, or which way it filters. */

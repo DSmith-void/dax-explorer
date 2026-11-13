@@ -36,12 +36,74 @@ public sealed class Row(IReadOnlyDictionary<string, object?> values)
 /// </summary>
 public static class ModelBuilder
 {
+    /// <summary>
+    /// TOM's TimeUnit values (Microsoft.AnalysisServices.Tabular.TimeUnit), as INFO.CALENDARCOLUMNGROUPS reports
+    /// them. 0 (Unknown) is a group tagged without a unit: Power BI calls those columns "time-related".
+    /// </summary>
+    private static readonly string[] TimeUnits =
+    [
+        "TimeRelated", "Year", "Semester", "SemesterOfYear", "Quarter", "QuarterOfYear", "QuarterOfSemester",
+        "Month", "MonthOfYear", "MonthOfSemester", "MonthOfQuarter", "Week", "WeekOfYear", "WeekOfSemester",
+        "WeekOfQuarter", "WeekOfMonth", "Date", "DayOfYear", "DayOfSemester", "DayOfQuarter", "DayOfMonth", "DayOfWeek",
+    ];
+
+    public static string TimeUnitName(object? value)
+    {
+        var number = value switch
+        {
+            null or DBNull => -1,
+            string s => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : -1,
+            var other => Convert.ToInt32(other, CultureInfo.InvariantCulture),
+        };
+        return number >= 0 && number < TimeUnits.Length ? TimeUnits[number] : "Unknown";
+    }
+
+    /// <summary>
+    /// Calendars from INFO.CALENDARS, INFO.CALENDARCOLUMNGROUPS and INFO.CALENDARCOLUMNREFERENCES, which refer to
+    /// tables and columns by ID; the IDs are those of INFO.VIEW.TABLES and INFO.VIEW.COLUMNS.
+    /// </summary>
+    public static List<CalendarInfo> BuildCalendars(
+        IEnumerable<Row> tables,
+        IEnumerable<Row> columns,
+        IEnumerable<Row> calendars,
+        IEnumerable<Row> groups,
+        IEnumerable<Row> references)
+    {
+        var tableNames = tables.Where(r => r.Text("ID") is not null).ToDictionary(r => r.RequiredText("ID"), r => r.RequiredText("Name"));
+        var columnNames = columns.Where(r => r.Text("ID") is not null).ToDictionary(r => r.RequiredText("ID"), r => r.RequiredText("Name"));
+        var referenceList = references.ToList();
+        var groupList = groups.ToList();
+        var result = new List<CalendarInfo>();
+        foreach (var calendar in calendars)
+        {
+            var id = calendar.RequiredText("ID");
+            if (!tableNames.TryGetValue(calendar.RequiredText("TableID"), out var table)) continue;
+            var calendarGroups = new List<CalendarColumnGroupInfo>();
+            foreach (var group in groupList.Where(g => g.Text("CalendarID") == id))
+            {
+                var groupId = group.RequiredText("ID");
+                string? primary = null;
+                var associated = new List<string>();
+                foreach (var reference in referenceList.Where(r => r.Text("CalendarColumnGroupID") == groupId))
+                {
+                    if (!columnNames.TryGetValue(reference.RequiredText("ColumnID"), out var column)) continue;
+                    if (reference.Flag("IsPrimaryColumn") && primary is null) primary = column;
+                    else associated.Add(column);
+                }
+                calendarGroups.Add(new CalendarColumnGroupInfo(TimeUnitName(group["TimeUnit"]), primary, associated));
+            }
+            result.Add(new CalendarInfo(calendar.RequiredText("Name"), table, calendarGroups));
+        }
+        return result;
+    }
+
     public static ModelMetadata Build(
         string databaseName,
         IEnumerable<Row> tables,
         IEnumerable<Row> columns,
         IEnumerable<Row> measures,
-        IEnumerable<Row> relationships) =>
+        IEnumerable<Row> relationships,
+        IReadOnlyList<CalendarInfo>? calendars = null) =>
         new(
             databaseName,
             tables.Select(r => new TableInfo(r.RequiredText("Name"), r.Flag("IsHidden"), r.Text("Expression"), r.Text("DataCategory"))).ToList(),
@@ -76,5 +138,6 @@ public static class ModelBuilder
                     r.Text("ToCardinality") ?? "One",
                     r.Flag("IsActive"),
                     r.Text("CrossFilteringBehavior") ?? "OneDirection"))
-                .ToList());
+                .ToList(),
+            calendars ?? []);
 }

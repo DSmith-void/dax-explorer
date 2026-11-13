@@ -53,6 +53,52 @@ public class ModelBuilderTests
     }
 
     [Fact]
+    public void Reads_calendars_with_their_units_and_columns()
+    {
+        // The shape INFO.CALENDARS / CALENDARCOLUMNGROUPS / CALENDARCOLUMNREFERENCES return (IDs, not names).
+        var calendars = ModelBuilder.BuildCalendars(
+            tables: [R(("ID", 19L), ("Name", "Date")), R(("ID", 22L), ("Name", "Sales"))],
+            columns:
+            [
+                R(("ID", 40L), ("Table", "Date"), ("Name", "Date")),
+                R(("ID", 41L), ("Table", "Date"), ("Name", "Year")),
+                R(("ID", 42L), ("Table", "Date"), ("Name", "Month Number")),
+                R(("ID", 43L), ("Table", "Date"), ("Name", "Month")),
+                R(("ID", 45L), ("Table", "Date"), ("Name", "Is Holiday")),
+            ],
+            calendars: [R(("ID", 926L), ("TableID", 19L), ("Name", "Fiscal Calendar"))],
+            groups:
+            [
+                R(("ID", 927L), ("CalendarID", 926L), ("TimeUnit", 1L)),
+                R(("ID", 929L), ("CalendarID", 926L), ("TimeUnit", 8L)),
+                R(("ID", 930L), ("CalendarID", 926L), ("TimeUnit", 16L)),
+                R(("ID", 931L), ("CalendarID", 926L), ("TimeUnit", 0L)),
+            ],
+            references:
+            [
+                R(("CalendarColumnGroupID", 927L), ("ColumnID", 41L), ("IsPrimaryColumn", true)),
+                R(("CalendarColumnGroupID", 929L), ("ColumnID", 42L), ("IsPrimaryColumn", true)),
+                R(("CalendarColumnGroupID", 929L), ("ColumnID", 43L), ("IsPrimaryColumn", false)),
+                R(("CalendarColumnGroupID", 930L), ("ColumnID", 40L), ("IsPrimaryColumn", true)),
+                R(("CalendarColumnGroupID", 931L), ("ColumnID", 45L), ("IsPrimaryColumn", false)),
+            ]);
+
+        var calendar = Assert.Single(calendars);
+        Assert.Equal(("Fiscal Calendar", "Date"), (calendar.Name, calendar.Table));
+        Assert.Equal(["Year", "MonthOfYear", "Date", "TimeRelated"], calendar.Groups.Select(g => g.Unit));
+        Assert.Equal(["Year", "Month Number", "Date", null], calendar.Groups.Select(g => g.PrimaryColumn));
+        Assert.Equal(["Month"], calendar.Groups[1].AssociatedColumns);
+        Assert.Equal(["Is Holiday"], calendar.Groups[3].AssociatedColumns);
+    }
+
+    [Theory]
+    [InlineData(4L, "Quarter")]
+    [InlineData(11L, "Week")]
+    [InlineData(21L, "DayOfWeek")]
+    [InlineData(99L, "Unknown")]
+    public void Names_time_units_like_TOM(long value, string expected) => Assert.Equal(expected, ModelBuilder.TimeUnitName(value));
+
+    [Fact]
     public void Builds_tables_measures_and_relationships()
     {
         var model = BuildSample();
