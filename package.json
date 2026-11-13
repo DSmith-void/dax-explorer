@@ -3,7 +3,7 @@
   "description": "DAX Explorer: step through how a DAX measure is calculated, with real values from Power BI Desktop.",
   "license": "MIT",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
