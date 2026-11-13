@@ -65,6 +65,12 @@ export interface FunctionSpec {
    * Arguments with role 'rowExpression' are evaluated in that row context.
    */
   iteratesArgument?: number;
+  /**
+   * For functions whose inputs can only be told apart by what is written (SUMMARIZE: group-by columns until
+   * the first text, then name/expression pairs): the parameter for each input, or null when they don't fit.
+   * Used instead of `overloads` when the inputs are known; `overloads` still give the input counts.
+   */
+  paramsFor?: (args: readonly { kind: string }[]) => ParamSpec[] | null;
 }
 
 export const p = (name: string, role: ArgRole, extra: Partial<ParamSpec> = {}): ParamSpec => ({ name, role, ...extra });

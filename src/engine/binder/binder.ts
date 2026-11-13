@@ -113,7 +113,7 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
     }
 
     const spec = lookupFunction(node.name);
-    const params = spec ? parametersForCall(spec, node.args.length) : null;
+    const params = spec ? parametersForCall(spec, node.args.length, node.args) : null;
     result.calls.set(node.id, { nodeId: node.id, spec, params });
 
     if (!spec) {

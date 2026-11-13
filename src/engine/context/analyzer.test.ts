@@ -465,3 +465,45 @@ describe('FIRSTNONBLANK and LASTNONBLANK (checked in Power BI Desktop on Initech
     expect(filter && filter.kind === 'add-filter' ? filter.entry.condition : '').toBe("= the last value (smallest first) where [Total Sales] isn't blank");
   });
 });
+
+describe('SUMMARIZE (checked in Power BI Desktop on Initech)', () => {
+  const source = `SUMMARIZE(Sales, 'Product'[Category], "Sales", SUM(Sales[Amount]), "Name", 'Product'[Category] & "!")`;
+
+  it('goes group by group, and its extra columns see the table filtered to the group', () => {
+    const { step } = run(source);
+    const s = step(source);
+    expect(s.summary).toBe("SUMMARIZE groups Sales by Product[Category], one group at a time.");
+    expect(s.notes[1]).toContain("Sales is filtered to that group's rows");
+    const inner = step('SUM(Sales[Amount])');
+    expect(describeContext(inner.context)).toContain('table Sales limited to the rows of the current group  (set by SUMMARIZE for each group)');
+  });
+
+  it("can read the group's columns, but not another column of the table (an error)", () => {
+    expect(run(source).step("'Product'[Category]", 1).summary).toBe("Reads 'Product'[Category] from the row that SUMMARIZE is currently on.");
+    const bad = run(`SUMMARIZE(Sales, 'Product'[Category], "Qty", Sales[Quantity])`);
+    expect(bad.step('Sales[Quantity]').summary).toBe('Sales[Quantity] isn’t in the current row of SUMMARIZE, which has only Product[Category] (an error).'.replace('’', "'"));
+    expect(bad.step('Sales[Quantity]').notes[0]).toContain('MAX(Sales[Quantity]) or SUM(Sales[Quantity]): SUMMARIZE filters the table');
+  });
+
+  it('a plain loop over VALUES gives the CALCULATE advice instead (MAX alone sees every row)', () => {
+    const { step } = run("SUMX(VALUES('Product'[Category]), LEN('Product'[Product]))");
+    expect(step("'Product'[Product]").notes[0]).toContain("CALCULATE(MAX('Product'[Product]))");
+  });
+
+  it('as a table, its rows have the group-by columns (a measure over it filters them)', () => {
+    const { step } = run("SUMX(SUMMARIZE(Sales, 'Product'[Category]), [Total Sales])");
+    expect(step("SUMX(SUMMARIZE(Sales, 'Product'[Category]), [Total Sales])").summary).toBe(
+      "SUMX goes through SUMMARIZE(Sales, 'Product'[Category]) one row at a time.",
+    );
+    const transition = step('[Total Sales]').operations.find((o) => o.kind === 'context-transition');
+    expect(transition && transition.kind === 'context-transition' ? transition.added.map((e) => e.target) : []).toEqual([
+      { kind: 'columns', columns: [{ table: 'Product', column: 'Category' }] },
+    ]);
+  });
+
+  it('ROLLUP adds a total row, where ISSUBTOTAL is TRUE', () => {
+    const { step } = run(`SUMMARIZE(Sales, ROLLUP('Product'[Category]), "Total?", ISSUBTOTAL('Product'[Category]))`);
+    expect(step("ROLLUP('Product'[Category])").summary).toContain('Adds a total row');
+    expect(step("ISSUBTOTAL('Product'[Category])").summary).toContain('TRUE on the total row');
+  });
+});

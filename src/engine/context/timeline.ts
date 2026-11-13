@@ -76,6 +76,7 @@ export interface TimelineEntry {
 
 /** What each iterator does with the results of its rows. */
 const COMBINES: Record<string, string> = {
+  SUMMARIZE: 'has one row per group, with its extra columns',
   SUMX: 'adds up the results from every row',
   AVERAGEX: 'averages the results from every row',
   MINX: 'keeps the smallest result',
@@ -90,7 +91,6 @@ const COMBINES: Record<string, string> = {
   ADDCOLUMNS: 'adds the results as new columns',
   SELECTCOLUMNS: 'returns the results as a new table',
   GENERATE: 'combines each row with the rows calculated for it',
-  SUMMARIZE: 'returns the results as a new table',
 };
 
 /** For a measure stepped into from another measure. */
@@ -288,10 +288,13 @@ export function buildTimeline(
       add({
         kind: 'iterate',
         nodeId: node.id,
-        title: `${spec.name} goes row by row`,
+        title: spec.name === 'SUMMARIZE' ? 'SUMMARIZE goes group by group' : `${spec.name} goes row by row`,
         // Worded from the row context itself: when the iterator is also a CALCULATE filter input,
         // its step's summary describes that role instead.
-        summary: `${spec.name} goes through ${rowTable(step?.operations) ?? 'a table'} one row at a time.`,
+        summary:
+          spec.name === 'SUMMARIZE'
+            ? (step?.summary ?? 'SUMMARIZE goes through its groups one at a time.')
+            : `${spec.name} goes through ${rowTable(step?.operations) ?? 'a table'} one row at a time.`,
         innerContext: step?.innerContext,
         operations: step?.operations,
         depth,
@@ -302,7 +305,7 @@ export function buildTimeline(
       add({
         kind: 'iterate-done',
         nodeId: node.id,
-        title: `${spec.name}: after the last row`,
+        title: spec.name === 'SUMMARIZE' ? 'SUMMARIZE: after the last group' : `${spec.name}: after the last row`,
         summary: `After the last row, ${spec.name} ${COMBINES[spec.name] ?? 'finishes going through the rows'}.`,
         depth,
       });

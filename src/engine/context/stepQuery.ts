@@ -11,7 +11,8 @@
  * When that can't be reproduced exactly, the result says why instead of guessing.
  */
 import type { BindResult } from '../binder/binder';
-import { childrenOf, findNode, type AstNode, type Expr } from '../parser/ast';
+import { childrenOf, findNode, type AstNode, type Expr, type FunctionCall } from '../parser/ast';
+import type { ParamSpec } from '../catalog/functions';
 import type { ColumnName } from './model';
 import { columnDax, daxLiteral, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
 import { TOTALS } from './totals';
@@ -215,7 +216,10 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         if (!choice) throw new NeedsRow(frame.key, parent.id, call.spec.name);
         if (table) throw new Unsupported(`A table calculated for one row of ${call.spec.name} is not shown yet.`);
         const tableArg = parent.args[call.spec.iteratesArgument];
-        expr = pickRow(loopTable(tableArg, call.params[call.spec.iteratesArgument]?.role, text), choice, expr);
+        expr =
+          name === 'SUMMARIZE'
+            ? summarizeRow(text(tableArg), groupByText(parent, call.params, text), choice, expr)
+            : pickRow(loopTable(tableArg, call.params[call.spec.iteratesArgument]?.role, text), choice, expr);
       }
     }
     return expr;
@@ -280,6 +284,16 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         if (!call?.spec || call.spec.iteratesArgument === undefined || !call.params) return { kind: 'none', reason: '' };
         const rowArg = node.args.find((_, i) => call.params![i]?.role === 'rowExpression');
         const tableArg = node.args[call.spec.iteratesArgument];
+        if (call.spec.name === 'SUMMARIZE' && tableArg) {
+          // Its groups, with the first extra column worked out per group: SUMMARIZE itself does that exactly.
+          // The count comes from the very same expression: Power BI counted SUMMARIZE(Sales, ROLLUP(…)) without the
+          // extra column as 2 rows, with it as 5 (the four categories and the total).
+          const groups = `SUMMARIZE(\n${text(tableArg)},\n${groupByText(node, call.params, text)}`;
+          const shown = rowArg ? `${groups},\n${daxLiteral(ROW_VALUE_COLUMN)},\n${text(rowArg)}\n)` : `${groups}\n)`;
+          const count = inContext(node, `COUNTROWS(${shown})`, false);
+          if (!rowArg) return { kind: 'table', dax: inContext(node, shown, true), countDax: count };
+          return { kind: 'rows', dax: inContext(node, shown, true), countDax: count, iteratorName: 'SUMMARIZE' };
+        }
         if (!rowArg || !tableArg) return { kind: 'none', reason: '' };
         if (isTable(rowArg)) return { kind: 'none', reason: `The tables ${call.spec.name} makes for each row are not shown yet.` };
         const loop = loopTable(tableArg, call.params[call.spec.iteratesArgument]?.role);
@@ -349,16 +363,35 @@ class NeedsRow extends Error {
  * row is an error rather than a silent BLANK. Identical rows give identical results, so any match works.
  */
 function pickRow(table: string, choice: RowChoice, expr: string): string {
+  return `VAR __DaxExplorerRow =\nFILTER(\n${table},\n${rowConditions(choice)}\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\n${expr}\n)\n)`;
+}
+
+/** The conditions that find the picked row again, by its column values. */
+function rowConditions(choice: RowChoice): string {
   if (choice.columns.length === 0 || choice.columns.length !== choice.values.length) {
     throw new Unsupported('The picked row has no columns to find it by.');
   }
-  const conditions = choice.columns.map((column, i) => {
-    const ref = columnNameDax(column);
-    if (!ref) throw new Unsupported(`The column ${column} can't be used to find the picked row.`);
-    const value = choice.values[i];
-    return value === null ? `ISBLANK(${ref})` : `${ref} == ${daxLiteral(value)}`;
-  });
-  return `VAR __DaxExplorerRow =\nFILTER(\n${table},\n${conditions.join(' && ')}\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\n${expr}\n)\n)`;
+  return choice.columns
+    .map((column, i) => {
+      const ref = columnNameDax(column);
+      if (!ref) throw new Unsupported(`The column ${column} can't be used to find the picked row.`);
+      const value = choice.values[i];
+      return value === null ? `ISBLANK(${ref})` : `${ref} == ${daxLiteral(value)}`;
+    })
+    .join(' && ');
+}
+
+/** The group-by inputs of SUMMARIZE (columns, or ROLLUP(…)), as written. */
+function groupByText(call: FunctionCall, params: readonly ParamSpec[], of: (node: AstNode) => string): string {
+  return call.args.filter((_, i) => i > 0 && params[i]?.role === 'column').map(of).join(',\n');
+}
+
+/**
+ * The value of `expr` for one group of SUMMARIZE: the same SUMMARIZE, with `expr` as an extra column, read on
+ * the picked group's row. SUMMARIZE itself sets the group's filters (on the table's rows), so this is exact.
+ */
+function summarizeRow(table: string, groupBy: string, choice: RowChoice, expr: string): string {
+  return `VAR __DaxExplorerRow =\nFILTER(\nSUMMARIZE(\n${table},\n${groupBy},\n"@DaxExplorerStep",\n${expr}\n),\n${rowConditions(choice)}\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow, [@DaxExplorerStep])\n)`;
 }
 
 /** The nodes from the root down to the node with this id, or null. */

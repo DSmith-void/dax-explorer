@@ -449,6 +449,52 @@ export function findHints(input: HintInput): Hint[] {
     }
   }
 
+  // --- 11d. SUMMARIZE's extra columns. Checked in Power BI Desktop: each is worked out with the table filtered to
+  //      the group's rows, so CALCULATE(SUM(Sales[Amount]), ALL('Product')) per category gave the category's own
+  //      total (77,094 for Widgets), where ADDCOLUMNS(SUMMARIZE(Sales, Category), …, CALCULATE(…)) gave the grand
+  //      total (254,958). Plain sums and measures gave the same either way.
+  for (const call of calls.filter((c) => named(c, 'SUMMARIZE'))) {
+    const params = binding?.calls.get(call.id)?.params;
+    if (!params) continue;
+    const table = call.args[0];
+    const groups = call.args.filter((_, i) => i > 0 && params[i]?.role === 'column');
+    const pairs: [AstNode, AstNode][] = [];
+    call.args.forEach((arg, i) => {
+      if (params[i]?.role === 'rowExpression') pairs.push([call.args[i - 1], arg]);
+    });
+    if (!table || pairs.length === 0) continue;
+    const tableName = table.kind === 'TableRef' ? table.name : null;
+    // ALL / REMOVEFILTERS / ALLEXCEPT of another table: the case that gives a different result.
+    const removesOther = pairs.some(([, expression]) =>
+      allNodes(expression).some(
+        (n) =>
+          n.kind === 'FunctionCall' &&
+          named(n, 'ALL', 'REMOVEFILTERS', 'ALLEXCEPT') &&
+          n.args.some((a) => (a.kind === 'TableRef' ? !tableName || !same(a.name, tableName) : a.kind === 'ColumnRef' && (!tableName || !same(a.table, tableName)))),
+      ),
+    );
+    const rewrite = `ADDCOLUMNS(SUMMARIZE(${[text(table), ...groups.map(text)].join(', ')}), ${pairs.map(([name, expression]) => `${text(name)}, CALCULATE(${text(expression)})`).join(', ')})`;
+    hints.push({
+      check: 'summarize-extra-columns',
+      short: removesOther
+        ? `ALL on another table doesn't remove SUMMARIZE's group filter here.`
+        : 'Each extra column is worked out with the table filtered to the group’s rows.',
+      kind: removesOther ? 'warning' : 'note',
+      nodeId: call.id,
+      title: removesOther ? 'Removing filters here may not give the totals you expect' : 'Extra columns in SUMMARIZE',
+      code: oneLine(text(call)),
+      why:
+        `SUMMARIZE works out each extra column once per group, with ${text(table)} filtered to that group's rows. That ` +
+        `filter is on ${text(table)} itself, not only on the group columns, so ALL or REMOVEFILTERS on another table ` +
+        `(such as ALL('Product')) doesn't remove it: you get the group's own total instead of the grand total. ` +
+        `The usual pattern adds the columns outside SUMMARIZE, where only the group columns are filtered.`,
+      suggestion: {
+        dax: rewrite,
+        note: 'Gives the same result for plain sums and measures; differs when the expression removes filters, where this version removes them as written.',
+      },
+    });
+  }
+
   // --- 12. A calendar moves single days by their place in it, not by date (checked in Power BI Desktop:
   //     SAMEPERIODLASTYEAR and DATEADD by YEAR or MONTH, with and without a Month unit in the calendar).
   if (analysis) {

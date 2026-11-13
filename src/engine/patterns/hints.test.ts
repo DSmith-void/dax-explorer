@@ -313,3 +313,16 @@ describe('FIRSTNONBLANK and LASTNONBLANK (checked in Power BI Desktop on Initech
     expect(checks(hints(`M = FIRSTNONBLANK('Date'[Date], [Total Sales])`))).not.toContain('nonblank-text-order');
   });
 });
+
+describe('SUMMARIZE extra columns (checked in Power BI Desktop: ALL on another table keeps the group filter)', () => {
+  it('warns when an extra column removes filters from another table, with the ADDCOLUMNS rewrite', () => {
+    const hint = one(hints(`M = COUNTROWS(SUMMARIZE(Sales, 'Product'[Category], "All", CALCULATE(SUM(Sales[Amount]), ALL('Product'))))`), 'summarize-extra-columns');
+    expect(hint.kind).toBe('warning');
+    expect(hint.suggestion?.dax).toBe(`ADDCOLUMNS(SUMMARIZE(Sales, 'Product'[Category]), "All", CALCULATE(CALCULATE(SUM(Sales[Amount]), ALL('Product'))))`);
+  });
+
+  it('is only a note for plain sums (same result either way), and quiet without extra columns', () => {
+    expect(one(hints(`M = COUNTROWS(SUMMARIZE(Sales, 'Product'[Category], "S", SUM(Sales[Amount])))`), 'summarize-extra-columns').kind).toBe('note');
+    expect(checks(hints(`M = COUNTROWS(SUMMARIZE(Sales, 'Product'[Category]))`))).not.toContain('summarize-extra-columns');
+  });
+});

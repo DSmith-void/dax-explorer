@@ -56,6 +56,8 @@ export function entryText(entry: FilterEntry): string {
 
 export function originText(entry: FilterEntry): string {
   const origin = entry.origin;
+  // SUMMARIZE's own filter: the table limited to each group's rows (not a CALCULATE turning a row into a filter).
+  if (origin.kind === 'context-transition' && origin.iteratorName === 'SUMMARIZE' && origin.iteratorNodeId === origin.nodeId) return 'set by SUMMARIZE for each group';
   if (origin.kind === 'context-transition') return 'context transition';
   return entry.mode === 'intersect'
     ? `added by ${origin.functionName}, on top of existing filters (KEEPFILTERS)`

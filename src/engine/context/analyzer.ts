@@ -242,6 +242,12 @@ export function analyzeContext(
         const name = specOf(expr)?.name;
         const args = expr.args;
         switch (name) {
+          case 'SUMMARIZE': {
+            // Its rows have the group-by columns (and the extra columns, which have no lineage to a table).
+            const firstName = args.findIndex((a, i) => i > 0 && a.kind === 'StringLiteral');
+            const columns = groupColumns(args.slice(1, firstName === -1 ? undefined : firstName));
+            return columns.length > 0 ? { kind: 'columns', columns, description } : { kind: 'unknown', description };
+          }
           case 'VALUES':
           case 'DISTINCT':
           case 'ALL':
@@ -430,6 +436,10 @@ export function analyzeContext(
       visitCalculate(node, ctx, spec);
       return;
     }
+    if (spec.name === 'SUMMARIZE') {
+      visitSummarize(node, ctx, call.params);
+      return;
+    }
     if (spec.iteratesArgument !== undefined) {
       visitIterator(node, ctx, spec, call.params);
       return;
@@ -510,6 +520,14 @@ export function analyzeContext(
       case 'USERELATIONSHIP':
       case 'CROSSFILTER':
         return role === 'filter' ? [] : [`${spec.name} only does something when it is used inside CALCULATE or CALCULATETABLE.`];
+      // Checked in Power BI Desktop: SUMMARIZE(Sales, ROLLUP('Product'[Category]), …) adds a row with Category
+      // BLANK and the grand total, where ISSUBTOTAL('Product'[Category]) is TRUE.
+      case 'ROLLUP':
+        return [`Adds a total row for ${node.args.map((a) => snippet(a, 30)).join(', ')} (BLANK on that row), with the totals of the extra columns.`];
+      case 'ROLLUPGROUP':
+        return [`Treats ${node.args.map((a) => snippet(a, 30)).join(', ')} as one column: they get one total row together.`];
+      case 'ISSUBTOTAL':
+        return [`TRUE on the total row that ROLLUP adds for ${first ? snippet(first, 30) : 'the column'}, FALSE on the other rows.`];
       case 'LOOKUPVALUE': {
         // Checked in Power BI Desktop: filters on its table, and filters reaching it from other tables (Product,
         // Date), don't change what it finds; a row context doesn't either. Only its own search conditions count.
@@ -565,6 +583,64 @@ export function analyzeContext(
         ...(nonBlank
           ? [
               `It goes through them smallest first (text alphabetically, not in a sort-by column's order) and keeps the ${nonBlank[1] === 'FIRST' ? 'first' : 'last'} one where ${node.args[1] ? snippet(node.args[1], 40) : 'the expression'} isn't blank. ${nonBlank[2] ? 'It returns the expression’s value there' : 'It returns that value, as a one-row table'}, or ${nonBlank[2] ? 'BLANK' : 'an empty table'} when every one is blank.`,
+            ]
+          : []),
+      ],
+    });
+  }
+
+  /** The group-by columns of SUMMARIZE: written directly, or inside ROLLUP / ROLLUPGROUP. */
+  function groupColumns(args: readonly Expr[]): ColumnName[] {
+    return args.flatMap((arg): ColumnName[] => {
+      if (arg.kind === 'FunctionCall' && ['ROLLUP', 'ROLLUPGROUP'].includes(arg.name.toUpperCase())) return groupColumns(arg.args);
+      const column = columnOf(arg);
+      return column ? [column] : [];
+    });
+  }
+
+  /**
+   * SUMMARIZE(table, group-by columns…, name, expression…), as Power BI Desktop does it (checked on Initech):
+   *  - it lists each group (combination of the group-by columns) that has rows in the table, with the filters
+   *    in effect;
+   *  - each extra column is worked out once per group, with a current row that has only the group's columns
+   *    (another column of the table is an error), and with the table filtered to the group's rows. That filter
+   *    is on the table itself: CALCULATE(…, ALL('Product')) still gives the group's total, ALL(Sales) doesn't.
+   */
+  function visitSummarize(node: FunctionCall, ctx: EvalContext, params: ParamSpec[]) {
+    const tableArg = node.args[0];
+    const groupArgs = node.args.filter((_, i) => i > 0 && params[i]?.role === 'column');
+    const columns = groupColumns(groupArgs);
+    node.args.forEach((arg, i) => {
+      if (params[i]?.role !== 'rowExpression') visit(arg, ctx, params[i]?.role ?? null);
+    });
+    const tableText = tableArg ? snippet(tableArg, 30) : 'the table';
+    const byText = columns.length > 0 ? columns.map(columnText).join(', ') : 'nothing';
+    const row: RowContext = {
+      nodeId: node.id,
+      functionName: 'SUMMARIZE',
+      table: { kind: 'columns', columns, description: `the groups of ${tableText} by ${byText}` },
+    };
+    // The group's rows of the table, as a filter on the table itself.
+    const groupFilter: FilterEntry = {
+      target: tableArg?.kind === 'TableRef' ? { kind: 'table', table: tableArg.name } : { kind: 'unknown', description: tableText },
+      condition: 'limited to the rows of the current group',
+      origin: { kind: 'context-transition', nodeId: node.id, iteratorNodeId: node.id, iteratorName: 'SUMMARIZE' },
+      mode: 'intersect',
+    };
+    const inner: EvalContext = { ...ctx, filter: addFilter(ctx.filter, groupFilter).fc, rows: [...ctx.rows, row] };
+    const extra = node.args.filter((_, i) => params[i]?.role === 'rowExpression');
+    extra.forEach((arg) => visit(arg, inner, 'rowExpression'));
+    record({
+      nodeId: node.id,
+      context: ctx,
+      operations: [{ kind: 'row-context', row }],
+      innerContext: inner,
+      summary: `SUMMARIZE groups ${tableText} by ${byText}, one group at a time.`,
+      notes: [
+        `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
+        ...(extra.length > 0
+          ? [
+              `Each extra column is worked out once per group: it can read the group's columns (${byText}), and ${tableText} is filtered to that group's rows. That filter is on ${tableText} itself, so removing filters from another table (such as ALL on a related table) doesn't remove it; removing filters from ${tableText} does.`,
             ]
           : []),
       ],
@@ -1195,6 +1271,20 @@ export function analyzeContext(
       return { summary: note, notes: [note] };
     }
     const innermost = rows[rows.length - 1];
+    if (innermost.table.kind === 'columns' && column.table !== '') {
+      // The loop's rows have only some columns (SUMMARIZE's groups, VALUES of a column): checked in Power BI
+      // Desktop, reading another column there is an error.
+      const has = innermost.table.columns.map(columnText).join(', ');
+      const summary = `${label} isn't in the current row of ${innermost.functionName}, which has only ${has} (an error).`;
+      // The fix differs: SUMMARIZE filters the table to the group, a plain loop filters nothing (checked live).
+      const fix =
+        innermost.functionName === 'SUMMARIZE'
+          ? `Use an aggregation such as MAX(${label}) or SUM(${label}): SUMMARIZE filters the table to the group's rows, so it works per group.`
+          : `Use CALCULATE(MAX(${label})): CALCULATE turns the current row into a filter, so MAX sees that row's data. (MAX on its own would see every row.)`;
+      const message = `${innermost.functionName} goes through ${innermost.table.description}, so its current row has only ${has}. ${label} isn't one of them, so there is no single value to read, and DAX shows an error. ${fix}`;
+      if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
+      return { summary, notes: [message] };
+    }
     if (column.table === '' || innermost.table.kind === 'unknown') {
       return {
         summary: `Reads ${label} from the row that ${innermost.functionName} is currently on.`,

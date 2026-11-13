@@ -325,3 +325,16 @@ describe('calls, keywords and unknown functions', () => {
     expect(bind(null, CONVENTION).references.size).toBe(0);
   });
 });
+
+describe('SUMMARIZE inputs, told apart by what is written', () => {
+  it('group-by columns until the first name, then name and expression pairs', () => {
+    const { calls } = bind(rootOf(`SUMMARIZE(Sales, 'Product'[Category], 'Date'[Year], "S", SUM(Sales[Amount]))`), CONVENTION);
+    const call = [...calls.values()].find((c) => c.spec?.name === 'SUMMARIZE')!;
+    expect(call.params?.map((p) => p.role)).toEqual(['table', 'column', 'column', 'scalar', 'rowExpression']);
+  });
+
+  it('a name without an expression does not fit', () => {
+    const result = bind(rootOf(`SUMMARIZE(Sales, 'Product'[Category], "S")`), CONVENTION);
+    expect(result.diagnostics.map((d) => d.code)).toContain('argument-count');
+  });
+});

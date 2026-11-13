@@ -225,6 +225,30 @@ const SPECS: FunctionSpec[] = [
     },
   ]),
 
+  // --- Grouping ---
+  summarize(),
+  {
+    name: 'ROLLUP',
+    category: 'table',
+    returns: 'table',
+    summary: 'Inside SUMMARIZE: adds total rows for these group columns (their value is BLANK on those rows).',
+    overloads: [[p('column', 'column'), p('column', 'column', { optional: true, repeating: true })]],
+  },
+  {
+    name: 'ROLLUPGROUP',
+    category: 'table',
+    returns: 'table',
+    summary: 'Inside ROLLUP: treats these columns as one, so they get one total row together.',
+    overloads: [[p('column', 'column'), p('column', 'column', { optional: true, repeating: true })]],
+  },
+  {
+    name: 'ISSUBTOTAL',
+    category: 'table',
+    returns: 'scalar',
+    summary: 'Inside SUMMARIZE: TRUE on the total row that ROLLUP adds for this column.',
+    overloads: [[p('column', 'column')]],
+  },
+
   // --- Lookup ---
   lookupValue(),
   {
@@ -446,7 +470,8 @@ export function arity(params: readonly ParamSpec[]): { min: number; max: number 
  * Picks the overload matching the argument count and returns the parameter
  * for each argument position. Returns null if no overload fits.
  */
-export function parametersForCall(spec: FunctionSpec, argumentCount: number): ParamSpec[] | null {
+export function parametersForCall(spec: FunctionSpec, argumentCount: number, args?: readonly { kind: string }[]): ParamSpec[] | null {
+  if (spec.paramsFor && args) return spec.paramsFor(args);
   for (const params of spec.overloads) {
     const { min, max } = arity(params);
     if (argumentCount < min || argumentCount > max) continue;
@@ -482,6 +507,36 @@ function lookupValue(): FunctionSpec {
       ...Array.from({ length: 20 }, (_, i) => [[...head, ...pairs(i + 1)], [...head, ...pairs(i + 1), alternate]]).flat(),
       [...head, ...pair, p('search column', 'column', { repeating: true }), p('search value', 'scalar', { repeating: true })],
     ],
+  };
+}
+
+/**
+ * SUMMARIZE(table, group-by column…, [name, expression]…). The group-by columns (or ROLLUP(…)) come first and
+ * the extra columns are written as a text name and an expression, so the inputs are told apart by what is
+ * written. Checked in Power BI Desktop: each extra column is worked out once per group, with a current row
+ * holding only the group's columns, and with the table filtered to the group's rows.
+ */
+function summarize(): FunctionSpec {
+  const table = p('table', 'table');
+  const groupBy = p('group by column', 'column');
+  const name = p('name', 'scalar');
+  const expression = p('expression', 'rowExpression');
+  return {
+    name: 'SUMMARIZE',
+    category: 'table',
+    returns: 'table',
+    summary: 'Groups the rows of a table by some columns, with optional extra columns worked out once per group.',
+    overloads: [[table, groupBy, p('group by column, or name', 'column', { optional: true, repeating: true })]],
+    iteratesArgument: 0,
+    paramsFor: (args) => {
+      if (args.length < 2) return null;
+      const params = [table];
+      let i = 1;
+      for (; i < args.length && args[i].kind !== 'StringLiteral'; i++) params.push(groupBy);
+      if ((args.length - i) % 2 !== 0) return null;
+      for (; i < args.length; i += 2) params.push(name, expression);
+      return params;
+    },
   };
 }
 
