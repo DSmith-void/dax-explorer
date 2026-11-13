@@ -56,3 +56,4 @@ samples/Initech/**/.pbi/cache.abf
 Thumbs.db
 *.suo
 *.sw?
+src/devtools/claims.report.md

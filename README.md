@@ -91,6 +91,18 @@ has no data sources and nothing to refresh.
 | `npm test`              | Run the app's tests (Vitest)                                   |
 | `dotnet test helper`    | Run the helper's tests                                         |
 
+**Claim checker.** The explanations make claims (which columns are filtered at each step, which steps are
+errors). The claim checker asks Power BI Desktop each one, for a library of synthetic measures
+(`src/devtools/claimLibrary.ts`) under several report filters, and lists every disagreement. With a helper
+running and connected to the Initech sample (and no other report open):
+
+```sh
+CLAIMS_LIVE=1 CLAIMS_HELPER=http://127.0.0.1:5093 DAXEXPLORER_HELPER_TOKEN=<token> npx vitest run src/devtools -u
+```
+
+It writes `src/devtools/claims.report.md` and the claims Power BI confirmed (`claims.confirmed.json`); the
+normal tests then fail if a confirmed claim changes.
+
 Project layout:
 
 - `src/engine/`: the DAX engine (lexer, parser, function catalog, binder, the context analysis, the

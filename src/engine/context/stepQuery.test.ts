@@ -4,6 +4,7 @@ import { bind } from '../binder/binder';
 import { splitMeasureDefinition } from '../definition';
 import { tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
+import { findNode } from '../parser/ast';
 import { analyzeContext } from './analyzer';
 import type { ReportFilter } from './reportFilters';
 import { buildStepQuery, columnNameDax, evaluateText, rowColumns, rowKey, type RowChoice, type StepQuery } from './stepQuery';
@@ -195,5 +196,19 @@ describe('GROUPBY values', () => {
     const inner = timeline.find((e) => e.kind === 'iterate' && e.title === 'SUMX goes row by row')!;
     const q = buildStepQuery(inner, { root, binding, source, reportFilters: [], rows: new Map() });
     expect(q).toEqual({ kind: 'none', reason: expect.stringContaining("Values inside GROUPBY's aggregation aren't shown") });
+  });
+});
+
+describe('a CALCULATE without filters inside a loop (found by the claim checker)', () => {
+  it('is kept when a step inside it is rebuilt: it turns the loop’s row into a filter', () => {
+    const source = "SUMX(VALUES('Product'[Category]), CALCULATE(SUM(Sales[Amount])))";
+    const { root } = parse(tokenize(source).tokens);
+    const binding = bind(root, { mode: 'convention', userChoices: {} });
+    const timeline = buildTimeline(root, binding, analyzeContext(root, binding, source), source);
+    const loop = timeline.find((e) => e.kind === 'iterate')!;
+    const rows = new Map<string, RowChoice>([[rowKey('root', loop.nodeId!), { columns: ['Product[Category]'], values: ['Widgets'] }]]);
+    const sum = timeline.find((e) => e.nodeId !== null && source.slice(findNode(root, e.nodeId)!.span.start, findNode(root, e.nodeId)!.span.end) === 'SUM(Sales[Amount])')!;
+    const q = buildStepQuery(sum, { root, binding, source, reportFilters: [], rows, frameKey: 'root' });
+    expect(q.kind === 'scalar' ? q.dax : '').toContain('MAXX(__DaxExplorerRow,\nCALCULATE(\nSUM(Sales[Amount])\n)\n)');
   });
 });

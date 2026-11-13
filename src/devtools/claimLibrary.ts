@@ -1,0 +1,59 @@
+/**
+ * What the claim checker runs: the built-in examples plus deliberately awkward synthetic measures on the
+ * Initech sample (never real work measures), each under a few report-filter setups.
+ */
+import type { ReportFilter } from '../engine/context/reportFilters';
+import { SAMPLE_MEASURES } from '../samples/sampleMeasures';
+
+export interface LibraryMeasure {
+  id: string;
+  /** A measure definition: "Name = expression". */
+  definition: string;
+}
+
+/** Combinations chosen to exercise the engine's rules where they meet (filters, removals, rows, relationships). */
+const AWKWARD: LibraryMeasure[] = [
+  ['all-sales-keeps-product', 'CALCULATE([Total Sales], ALL(Sales))'],
+  ['all-product-then-category', `CALCULATE([Total Sales], 'Product'[Category] = "Widgets", ALL('Product'))`],
+  ['keepfilters-category', `CALCULATE([Total Sales], KEEPFILTERS('Product'[Category] = "Widgets"))`],
+  ['allexcept-category', `CALCULATE([Total Sales], ALLEXCEPT('Product', 'Product'[Category]))`],
+  ['removefilters-date', `CALCULATE([Total Sales], REMOVEFILTERS('Date'))`],
+  ['datesytd-removes-date', `CALCULATE([Total Sales], DATESYTD('Date'[Date]))`],
+  ['plain-date-filter', `CALCULATE([Total Sales], 'Date'[Date] >= DATE(2025, 1, 1))`],
+  ['month-filter', `CALCULATE([Total Sales], 'Date'[Month] = "Mar")`],
+  ['loop-values-transition', `SUMX(VALUES('Product'[Category]), CALCULATE([Total Sales]))`],
+  ['loop-measure-transition', `AVERAGEX(VALUES('Date'[Year]), [Total Sales])`],
+  ['nested-calculate-all', `CALCULATE(CALCULATE([Total Sales], 'Product'[Category] = "Gadgets"), ALL('Product'))`],
+  ['filter-all-column', `CALCULATE([Total Sales], FILTER(ALL('Product'[Category]), 'Product'[Category] <> "Widgets"))`],
+  ['userelationship', `CALCULATE([Total Sales], USERELATIONSHIP(Sales[Ship Date], 'Date'[Date]))`],
+  ['treatas', `CALCULATE([Total Sales], TREATAS({"Widgets"}, 'Product'[Category]))`],
+  ['in-list', `CALCULATE([Total Sales], 'Product'[Category] IN {"Widgets", "Gadgets"})`],
+  ['removefilters-all', `CALCULATE(SUMX(Sales, Sales[Amount]), REMOVEFILTERS())`],
+  ['variable-outside', `VAR s = [Total Sales] RETURN CALCULATE(s, ALL('Product'))`],
+  ['loop-all-category', `AVERAGEX(VALUES('Date'[Year]), CALCULATE([Total Sales], ALL('Product'[Category])))`],
+  ['all-customer-other-table', `CALCULATE([Total Sales], ALL('Customer'))`],
+  ['lookup-ignores', `LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro")`],
+  ['summarize-all-product', `COUNTROWS(SUMMARIZE(Sales, 'Product'[Category], "All", CALCULATE(SUM(Sales[Amount]), ALL('Product'))))`],
+  ['column-inside-calculate', `SUMX('Product', CALCULATE('Product'[List Price] + 0))`],
+  ['earlier-classic', `SUMX('Product', COUNTROWS(FILTER('Product', 'Product'[List Price] < EARLIER('Product'[List Price]))))`],
+  ['lastnonblank-filter', `CALCULATE([Total Sales], LASTNONBLANK('Date'[Date], [Total Sales]))`],
+].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
+
+export const CLAIM_LIBRARY: readonly LibraryMeasure[] = [
+  ...SAMPLE_MEASURES.map((m) => ({ id: m.id, definition: m.expression })),
+  ...AWKWARD,
+];
+
+/** Report-filter setups each measure is checked under. */
+export const CLAIM_SCENARIOS: readonly { id: string; filters: ReportFilter[] }[] = [
+  { id: 'no-filters', filters: [] },
+  { id: 'gadgets', filters: [{ kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Gadgets'] }] },
+  { id: 'year-2025', filters: [{ kind: 'values', column: { table: 'Date', column: 'Year' }, values: [2025] }] },
+  {
+    id: 'gadgets-2025',
+    filters: [
+      { kind: 'values', column: { table: 'Product', column: 'Category' }, values: ['Gadgets'] },
+      { kind: 'values', column: { table: 'Date', column: 'Year' }, values: [2025] },
+    ],
+  },
+];

@@ -207,8 +207,10 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         continue;
       }
       if ((name === 'CALCULATE' || name === 'CALCULATETABLE') && argIndex === 0) {
+        // Kept even without filters: inside a loop, CALCULATE turns the current row into a filter (found by the
+        // claim checker: dropping an empty CALCULATE lost that, and steps inside it saw every row).
         const filters = parent.args.slice(1).filter((a) => a.kind !== 'Omitted').map(text);
-        if (filters.length > 0) expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${filters.join(',\n')}\n)`;
+        expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr}${filters.length > 0 ? `,\n${filters.join(',\n')}` : ''}\n)`;
         continue;
       }
       if (call.spec.iteratesArgument !== undefined && call.params[argIndex]?.role === 'rowExpression') {
