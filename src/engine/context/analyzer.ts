@@ -291,6 +291,12 @@ export function analyzeContext(
             const column = args[0] ? columnOf(args[0]) : null;
             return column ? { kind: 'columns', columns: [column], description } : { kind: 'unknown', description };
           }
+          case 'FIRSTNONBLANK':
+          case 'LASTNONBLANK': {
+            // A one-row table of the column it goes through.
+            const column = args[0] ? columnOf(args[0]) : null;
+            return column ? { kind: 'columns', columns: [column], description } : { kind: 'unknown', description };
+          }
           case 'TREATAS': {
             // Its result has the lineage of the columns it names.
             const columns = args.slice(1).map(columnOf);
@@ -540,12 +546,13 @@ export function analyzeContext(
     const row: RowContext = {
       nodeId: node.id,
       functionName: spec.name,
-      table: tableArg ? shapeOf(tableArg) : { kind: 'unknown', description: '(missing table)' },
+      table: tableArg ? loopShape(tableArg, params[spec.iteratesArgument!]?.role) : { kind: 'unknown', description: '(missing table)' },
     };
     const rowCtx: EvalContext = { ...ctx, rows: [...ctx.rows, row] };
     node.args.forEach((arg, i) => {
       if (params[i].role === 'rowExpression') visit(arg, rowCtx, 'rowExpression');
     });
+    const nonBlank = /^(FIRST|LAST)NONBLANK(VALUE)?$/.exec(spec.name);
     record({
       nodeId: node.id,
       context: ctx,
@@ -554,8 +561,20 @@ export function analyzeContext(
       summary: `${spec.name} goes through ${row.table.description} one row at a time.`,
       notes: [
         `Row by row (row context): the inputs marked "per row" are calculated for each row. This doesn't filter anything by itself.`,
+        // Checked in Power BI Desktop: smallest first, text alphabetically (Month gave Apr first), no sort-by.
+        ...(nonBlank
+          ? [
+              `It goes through them smallest first (text alphabetically, not in a sort-by column's order) and keeps the ${nonBlank[1] === 'FIRST' ? 'first' : 'last'} one where ${node.args[1] ? snippet(node.args[1], 40) : 'the expression'} isn't blank. ${nonBlank[2] ? 'It returns the expression’s value there' : 'It returns that value, as a one-row table'}, or ${nonBlank[2] ? 'BLANK' : 'an empty table'} when every one is blank.`,
+            ]
+          : []),
       ],
     });
+  }
+
+  /** The rows a loop goes through: a table, or for FIRSTNONBLANK and the like, the values of a column. */
+  function loopShape(arg: Expr, role: ArgRole | undefined): TableShape {
+    const column = role === 'column' ? columnOf(arg) : null;
+    return column ? { kind: 'columns', columns: [column], description: `the values of ${snippet(arg)}` } : shapeOf(arg);
   }
 
   // --------------------------------------------------------------- CALCULATE
@@ -958,6 +977,23 @@ export function analyzeContext(
           case 'ENDOFQUARTER':
           case 'ENDOFYEAR':
             return timeFilter(spec.name, arg.args, calculate, calculateName, mode);
+          case 'FIRSTNONBLANK':
+          case 'LASTNONBLANK': {
+            // A one-row table of the column: as a filter, the column is set to that one value. Its expression
+            // is worked out with the filters from outside the CALCULATE (Power BI: March 2025 gave 31 March).
+            const column = arg.args[0] ? columnOf(arg.args[0]) : null;
+            if (!column || column.table === '') return { kind: 'not-modeled', description: `the app can't tell which column ${spec.name} goes through (it needs a Table[Column] reference)` };
+            const which = spec.name === 'FIRSTNONBLANK' ? 'first' : 'last';
+            return {
+              kind: 'filter',
+              entry: {
+                target: { kind: 'columns', columns: [column] },
+                condition: `= the ${which} value (smallest first) where ${arg.args[1] ? snippet(arg.args[1], 30) : 'the expression'} isn't blank`,
+                origin,
+                mode,
+              },
+            };
+          }
           case 'TREATAS': {
             const [values, ...targets] = arg.args;
             const columns = targets.map(columnOf);

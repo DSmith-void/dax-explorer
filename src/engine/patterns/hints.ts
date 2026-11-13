@@ -404,6 +404,51 @@ export function findHints(input: HintInput): Hint[] {
     });
   }
 
+  // --- 11c. FIRSTNONBLANK and the like: the expression needs CALCULATE (or a measure) to change per value.
+  //      Checked in Power BI Desktop: for Gadgets, FIRSTNONBLANK('Date'[Date], SUM(Sales[Amount])) gave 1 Jan
+  //      2024 (a day without Gadgets sales); with [Total Sales] or CALCULATE(SUM(…)), 3 Jan (the first sale).
+  //      And a text column goes alphabetically: FIRSTNONBLANK('Date'[Month], …) gave Apr, not Jan.
+  for (const call of calls.filter((c) => named(c, 'FIRSTNONBLANK', 'LASTNONBLANK', 'FIRSTNONBLANKVALUE', 'LASTNONBLANKVALUE'))) {
+    const [columnArg, expression] = call.args;
+    if (expression) {
+      const inside = allNodes(expression);
+      const transitions = inside.some((n) => isMeasure(n) || (n.kind === 'FunctionCall' && named(n, 'CALCULATE', 'CALCULATETABLE')));
+      const aggregates = inside.some((n) => n.kind === 'FunctionCall' && ['aggregation', 'iterator', 'statistical'].includes(binding?.calls.get(n.id)?.spec?.category ?? ''));
+      if (aggregates && !transitions) {
+        hints.push({
+          check: 'nonblank-needs-calculate',
+          short: 'Without CALCULATE it gives the same total for every value, so the first value always wins.',
+          kind: 'warning',
+          nodeId: expression.id,
+          title: `${call.name.toUpperCase()} doesn't work this out per value`,
+          code: text(expression),
+          why:
+            `Going through the values of ${columnArg ? text(columnArg) : 'the column'} gives a current row, but that doesn't filter anything ` +
+            `(row context). So ${oneLine(text(expression))} sees every value at once, the same total every time, and the ` +
+            `${/^FIRST/i.test(call.name) ? 'first' : 'last'} value is kept even if it has no data of its own. CALCULATE around it turns the ` +
+            `current value into a filter (context transition); a measure does that by itself.`,
+          suggestion: { dax: `CALCULATE(${text(expression)})`, note: 'Worked out for each value on its own, as in a measure.' },
+        });
+      }
+    }
+    const column = columnArg?.kind === 'ColumnRef' ? { table: columnArg.table, column: columnArg.column } : null;
+    const sort = column ? input.model?.sortBy?.find((s) => sameColumn(s.column, column)) : undefined;
+    if (sort) {
+      hints.push({
+        check: 'nonblank-text-order',
+        short: `${sort.column.column} is sorted by ${sort.by.column} in the report, but not here.`,
+        kind: 'note',
+        nodeId: call.id,
+        title: `Goes through ${sort.column.column} alphabetically`,
+        code: text(call),
+        why:
+          `${call.name.toUpperCase()} goes through the values smallest first, by the values themselves: text alphabetically. ` +
+          `The report sorts ${columnText(sort.column)} by ${columnText(sort.by)}, but that order isn't used here (with months, ` +
+          `Apr comes before Jan). Go through ${columnText(sort.by)} instead to follow that order.`,
+      });
+    }
+  }
+
   // --- 12. A calendar moves single days by their place in it, not by date (checked in Power BI Desktop:
   //     SAMEPERIODLASTYEAR and DATEADD by YEAR or MONTH, with and without a Month unit in the calendar).
   if (analysis) {

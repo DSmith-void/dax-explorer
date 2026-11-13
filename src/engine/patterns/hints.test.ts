@@ -294,3 +294,22 @@ describe('one-line reasons', () => {
     }
   });
 });
+
+describe('FIRSTNONBLANK and LASTNONBLANK (checked in Power BI Desktop on Initech)', () => {
+  it('warns when the expression is an aggregation without CALCULATE: the same total for every value', () => {
+    const hint = one(hints(`M = FIRSTNONBLANK('Date'[Date], SUM(Sales[Amount]))`), 'nonblank-needs-calculate');
+    expect(hint.kind).toBe('warning');
+    expect(hint.suggestion?.dax).toBe('CALCULATE(SUM(Sales[Amount]))');
+  });
+
+  it('is quiet with a measure or CALCULATE (both change per value)', () => {
+    expect(checks(hints(`M = FIRSTNONBLANK('Date'[Date], [Total Sales])`))).not.toContain('nonblank-needs-calculate');
+    expect(checks(hints(`M = LASTNONBLANKVALUE('Date'[Date], CALCULATE(SUM(Sales[Amount])))`))).not.toContain('nonblank-needs-calculate');
+  });
+
+  it('says a column with a sort-by column goes alphabetically (Power BI: Apr before Jan)', () => {
+    const hint = one(hints(`M = FIRSTNONBLANK('Date'[Month], [Total Sales])`), 'nonblank-text-order');
+    expect(hint.title).toBe('Goes through Month alphabetically');
+    expect(checks(hints(`M = FIRSTNONBLANK('Date'[Date], [Total Sales])`))).not.toContain('nonblank-text-order');
+  });
+});

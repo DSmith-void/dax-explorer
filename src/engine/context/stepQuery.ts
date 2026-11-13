@@ -215,11 +215,18 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         if (!choice) throw new NeedsRow(frame.key, parent.id, call.spec.name);
         if (table) throw new Unsupported(`A table calculated for one row of ${call.spec.name} is not shown yet.`);
         const tableArg = parent.args[call.spec.iteratesArgument];
-        expr = pickRow(text(tableArg), choice, expr);
+        expr = pickRow(loopTable(tableArg, call.params[call.spec.iteratesArgument]?.role, text), choice, expr);
       }
     }
     return expr;
   }
+
+  /**
+   * The table a loop goes through, as DAX: for FIRSTNONBLANK and the like (a column), its values. `of` reads
+   * the code of the measure the loop is in (a calling measure has its own text).
+   */
+  const loopTable = (arg: AstNode, role: string | undefined, of: (node: AstNode) => string = text) =>
+    role === 'column' && arg.kind !== 'FunctionCall' ? `VALUES(${of(arg)})` : of(arg);
 
   const valueOf = (node: AstNode): StepQuery => {
     if (visualMode) {
@@ -275,8 +282,9 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         const tableArg = node.args[call.spec.iteratesArgument];
         if (!rowArg || !tableArg) return { kind: 'none', reason: '' };
         if (isTable(rowArg)) return { kind: 'none', reason: `The tables ${call.spec.name} makes for each row are not shown yet.` };
-        const rows = inContext(node, `ADDCOLUMNS(\n${text(tableArg)},\n${daxLiteral(ROW_VALUE_COLUMN)},\n${text(rowArg)}\n)`, true);
-        const count = inContext(node, `COUNTROWS(${text(tableArg)})`, false);
+        const loop = loopTable(tableArg, call.params[call.spec.iteratesArgument]?.role);
+        const rows = inContext(node, `ADDCOLUMNS(\n${loop},\n${daxLiteral(ROW_VALUE_COLUMN)},\n${text(rowArg)}\n)`, true);
+        const count = inContext(node, `COUNTROWS(${loop})`, false);
         return { kind: 'rows', dax: rows, countDax: count, iteratorName: call.spec.name };
       }
       default:

@@ -203,6 +203,28 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('table or column', 'tableOrColumn')]],
   },
 
+  // --- First / last value where an expression isn't blank ---
+  // Checked in Power BI Desktop: they go through the column's values that pass the filters, in ascending order
+  // (text alphabetically; a sort-by column is not used), and calculate the expression for each value.
+  ...(['FIRST', 'LAST'] as const).flatMap((which): FunctionSpec[] => [
+    {
+      name: `${which}NONBLANK`,
+      category: 'iterator',
+      returns: 'table',
+      summary: `Goes through the values of a column, smallest first, and keeps the ${which === 'FIRST' ? 'first' : 'last'} one where an expression isn't blank (a one-row table).`,
+      overloads: [[p('column', 'column'), p('expression', 'rowExpression')]],
+      iteratesArgument: 0,
+    },
+    {
+      name: `${which}NONBLANKVALUE`,
+      category: 'iterator',
+      returns: 'scalar',
+      summary: `Goes through the values of a column, smallest first, and returns the expression's value for the ${which === 'FIRST' ? 'first' : 'last'} one where it isn't blank.`,
+      overloads: [[p('column', 'column'), p('expression', 'rowExpression')]],
+      iteratesArgument: 0,
+    },
+  ]),
+
   // --- Lookup ---
   lookupValue(),
   {

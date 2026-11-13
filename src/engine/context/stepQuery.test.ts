@@ -161,3 +161,15 @@ describe('evaluateText', () => {
     expect(evaluateText({ kind: 'table', dax: 'VALUES(Plant[Plant Name])', countDax: '' })).toBe('EVALUATE\nVALUES(Plant[Plant Name])');
   });
 });
+
+describe('loops over a column (FIRSTNONBLANK and the like)', () => {
+  it('go through VALUES(column): a column on its own is not a table in DAX', () => {
+    const source = "FIRSTNONBLANK('Date'[Date], [Total Sales])";
+    const { root } = parse(tokenize(source).tokens);
+    const binding = bind(root, { mode: 'convention', userChoices: {} });
+    const timeline = buildTimeline(root, binding, analyzeContext(root, binding, source), source);
+    const q = buildStepQuery(timeline.find((e) => e.kind === 'iterate')!, { root, binding, source, reportFilters: [], rows: new Map() });
+    expect(q.kind === 'rows' ? q.dax : '').toContain("ADDCOLUMNS(\nVALUES('Date'[Date]),");
+    expect(q.kind === 'rows' ? q.countDax : '').toBe("COUNTROWS(VALUES('Date'[Date]))");
+  });
+});

@@ -441,3 +441,27 @@ describe('a loop’s row inside CALCULATE (checked in Power BI Desktop: it becom
     expect(inner.operations.filter((o) => o.kind === 'context-transition')).toEqual([]);
   });
 });
+
+describe('FIRSTNONBLANK and LASTNONBLANK (checked in Power BI Desktop on Initech)', () => {
+  it('go through the values of the column, smallest first, and say what they keep', () => {
+    const { step } = run("FIRSTNONBLANK('Date'[Date], [Total Sales])");
+    const s = step("FIRSTNONBLANK('Date'[Date], [Total Sales])");
+    expect(s.summary).toBe("FIRSTNONBLANK goes through the values of 'Date'[Date] one row at a time.");
+    expect(s.notes[1]).toContain("smallest first (text alphabetically, not in a sort-by column's order)");
+    expect(s.notes[1]).toContain('as a one-row table, or an empty table');
+    const v = run("LASTNONBLANKVALUE('Date'[Date], [Total Sales])").step("LASTNONBLANKVALUE('Date'[Date], [Total Sales])");
+    expect(v.notes[1]).toContain('the expression’s value there, or BLANK');
+  });
+
+  it('a measure inside is worked out for each value (context transition)', () => {
+    const { step } = run("FIRSTNONBLANK('Date'[Date], [Total Sales])");
+    expect(step('[Total Sales]').operations.map((o) => o.kind)).toEqual(['context-transition']);
+  });
+
+  it('as a CALCULATE filter, it sets the column to that one value', () => {
+    const { step } = run("CALCULATE([Total Sales], LASTNONBLANK('Date'[Date], [Total Sales]))");
+    const calc = step("CALCULATE([Total Sales], LASTNONBLANK('Date'[Date], [Total Sales]))");
+    const filter = calc.operations.find((o) => o.kind === 'add-filter');
+    expect(filter && filter.kind === 'add-filter' ? filter.entry.condition : '').toBe("= the last value (smallest first) where [Total Sales] isn't blank");
+  });
+});

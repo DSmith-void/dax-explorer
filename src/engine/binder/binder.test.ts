@@ -65,7 +65,8 @@ describe('function catalog', () => {
     for (const spec of FUNCTION_CATALOG.filter((f) => f.category === 'iterator')) {
       const params = spec.overloads[0];
       expect(spec.iteratesArgument, spec.name).toBeDefined();
-      expect(params[spec.iteratesArgument!].role, `${spec.name}: iterated argument is a table`).toBe('table');
+      // A table, or for FIRSTNONBLANK and the like, a column (they go through its values).
+      expect(params[spec.iteratesArgument!].role, `${spec.name}: iterated argument is a table or a column`).toBeOneOf(['table', 'column']);
       expect(params.some((param) => param.role === 'rowExpression'), spec.name).toBe(true);
     }
   });
