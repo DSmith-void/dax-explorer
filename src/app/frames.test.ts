@@ -124,7 +124,7 @@ describe('values inside a measure stepped into', () => {
     const rows = new Map([[rowKey('', maxx.nodeId!), plant]]);
     const q = query(inner, rows, WIDGETS);
     expect(q.kind === 'scalar' && q.dax).toBe(
-      `CALCULATE(\nVAR __DaxExplorerRow =\nFILTER(\nVALUES(Plant[Plant Name]),\nPlant[Plant Name] == "Austin"\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\nCALCULATE(\n[Total Sales]\n)\n)\n),\nTREATAS({"Widgets"}, 'Product'[Category])\n)`,
+      `CALCULATE(\nVAR __DaxExplorerRow =\nFILTER(\nVALUES(Plant[Plant Name]),\n'Plant'[Plant Name] == "Austin"\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\nCALCULATE(\n[Total Sales]\n)\n)\n),\nTREATAS({"Widgets"}, 'Product'[Category])\n)`,
     );
 
     // "Back in" shows the whole called measure's value, the same way.

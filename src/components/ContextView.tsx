@@ -1,8 +1,10 @@
-import { entryText, incomingText, originText, rowContextText, relationshipChangeText } from '../engine/context/describe';
+import { entryText, incomingText, originText, relationshipChangeText } from '../engine/context/describe';
 import type { EvalContext } from '../engine/context/model';
+import type { RowChoice } from '../engine/context/stepQuery';
 import { reportFilterStatus, reportFilterText, type ReportFilter, type ReportFilterStatus } from '../engine/context/reportFilters';
 import { useRelationships } from './relationshipContext';
 import { useReportFilters } from './reportFiltersContext';
+import { rowText } from './valueFormat';
 
 const STATUS_TEXT: Record<ReportFilterStatus, string> = {
   applies: 'applies',
@@ -21,10 +23,12 @@ interface ContextViewProps {
   context: EvalContext;
   /** When given, filters not present in this context are highlighted as new. */
   compareTo?: EvalContext;
+  /** The row picked in each loop (by the loop's node id), when connected: shown next to the loop. */
+  rowFor?: (iteratorNodeId: number) => RowChoice | undefined;
 }
 
 /** Structured rendering of a symbolic evaluation context. */
-export function ContextView({ context, compareTo }: ContextViewProps) {
+export function ContextView({ context, compareTo, rowFor }: ContextViewProps) {
   const reportFilters = useReportFilters();
   const model = useRelationships();
   if (context.unknownReason) {
@@ -40,6 +44,7 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
   const incoming = incomingText(context.filter.removals, model);
 
   return (
+    <>
     <ul className="context-view">
       <li className={`context-incoming${previousIncoming !== null && previousIncoming !== incoming ? ' is-changed' : ''}`}>
         {incoming}
@@ -86,11 +91,35 @@ export function ContextView({ context, compareTo }: ContextViewProps) {
           Not checked: {caveat}
         </li>
       ))}
-      {context.rows.map((row) => (
-        <li key={`r${row.nodeId}`} className={`context-row${compareTo !== undefined && !previousRows.has(row.nodeId) ? ' is-changed' : ''}`}>
-          {rowContextText(row)}
-        </li>
-      ))}
     </ul>
+    {/* Loops are not filters: they filter nothing, they give a current row to read columns from. Shown apart. */}
+    {context.rows.length > 0 && (
+      <div className="context-loops">
+        <span className="context-loops-heading">Going row by row</span>
+        <p className="context-loops-note">Each loop has a current row to read columns from. This filters nothing by itself.</p>
+        <ul className="context-view">
+          {context.rows.map((row, i) => {
+            const choice = rowFor?.(row.nodeId);
+            const asFilter = i < (context.rowsAsFilters ?? 0);
+            const isNew = compareTo !== undefined && !previousRows.has(row.nodeId);
+            return (
+              <li key={`r${row.nodeId}`} className={`context-row${asFilter ? ' is-filter' : ''}${isNew ? ' is-changed' : ''}`}>
+                {asFilter ? (
+                  <>
+                    <strong>{row.functionName}</strong>'s current row{choice ? <> ({rowText(choice)})</> : null} is a filter here: CALCULATE turned it into one, so its columns can't be read here.
+                  </>
+                ) : (
+                  <>
+                    <strong>{row.functionName}</strong> goes through <code>{row.table.description}</code>
+                    {choice ? <>, now on {rowText(choice)}</> : null}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    )}
+    </>
   );
 }

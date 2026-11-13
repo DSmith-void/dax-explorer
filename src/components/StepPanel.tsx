@@ -161,6 +161,8 @@ export function StepPanel({ entries, index, onStep, onSelectNode, values, connec
   const root = frame.result.parse?.root ?? null;
   const source = frame.result.text;
   const lineAt = createLineMap(source);
+  /** The row picked in a loop of this measure (by the loop's node id), when connected. */
+  const rowFor = (id: number) => values.rows.get(rowKey(frame.key, id));
   const notes = current.nodeId !== null && HAS_NOTES.has(current.kind)
     ? (frame.analysis?.steps.get(current.nodeId)?.notes ?? []).filter((n) => n !== current.summary)
     : [];
@@ -245,15 +247,15 @@ export function StepPanel({ entries, index, onStep, onSelectNode, values, connec
           <div className="filters-compare">
             <div>
               <h5 className="step-subheading">Before</h5>
-              <ContextView context={current.context} />
+              <ContextView context={current.context} rowFor={rowFor} />
             </div>
             <div>
               <h5 className="step-subheading">After (what the inside sees)</h5>
-              <ContextView context={current.innerContext!} compareTo={current.context} />
+              <ContextView context={current.innerContext!} compareTo={current.context} rowFor={rowFor} />
             </div>
           </div>
         ) : (
-          <ContextView context={current.context} />
+          <ContextView context={current.context} rowFor={rowFor} />
         )}
         <DateStrip entry={current} range={values.dateRangeFor(current)} stateOf={values.stateOf} connected={connected} />
         <TablesReached context={current.innerContext ?? current.context} usedTables={frameTables(frame)} folded={false} />

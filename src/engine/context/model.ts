@@ -92,8 +92,20 @@ export interface EvalContext {
   filter: FilterContext;
   /** Active row contexts, outermost first. */
   rows: RowContext[];
+  /**
+   * How many of `rows` (the outermost ones) have become filters: inside CALCULATE's expression, the rows of
+   * the loops around it are turned into filters (context transition), and their columns can no longer be read,
+   * nor reached with EARLIER (checked in Power BI Desktop: both are errors). They still decide the value,
+   * through those filters. Missing = 0: every row can be read.
+   */
+  rowsAsFilters?: number;
   /** When set, the rules cannot say how this point is evaluated (e.g. inside an unknown function). */
   unknownReason: string | null;
+}
+
+/** The rows whose columns can be read here (not turned into filters by a CALCULATE around this point). */
+export function readableRows(ctx: EvalContext): RowContext[] {
+  return ctx.rows.slice(ctx.rowsAsFilters ?? 0);
 }
 
 export type Operation =

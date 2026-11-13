@@ -85,13 +85,13 @@ describe('buildStepQuery', () => {
   it('with a picked row, the value is calculated for that row (found by its values; a missing row is an error)', () => {
     const { query } = steps(SAMPLE_MEASURES[1].expression, [], () => ({ columns: ['Customer[Customer Key]'], values: [1] }));
     expect(dax(query('Calculate [Total Sales]'))).toBe(
-      `VAR __DaxExplorerRow =\nFILTER(\nVALUES(Customer[Customer Key]),\nCustomer[Customer Key] == 1\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\n[Total Sales]\n)\n)`,
+      `VAR __DaxExplorerRow =\nFILTER(\nVALUES(Customer[Customer Key]),\n'Customer'[Customer Key] == 1\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\n[Total Sales]\n)\n)`,
     );
   });
 
   it('a BLANK in the picked row is matched with ISBLANK', () => {
     const { query } = steps('S = SUMX(Sales, Sales[Quantity])', [], () => ({ columns: ['Sales[Order Key]', 'Sales[Date]'], values: [7, null] }));
-    expect(dax(query('Read Sales[Quantity]'))).toContain('Sales[Order Key] == 7 && ISBLANK(Sales[Date])');
+    expect(dax(query('Read Sales[Quantity]'))).toContain("'Sales'[Order Key] == 7 && ISBLANK('Sales'[Date])");
   });
 
   it('tables get their rows and a count; table results are wrapped in CALCULATETABLE', () => {
@@ -142,7 +142,8 @@ DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED(Product[Category])))
 
 describe('engine column names', () => {
   it('are used as DAX, quoting a table name when the engine did not', () => {
-    expect(columnNameDax('Customer[Customer Key]')).toBe('Customer[Customer Key]');
+    expect(columnNameDax('Customer[Customer Key]')).toBe("'Customer'[Customer Key]");
+    expect(columnNameDax('Date[Year]')).toBe("'Date'[Year]"); // unquoted, Date is a syntax error
     expect(columnNameDax("'Product Line'[Name]")).toBe("'Product Line'[Name]");
     expect(columnNameDax('Product Line[Name]')).toBe("'Product Line'[Name]");
     expect(columnNameDax('[@DaxExplorerValue]')).toBe('[@DaxExplorerValue]');

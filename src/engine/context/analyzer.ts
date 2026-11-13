@@ -1,6 +1,6 @@
 import type { BindResult } from '../binder/binder';
 import type { ArgRole, FunctionSpec, ParamSpec } from '../catalog/functions';
-import { childrenOf, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall } from '../parser/ast';
+import { childrenOf, findNode, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall } from '../parser/ast';
 import { createLineMap } from '../source';
 import { columnText, entryText, filterSignature, relationshipChangeText, removalText } from './describe';
 import type {
@@ -18,7 +18,7 @@ import type {
   Step,
   TableShape,
 } from './model';
-import { INITIAL_CONTEXT } from './model';
+import { INITIAL_CONTEXT, readableRows } from './model';
 import { visualRemovalCovers } from './reportFilters';
 import {
   calendarColumns,
@@ -104,6 +104,12 @@ export function analyzeContext(
   const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
   const sameColumn = (a: ColumnName, b: ColumnName) => same(a.table, b.table) && same(a.column, b.column);
   const inTable = (column: ColumnName, table: string) => column.table !== '' && same(column.table, table);
+  /** Whether a loop's current row has this column: the loop goes through its table, or through it. */
+  const rowHasColumn = (row: RowContext, column: ColumnName) => {
+    if (row.table.kind === 'table') return inTable(column, row.table.table);
+    if (row.table.kind === 'columns') return row.table.columns.some((c) => (column.table === '' ? same(c.column, column.column) : sameColumn(c, column)));
+    return false;
+  };
 
   // ------------------------------------------------- filter context algebra
 
@@ -206,7 +212,7 @@ export function analyzeContext(
   function contextTransition(ctx: EvalContext, atNodeId: number): { fc: FilterContext; added: FilterEntry[] } {
     let fc = ctx.filter;
     const added: FilterEntry[] = [];
-    for (const row of ctx.rows) {
+    for (const row of readableRows(ctx)) {
       const target = targetOfShape(row.table);
       const entry: FilterEntry = {
         target,
@@ -422,9 +428,65 @@ export function analyzeContext(
       visitIterator(node, ctx, spec, call.params);
       return;
     }
+    if (spec.name === 'EARLIER' || spec.name === 'EARLIEST') {
+      const notes = earlierNotes(node, spec.name, ctx);
+      record({ nodeId: node.id, context: ctx, operations: [], summary: notes[0], notes });
+      // Its column is not read from the current row: that step says what EARLIER reads instead.
+      const [column, count] = node.args;
+      if (column) record({ nodeId: column.id, context: ctx, operations: [], summary: notes[0], notes });
+      if (count) visit(count, ctx, 'scalar');
+      return;
+    }
     const notes = genericNotes(node, spec, role);
     record({ nodeId: node.id, context: ctx, operations: [], summary: notes[0], notes });
     node.args.forEach((arg, i) => visit(arg, ctx, call.params![i].role));
+  }
+
+  /**
+   * EARLIER(column, n) and EARLIEST(column), as Power BI Desktop does it (checked on Initech):
+   *  - step out of the n innermost loops, whatever tables they go through (EARLIEST: out of the innermost one);
+   *  - then take the nearest remaining loop through the column's table (EARLIEST: the outermost one).
+   * Loops whose rows became filters (inside CALCULATE) can't be reached: that is an error, as is no such loop.
+   */
+  function earlierNotes(node: FunctionCall, name: 'EARLIER' | 'EARLIEST', ctx: EvalContext): string[] {
+    const arg = node.args[0];
+    const column = arg ? columnOf(arg) : null;
+    const label = arg ? snippet(arg, 40) : 'the column';
+    if (!column) return [`${name} needs a column; the app can't tell which one this is.`];
+    let n = 1;
+    if (name === 'EARLIER' && node.args[1]) {
+      const count = node.args[1];
+      if (count.kind !== 'NumberLiteral') return [`${name}(${label}, …) steps out of a number of loops the app can't work out here, so which row it reads isn't checked.`];
+      n = Number(count.value);
+      if (!Number.isInteger(n) || n < 1) return [`${name}'s second input must be a whole number above zero, so DAX shows an error here.`];
+    }
+    const rows = readableRows(ctx);
+    const beyond = rows.slice(0, Math.max(0, rows.length - n));
+    const target = name === 'EARLIEST' ? beyond.find((row) => rowHasColumn(row, column)) : [...beyond].reverse().find((row) => rowHasColumn(row, column));
+    if (target) {
+      const where = lineOfNode(target.nodeId);
+      const current = rows[rows.length - 1];
+      const loops = name === 'EARLIEST' ? 'the outermost loop through its table' : n === 1 ? 'one loop out' : `${n} loops out`;
+      return [
+        `Reads ${label} from the row of ${target.functionName}${where}, not the current row of ${current.functionName}.`,
+        `${name} goes back to an earlier loop: here ${loops}, the ${target.functionName} going through ${target.table.description}. So ${label} is the value in that loop's current row, while ${current.functionName} goes through its own rows.`,
+      ];
+    }
+    const turned = ctx.rows.slice(0, ctx.rowsAsFilters ?? 0).some((row) => rowHasColumn(row, column));
+    const summary = turned
+      ? `${name} can't reach the earlier row here: inside CALCULATE it became a filter (an error).`
+      : `There is no earlier loop through ${column.table || 'this column’s table'} for ${name} to read from (an error).`;
+    const message = turned
+      ? `Inside CALCULATE, the rows of the loops around it have been turned into filters (context transition), so ${name} can't go back to them, and DAX shows an error. Store the value in a variable before the CALCULATE (VAR value = ${label}) and use the variable inside.`
+      : `${name} reads ${label} from an earlier loop (going row by row) through ${column.table || 'its table'}, one ${name === 'EARLIEST' ? 'outside the innermost loop' : `${n === 1 ? 'loop' : `${n} loops`} out`}. There is none here, so DAX shows an error ("an earlier row context doesn't exist").`;
+    insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
+    return [summary, message];
+  }
+
+  /** " (line 4)" for a node of this expression, or "" when it isn't found. */
+  function lineOfNode(nodeId: number): string {
+    const target = root ? findNode(root, nodeId) : null;
+    return target ? ` (line ${lineOf(target.span.start).line})` : '';
   }
 
   function genericNotes(node: FunctionCall, spec: FunctionSpec, role: ArgRole | null): string[] {
@@ -528,17 +590,19 @@ export function analyzeContext(
     // (TOTALYTD's dates argument is just the date column.)
     if (!isRelatedTable) filterArgs.forEach((arg, i) => visit(arg, ctx, total && i === 0 ? 'column' : 'filter'));
 
-    // 2. Context transition.
+    // 2. Context transition: the rows that can still be read become filters. (A CALCULATE inside another one
+    //    in a loop finds those rows already turned into filters, and passes them on unchanged.)
     let fc = ctx.filter;
-    if (ctx.rows.length > 0) {
+    const rows = readableRows(ctx);
+    if (rows.length > 0) {
       const transition = contextTransition(ctx, node.id);
       fc = transition.fc;
-      operations.push({ kind: 'context-transition', rows: ctx.rows, added: transition.added });
+      operations.push({ kind: 'context-transition', rows, added: transition.added });
       insights.push({
         kind: 'context-transition',
         nodeId: node.id,
-        summary: `This ${spec.name} works on one row of ${ctx.rows[ctx.rows.length - 1].functionName} at a time.`,
-        message: `This ${spec.name} is inside ${ctx.rows.map((r) => r.functionName).join(' and ')}, which is going row by row. So each time it runs, the current row becomes a filter (context transition) and only data for that row is included.`,
+        summary: `This ${spec.name} works on one row of ${rows[rows.length - 1].functionName} at a time.`,
+        message: `This ${spec.name} is inside ${rows.map((r) => r.functionName).join(' and ')}, which is going row by row. So each time it runs, the current row becomes a filter (context transition) and only data for that row is included.`,
       });
     }
 
@@ -622,8 +686,9 @@ export function analyzeContext(
       }
     }
 
-    // 5. The first argument sees the new context.
-    const inner: EvalContext = { filter: fc, rows: ctx.rows, unknownReason: null };
+    // 5. The first argument sees the new context. The rows of the loops around it have become filters: their
+    //    columns can't be read there any more (checked in Power BI Desktop), but they still decide the value.
+    const inner: EvalContext = { filter: fc, rows: ctx.rows, rowsAsFilters: ctx.rows.length, unknownReason: null };
     if (first) visit(first, inner, spec.returns === 'table' ? 'table' : 'scalar');
 
     record({
@@ -1027,7 +1092,8 @@ export function analyzeContext(
   }
 
   function measureStep(nodeId: number, label: string, ctx: EvalContext, reportInsight: boolean) {
-    if (ctx.rows.length === 0) {
+    const rows = readableRows(ctx);
+    if (rows.length === 0) {
       return {
         operations: [] as Operation[],
         innerContext: ctx,
@@ -1036,7 +1102,7 @@ export function analyzeContext(
       };
     }
     const transition = contextTransition(ctx, nodeId);
-    const innermost = ctx.rows[ctx.rows.length - 1];
+    const innermost = rows[rows.length - 1];
     const summary = `${label} for the current row of ${innermost.functionName}.`;
     if (reportInsight) {
       insights.push({
@@ -1047,8 +1113,8 @@ export function analyzeContext(
       });
     }
     return {
-      operations: [{ kind: 'context-transition', rows: ctx.rows, added: transition.added }] as Operation[],
-      innerContext: { filter: transition.fc, rows: ctx.rows, unknownReason: null },
+      operations: [{ kind: 'context-transition', rows, added: transition.added }] as Operation[],
+      innerContext: { filter: transition.fc, rows: ctx.rows, rowsAsFilters: ctx.rows.length, unknownReason: null },
       summary,
       notes: [
         `Calculated for each row, with that row turned into a filter (context transition): only its data counts. (A measure always acts as if wrapped in CALCULATE.)`,
@@ -1062,20 +1128,26 @@ export function analyzeContext(
     ctx: EvalContext,
     reportInsight: boolean,
   ): { summary: string; notes: string[] } {
-    if (ctx.rows.length === 0) {
+    const column: ColumnName = node.kind === 'ColumnRef' ? { table: node.table, column: node.column } : { table: '', column: node.name };
+    const rows = readableRows(ctx);
+    const covering = [...rows].reverse().find((row) => rowHasColumn(row, column));
+    if (!covering) {
+      // Inside CALCULATE within a loop: the loop's row became a filter (checked in Power BI Desktop: reading
+      // the column there is an error; storing it in a variable first works).
+      const turned = [...ctx.rows.slice(0, ctx.rowsAsFilters ?? 0)].reverse().find((row) => column.table !== '' && rowHasColumn(row, column));
+      if (turned) {
+        const summary = `${label} can't be read here: the row of ${turned.functionName} became a filter (an error).`;
+        const message = `Inside CALCULATE, the current row of ${turned.functionName} has been turned into a filter (context transition), so ${label} can no longer be read from it, and DAX shows an error. To use the row's value, store it in a variable before the CALCULATE (VAR value = ${label}) and use the variable inside.`;
+        if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
+        return { summary, notes: [message] };
+      }
+    }
+    if (rows.length === 0) {
       const summary = `${label} has no current row to read from (an error in a measure).`;
       const message = `${label} is used on its own here, but nothing is going row by row, so there is no "current row" to read it from. In a measure, DAX can't pick one value out of a whole column and shows an error. Wrap it in something like SUM(${label}) or SELECTEDVALUE(${label}).`;
       if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
       return { summary, notes: [message] };
     }
-    const column: ColumnName = node.kind === 'ColumnRef' ? { table: node.table, column: node.column } : { table: '', column: node.name };
-    const covering = [...ctx.rows].reverse().find((row) => {
-      if (row.table.kind === 'table') return inTable(column, row.table.table);
-      if (row.table.kind === 'columns') {
-        return row.table.columns.some((c) => (column.table === '' ? same(c.column, column.column) : sameColumn(c, column)));
-      }
-      return false;
-    });
     if (covering && implicitRows.get(covering.nodeId) === covering) {
       return {
         summary: `The value of ${label} being checked by the filter condition.`,
@@ -1086,7 +1158,7 @@ export function analyzeContext(
       const note = `Reads ${label} from the row that ${covering.functionName} is currently on.`;
       return { summary: note, notes: [note] };
     }
-    const innermost = ctx.rows[ctx.rows.length - 1];
+    const innermost = rows[rows.length - 1];
     if (column.table === '' || innermost.table.kind === 'unknown') {
       return {
         summary: `Reads ${label} from the row that ${innermost.functionName} is currently on.`,

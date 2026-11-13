@@ -1618,9 +1618,40 @@ select {
   color: var(--color-notice-text);
 }
 
+/* Loops going row by row: shown apart from the filters, in the "row" colour (they filter nothing). */
+.context-loops {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.context-loops-heading {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-row);
+}
+
+.context-loops-note {
+  margin: 2px 0 6px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
 .context-row {
   font-size: 0.8125rem;
-  color: var(--color-accent);
+  border-left-color: var(--color-row);
+}
+
+.context-row code {
+  font-family: var(--font-mono);
+}
+
+/* A loop whose row CALCULATE turned into a filter: it can't be read here. */
+.context-row.is-filter {
+  border-left-color: var(--color-filter);
+  color: var(--color-text-muted);
 }
 
 /* Lines that differ from the context the node itself is evaluated in */

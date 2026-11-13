@@ -205,6 +205,20 @@ const SPECS: FunctionSpec[] = [
 
   // --- Lookup ---
   lookupValue(),
+  {
+    name: 'EARLIER',
+    category: 'lookup',
+    returns: 'scalar',
+    summary: 'The value of a column in the row of an outer loop (going row by row), not the current one.',
+    overloads: [[p('column', 'column'), p('number of loops out', 'scalar', { optional: true })]],
+  },
+  {
+    name: 'EARLIEST',
+    category: 'lookup',
+    returns: 'scalar',
+    summary: 'The value of a column in the row of the outermost loop (going row by row) through its table.',
+    overloads: [[p('column', 'column')]],
+  },
 
   // --- Relationships ---
   {

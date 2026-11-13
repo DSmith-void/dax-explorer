@@ -119,9 +119,11 @@ export function columnNameDax(name: string): string | null {
   const match = /^(.*?)(\[(?:[^\]]|\]\])+\])$/u.exec(name);
   if (!match) return null;
   const [, table, column] = match;
-  if (table === '' || /^'(?:[^']|'')+'$/.test(table) || /^[\p{L}_][\p{L}\p{N}_]*$/u.test(table)) return table + column;
-  if (/['[\]]/.test(table)) return null;
-  return `'${table}'${column}`;
+  if (table === '' || /^'(?:[^']|'')+'$/.test(table)) return table + column;
+  if (/[[\]]/.test(table)) return null;
+  // Always quoted: a table named like a DAX word (Date, Calendar, …) is a syntax error without quotes
+  // (found in Power BI Desktop: Date[Year] == 2025 is rejected, 'Date'[Year] == 2025 works).
+  return `'${table.replace(/'/g, "''")}'${column}`;
 }
 
 class Unsupported extends Error {}

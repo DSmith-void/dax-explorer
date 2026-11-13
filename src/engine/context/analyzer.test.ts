@@ -368,3 +368,76 @@ describe('LOOKUPVALUE (checked in Power BI Desktop: it ignores every filter in e
     expect([...binding.references.values()].find((r) => r.key === '[fallback]')?.type).toBe('measure');
   });
 });
+
+describe('EARLIER and EARLIEST (each case checked in Power BI Desktop on Initech)', () => {
+  const earlierStep = (source: string, call: string) => run(source).step(call);
+
+  it('the classic pattern reads the outer loop, not the current one', () => {
+    const s = earlierStep(
+      "SUMX('Product', COUNTROWS(FILTER('Product', 'Product'[List Price] < EARLIER('Product'[List Price]))))",
+      "EARLIER('Product'[List Price])",
+    );
+    expect(s.summary).toBe("Reads 'Product'[List Price] from the row of SUMX (line 1), not the current row of FILTER.");
+  });
+
+  it('steps out of loops over other tables too, then takes the nearest loop through the column’s table', () => {
+    // Power BI: Gadget Max > Gizmo Lite > Date years, EARLIER(…, 1) gave Gizmo Lite's price (the middle loop).
+    const source = "AVERAGEX('Product', MINX('Product', MAXX(VALUES('Date'[Year]), EARLIER('Product'[List Price], 1))))";
+    expect(earlierStep(source, "EARLIER('Product'[List Price], 1)").summary).toContain('from the row of MINX');
+    const two = "AVERAGEX('Product', MINX('Product', MAXX(VALUES('Date'[Year]), EARLIER('Product'[List Price], 2))))";
+    expect(earlierStep(two, "EARLIER('Product'[List Price], 2)").summary).toContain('from the row of AVERAGEX');
+    // A Date loop between two Product loops is skipped: SUMX's row, as in Power BI (198 = 3 × 66).
+    const between = "SUMX('Product', SUMX(VALUES('Date'[Year]), COUNTROWS(FILTER('Product', 'Product'[List Price] < EARLIER('Product'[List Price])))))";
+    expect(earlierStep(between, "EARLIER('Product'[List Price])").summary).toContain('from the row of SUMX (line 1), not the current row of FILTER');
+  });
+
+  it('EARLIEST takes the outermost loop through the column’s table', () => {
+    const source = "AVERAGEX('Product', MINX('Product', MAXX('Product', EARLIEST('Product'[List Price]))))";
+    expect(earlierStep(source, "EARLIEST('Product'[List Price])").summary).toContain('from the row of AVERAGEX');
+    const withDate = "MAXX('Product', MAXX(VALUES('Date'[Year]), EARLIEST('Product'[List Price])))";
+    expect(earlierStep(withDate, "EARLIEST('Product'[List Price])").summary).toContain('from the row of MAXX');
+  });
+
+  it('with only one loop there is no earlier row: an error', () => {
+    const { step, analysis } = run("SUMX('Product', EARLIER('Product'[List Price]))");
+    expect(step("EARLIER('Product'[List Price])").summary).toContain('There is no earlier loop through Product');
+    expect(analysis.insights.map((i) => i.kind)).toContain('column-without-row-context');
+    expect(run("SUMX('Product', EARLIEST('Product'[List Price]))").step("EARLIEST('Product'[List Price])").summary).toContain('no earlier loop');
+  });
+
+  it('EARLIER(column, 0) is an error', () => {
+    const s = earlierStep("SUMX('Product', MAXX('Product', EARLIER('Product'[List Price], 0)))", "EARLIER('Product'[List Price], 0)");
+    expect(s.summary).toContain('whole number above zero');
+  });
+
+  it('inside CALCULATE the loops around it became filters: EARLIER cannot reach them', () => {
+    const source = "SUMX('Product', CALCULATE(MAXX(ALL('Product'), EARLIER('Product'[List Price]))))";
+    expect(earlierStep(source, "EARLIER('Product'[List Price])").summary).toContain('inside CALCULATE it became a filter');
+  });
+});
+
+describe('a loop’s row inside CALCULATE (checked in Power BI Desktop: it becomes a filter and can’t be read)', () => {
+  it('reading the column there is an error, with the variable fix', () => {
+    const { step } = run("SUMX('Product', CALCULATE('Product'[List Price] + 0))");
+    const s = step("'Product'[List Price]");
+    expect(s.summary).toBe("'Product'[List Price] can't be read here: the row of SUMX became a filter (an error).");
+    expect(s.notes[0]).toContain('VAR value');
+  });
+
+  it('a variable stored before the CALCULATE reads it fine', () => {
+    const { step, analysis } = run("SUMX('Product', VAR p = 'Product'[List Price] RETURN CALCULATE(p + 0))");
+    expect(step("'Product'[List Price]").summary).toBe("Reads 'Product'[List Price] from the row that SUMX is currently on.");
+    expect(analysis.insights.filter((i) => i.kind === 'column-without-row-context')).toEqual([]);
+  });
+
+  it('a loop inside the CALCULATE starts a readable row again', () => {
+    const { step } = run("SUMX('Product', CALCULATE(MAXX('Product', 'Product'[List Price])))");
+    expect(step("'Product'[List Price]").summary).toBe("Reads 'Product'[List Price] from the row that MAXX is currently on.");
+  });
+
+  it('a CALCULATE inside another one does not turn the same row into a filter twice', () => {
+    const { step } = run("SUMX('Product', CALCULATE(CALCULATE([Total Sales])))");
+    const inner = step('CALCULATE([Total Sales])');
+    expect(inner.operations.filter((o) => o.kind === 'context-transition')).toEqual([]);
+  });
+});
