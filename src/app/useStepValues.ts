@@ -149,6 +149,48 @@ export function useStepValues({ client, connectionKey, timeline, current, rootFr
     })();
   }, [wanted, cached, client]);
 
+  // The earlier steps' single values (shown in the story so far and next to the code). Picking another row
+  // changes the query of every step inside that iterator, so their values are fetched again, one at a time,
+  // once the current step has its value (the step being looked at always comes first).
+  const backlog = useMemo(() => {
+    if (!enabled || !current) return [];
+    const at = timeline.indexOf(current);
+    // On a "goes row by row" step, where a row is picked: also the steps inside that loop, which show the
+    // picked row's values (they come right after it, one level deeper, until the loop's last step).
+    let end = at;
+    if (current.kind === 'iterate') {
+      while (end + 1 < timeline.length && timeline[end + 1].frame === current.frame && timeline[end + 1].depth > current.depth) end++;
+    }
+    // Fetched from the end of this list: the loop's steps first (the row was just picked), then the earlier ones.
+    return [...timeline.slice(Math.max(0, at - 60), Math.max(0, at)), ...timeline.slice(at + 1, end + 1).reverse()]
+      .map(queryFor)
+      .filter((q): q is Extract<StepQuery, { kind: 'scalar' }> => q.kind === 'scalar' && !cache.has(keyOf(q)!));
+  }, [enabled, current, timeline, queryFor, cache]);
+  const currentSettled = !wanted || (cached !== undefined && cached.status !== 'loading');
+  useEffect(() => {
+    if (!currentSettled || inFlight.current.size > 0) return;
+    const query = backlog.at(-1);
+    if (!query) return;
+    const key = keyOf(query)!;
+    inFlight.current.add(key);
+    const done = (state: ValueState) => setCache((previous) => new Map(previous).set(key, state));
+    void (async () => {
+      try {
+        if (query.visual) {
+          const table = await client.evaluate('table', query.dax, 2);
+          const value = table.rows[0]?.[table.columns.length - 1] ?? null;
+          done({ status: 'ready', result: { columns: ['value'], rows: [[value]], truncated: false }, count: null });
+        } else {
+          done({ status: 'ready', result: await client.evaluate('scalar', query.dax), count: null });
+        }
+      } catch (e) {
+        done({ status: 'error', message: e instanceof Error ? e.message : 'The value could not be calculated.' });
+      } finally {
+        inFlight.current.delete(key);
+      }
+    })();
+  }, [backlog, currentSettled, client]);
+
   // The current step's date ranges (single values), when it changes a date filter.
   const rangeQueries = useMemo(() => {
     if (!enabled || !current) return [];

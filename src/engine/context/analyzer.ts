@@ -30,6 +30,7 @@ import {
   wholeTableDateRule,
   type RelationshipModel,
 } from './relationships';
+import { TOTALS } from './totals';
 
 /**
  * Symbolic context analysis.
@@ -50,13 +51,6 @@ import {
  * Everything else that would change context (relationships, ALLSELECTED, unknown functions...)
  * is recorded as "not modeled" or "unknown", never guessed.
  */
-/** TOTALYTD and friends: CALCULATE with the matching DATES…TD function. */
-const TOTALS = new Map([
-  ['TOTALYTD', 'DATESYTD'],
-  ['TOTALQTD', 'DATESQTD'],
-  ['TOTALMTD', 'DATESMTD'],
-  ['TOTALWTD', 'DATESWTD'],
-]);
 
 /**
  * @param initial the context the expression starts in: the report's filters F by default, or, for a measure
@@ -273,7 +267,15 @@ export function analyzeContext(
           case 'NEXTQUARTER':
           case 'NEXTYEAR':
           case 'FIRSTDATE':
-          case 'LASTDATE': {
+          case 'LASTDATE':
+          case 'STARTOFWEEK':
+          case 'STARTOFMONTH':
+          case 'STARTOFQUARTER':
+          case 'STARTOFYEAR':
+          case 'ENDOFWEEK':
+          case 'ENDOFMONTH':
+          case 'ENDOFQUARTER':
+          case 'ENDOFYEAR': {
             // A table of dates from its date column; with a calendar, of the calendar's primary columns.
             const calendar = args[0]?.kind === 'TableRef' ? findCalendar(model, args[0].name) : undefined;
             if (calendar) {
@@ -505,7 +507,7 @@ export function analyzeContext(
           arg,
           c:
             total && i === 0
-              ? timeFilter(total, yearEnd ? [arg, yearEnd] : [arg], node, spec.name, 'replace')
+              ? timeFilter(total.rule, yearEnd ? [arg, yearEnd] : [arg], node, spec.name, 'replace')
               : classifyFilter(arg, node, spec.name, 'replace'),
         }));
     // (TOTALYTD's dates argument is just the date column.)
@@ -768,6 +770,16 @@ export function analyzeContext(
       case 'LASTDATE':
         return 'the last date in the current filter';
       default: {
+        // Checked in Power BI Desktop: with 15 Jan – 10 Mar 2025 filtered, STARTOFMONTH gives 1 Jan and
+        // ENDOFMONTH 31 Mar; OPENINGBALANCEMONTH is CALCULATE with PREVIOUSDAY(STARTOFMONTH(dates)).
+        const edge = /^(STARTOF|ENDOF|OPENINGBALANCE)(WEEK|MONTH|QUARTER|YEAR)$/.exec(name);
+        if (edge) {
+          const period = edge[2].toLowerCase();
+          const yearEnd = edge[2] === 'YEAR' && args[1] ? ` (for a year ending ${arg(1)})` : '';
+          if (edge[1] === 'STARTOF') return `the first date of the ${period} of the first date in the current filter${yearEnd}`;
+          if (edge[1] === 'ENDOF') return `the last date of the ${period} of the last date in the current filter${yearEnd}`;
+          return `the day before the ${period} of the first date in the current filter starts${yearEnd}`;
+        }
         const match = /^(PREVIOUS|NEXT)(DAY|WEEK|MONTH|QUARTER|YEAR)$/.exec(name);
         if (!match) return `the dates ${name} works out`;
         const period = match[2].toLowerCase();
@@ -857,6 +869,14 @@ export function analyzeContext(
           case 'NEXTYEAR':
           case 'FIRSTDATE':
           case 'LASTDATE':
+          case 'STARTOFWEEK':
+          case 'STARTOFMONTH':
+          case 'STARTOFQUARTER':
+          case 'STARTOFYEAR':
+          case 'ENDOFWEEK':
+          case 'ENDOFMONTH':
+          case 'ENDOFQUARTER':
+          case 'ENDOFYEAR':
             return timeFilter(spec.name, arg.args, calculate, calculateName, mode);
           case 'TREATAS': {
             const [values, ...targets] = arg.args;

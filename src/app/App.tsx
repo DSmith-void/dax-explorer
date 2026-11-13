@@ -17,7 +17,7 @@ import { StepPanel, StoryList } from '../components/StepPanel';
 import type { CodeAnnotation } from '../components/CodeView';
 import { HintsPanel } from '../components/HintsPanel';
 import { StartPanel } from '../components/StartPanel';
-import { formatQueryValue } from '../components/valueFormat';
+import { formatQueryValue, isDatePart } from '../components/valueFormat';
 import { SummaryCards } from '../components/SummaryCards';
 import { ThemeToggle } from '../components/ThemeToggle';
 import type { ReferenceType, ResolutionMode } from '../engine/binder/binder';
@@ -202,7 +202,7 @@ export function App() {
       if (!node || state.status !== 'ready') continue;
       const value =
         query.kind === 'scalar'
-          ? formatQueryValue(state.result.rows[0]?.[0] ?? null)
+          ? formatQueryValue(state.result.rows[0]?.[0] ?? null, isDatePart(root, e.nodeId))
           : `${(state.count ?? state.result.rows.length).toLocaleString()} rows`;
       const forRow = query.kind === 'scalar' && e.context.rows.length > 0 ? ' (this row)' : '';
       const end = node.kind === 'VarDeclaration' ? node.value.span.end : node.span.end;

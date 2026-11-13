@@ -19,6 +19,7 @@ import type { BindResult } from '../binder/binder';
 import type { ArgRole, FunctionSpec } from '../catalog/functions';
 import { childrenOf, type AstNode, type Expr, type FunctionCall } from '../parser/ast';
 import { INITIAL_CONTEXT, type ContextAnalysis, type EvalContext, type Operation } from './model';
+import { TOTALS } from './totals';
 
 export type TimelineKind =
   /** Before anything is calculated: the report's filters. */
@@ -72,8 +73,6 @@ export interface TimelineEntry {
   depth: number;
 }
 
-/** TOTALYTD and friends: CALCULATE with the matching DATES…TD filter. */
-const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD', TOTALWTD: 'DATESWTD' };
 
 /** What each iterator does with the results of its rows. */
 const COMBINES: Record<string, string> = {
@@ -250,7 +249,7 @@ export function buildTimeline(
     }
     const params = call.params;
 
-    const total = TOTALS[spec.name];
+    const total = TOTALS.get(spec.name);
     if (spec.name === 'CALCULATE' || spec.name === 'CALCULATETABLE' || spec.name === 'RELATEDTABLE' || total) {
       const [first, ...written] = node.args;
       // TOTALYTD(expression, dates, [filter], [year end]): the filters are DATESYTD(dates) and the optional filter.
@@ -263,7 +262,7 @@ export function buildTimeline(
           add({
             kind: 'filter-input',
             nodeId: input.id,
-            title: isDates ? `Prepare filter: ${total}(${snippet(input, 24)})` : `Prepare filter: ${snippet(input, 32)}`,
+            title: isDates ? `Prepare filter: ${total.dax(snippet(input, 24))}` : `Prepare filter: ${snippet(input, 32)}`,
             summary: stepOf(input)?.summary ?? `${snippet(input)} is worked out, using the filters from outside the ${spec.name}.`,
             depth: depth + 1,
           });

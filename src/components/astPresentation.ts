@@ -13,6 +13,12 @@ const CATEGORY_TEXT: Record<FunctionCategory, string> = {
   logical: 'logic',
   math: 'math',
   text: 'text',
+  'date and time': 'date and time',
+  information: 'checks a value',
+  statistical: 'statistics',
+  financial: 'finance',
+  'parent and child': 'parent-child hierarchy',
+  other: 'other',
 };
 import type { AstNode, BinaryOperator } from '../engine/parser/ast';
 

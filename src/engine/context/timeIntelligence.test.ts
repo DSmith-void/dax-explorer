@@ -84,6 +84,36 @@ describe('TOTALYTD', () => {
   });
 });
 
+describe('opening and closing balances (checked in Power BI Desktop: equal to their CALCULATE form in every month)', () => {
+  it('CLOSINGBALANCEMONTH is CALCULATE with ENDOFMONTH', () => {
+    const { timeline, options } = explain("M = CLOSINGBALANCEMONTH([Total Sales], 'Date'[Date])");
+    expect(timeline.map((e) => e.title)).toContain("Prepare filter: ENDOFMONTH('Date'[Date])");
+    const calculate = timeline.find((e) => e.kind === 'calculate')!;
+    expect(technicalOperation(calculate.operations[1])).toContain('the last date of the month of the last date in the current filter');
+    expect(buildStepQuery(timeline.find((e) => e.kind === 'measure')!, options)).toEqual({
+      kind: 'scalar',
+      dax: "CALCULATE(\n[Total Sales],\nENDOFMONTH('Date'[Date])\n)",
+    });
+  });
+
+  it('OPENINGBALANCEYEAR is CALCULATE with PREVIOUSDAY(STARTOFYEAR(dates, year end)), filter', () => {
+    const { timeline, options } = explain("M = OPENINGBALANCEYEAR([Total Sales], 'Date'[Date], Product[Category] = \"Widgets\", \"6/30\")");
+    expect(timeline.map((e) => e.title)).toContain("Prepare filter: PREVIOUSDAY(STARTOFYEAR('Date'[Date]))");
+    const calculate = timeline.find((e) => e.kind === 'calculate')!;
+    expect(technicalOperation(calculate.operations[1])).toContain('the day before the year of the first date in the current filter starts (for a year ending "6/30")');
+    expect(buildStepQuery(timeline.find((e) => e.kind === 'measure')!, options)).toEqual({
+      kind: 'scalar',
+      dax: "CALCULATE(\n[Total Sales],\nPREVIOUSDAY(STARTOFYEAR('Date'[Date], \"6/30\")),\nProduct[Category] = \"Widgets\"\n)",
+    });
+  });
+
+  it('STARTOFMONTH and ENDOFYEAR as CALCULATE filters say which date they pick', () => {
+    const rule = (definition: string) => technicalOperation(explain(definition).calculate.operations.at(-1)!);
+    expect(rule("M = CALCULATE([Total Sales], STARTOFMONTH('Date'[Date]))")).toContain('the first date of the month of the first date in the current filter');
+    expect(rule("M = CALCULATE([Total Sales], ENDOFYEAR('Date'[Date], \"6/30\"))")).toContain('the last date of the year of the last date in the current filter (for a year ending "6/30")');
+  });
+});
+
 describe('date ranges for the date strip', () => {
   it('asks for the first and last date before the CALCULATE and inside it', () => {
     const { calculate, options } = explain("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Date'[Date]))");

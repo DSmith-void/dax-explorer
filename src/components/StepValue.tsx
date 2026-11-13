@@ -19,10 +19,12 @@ interface StepValueProps {
   /** The picked row of an iterator of this measure, by its node id. */
   rowFor: (iteratorNodeId: number) => RowChoice | undefined;
   onPickRow: (iteratorNodeId: number, choice: RowChoice) => void;
+  /** The value is a part of a date (a year): shown without a thousands separator. */
+  asWritten?: boolean;
 }
 
 /** The real value at a step, from the connected report. */
-export function StepValue({ entry, query, state, connected, rowFor, onPickRow }: StepValueProps) {
+export function StepValue({ entry, query, state, connected, rowFor, onPickRow, asWritten = false }: StepValueProps) {
   if (!connected) {
     return entry.kind === 'start' ? (
       <p className="value-note">Connect to a report (the data button) to see real values at each step.</p>
@@ -50,7 +52,7 @@ export function StepValue({ entry, query, state, connected, rowFor, onPickRow }:
   if (query.kind === 'scalar') {
     return (
       <div className="value-block">
-        <p className="value-number">{formatQueryValue(result.rows[0]?.[0] ?? null)}</p>
+        <p className="value-number">{formatQueryValue(result.rows[0]?.[0] ?? null, asWritten)}</p>
         {forText}
       </div>
     );

@@ -23,7 +23,7 @@ import { DiffList } from './DiffList';
 import { pillLabel } from './pillLabel';
 import { useReportFilters } from './reportFiltersContext';
 import { StepValue } from './StepValue';
-import { formatQueryValue } from './valueFormat';
+import { formatQueryValue, isDatePart } from './valueFormat';
 
 interface StepPanelProps {
   entries: readonly FlatEntry[];
@@ -205,6 +205,7 @@ export function StepPanel({ entries, index, onStep, onSelectNode, values, connec
           connected={connected}
           rowFor={(id) => values.rows.get(rowKey(frame.key, id))}
           onPickRow={(id, choice) => values.pickRow(frame.key, id, choice)}
+          asWritten={isDatePart(root, current.nodeId)}
         />
         {target && <StepIntoControl target={target} isExpanded={isExpanded} onExpand={onExpand} />}
         {/* Why: the step's sentence when there is no change to show (otherwise "what changes" says it), then
@@ -346,7 +347,13 @@ export function StoryList({ entries, index, onStep, values, connected, open, onT
               <button type="button" onClick={() => onStep(e.index)} aria-current={e.index === index ? 'step' : undefined}>
                 <span className="story-number">{e.index + 1}</span>
                 <span className="story-title">{e.title}</span>
-                {connected && <StoryValue query={values.queryFor(e)} state={values.stateOf(values.queryFor(e))} />}
+                {connected && (
+                  <StoryValue
+                    query={values.queryFor(e)}
+                    state={values.stateOf(values.queryFor(e))}
+                    asWritten={isDatePart(e.frame.result.parse?.root ?? null, e.nodeId)}
+                  />
+                )}
               </button>
             </li>
           );
@@ -633,7 +640,7 @@ function Diff({ entry, parts, root, onSelectNode }: { entry: FlatEntry; parts: S
 
 
 /** A step's value in the story list, once it has been calculated (single values only). */
-function StoryValue({ query, state }: { query: StepQuery; state: ValueState }) {
+function StoryValue({ query, state, asWritten }: { query: StepQuery; state: ValueState; asWritten: boolean }) {
   if (query.kind !== 'scalar' || state.status !== 'ready') return null;
-  return <span className="story-value">{formatQueryValue(state.result.rows[0]?.[0] ?? null)}</span>;
+  return <span className="story-value">{formatQueryValue(state.result.rows[0]?.[0] ?? null, asWritten)}</span>;
 }

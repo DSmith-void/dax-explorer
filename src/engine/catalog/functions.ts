@@ -8,64 +8,10 @@
  * describes argument roles only; evaluation semantics are added in later milestones.
  */
 
-/** What an argument position accepts. */
-export type ArgRole =
-  /** A scalar expression evaluated in the current context. */
-  | 'scalar'
-  /** A table expression. */
-  | 'table'
-  /** Must be a column reference. */
-  | 'column'
-  /** A table or a column reference (e.g. ALL, VALUES). A bracketed [X] here must be a column. */
-  | 'tableOrColumn'
-  /** A CALCULATE filter argument: boolean filter, table filter, or modifier (ALL, KEEPFILTERS, ...). */
-  | 'filter'
-  /** Evaluated once per row of the iterated table, in a row context. */
-  | 'rowExpression'
-  /** A keyword such as ASC/DESC or BOTH; see `keywords`. */
-  | 'keyword';
+import { PLAIN_FUNCTIONS } from './plainFunctions';
+import { p, type FunctionSpec, type ParamSpec } from './spec';
 
-export interface ParamSpec {
-  name: string;
-  role: ArgRole;
-  optional?: boolean;
-  /**
-   * Trailing parameters marked `repeating` form a group that may repeat any number of times,
-   * e.g. the filters of CALCULATE (group of 1) or TOPN's "order by, ASC/DESC" pairs (group of 2).
-   */
-  repeating?: boolean;
-  /** Allowed values for role 'keyword'. */
-  keywords?: readonly string[];
-}
-
-export type FunctionCategory =
-  | 'aggregation'
-  | 'iterator'
-  | 'filter modification'
-  | 'table'
-  | 'scope and filter inspection'
-  | 'relationship'
-  | 'time intelligence'
-  | 'logical'
-  | 'math'
-  | 'text';
-
-export interface FunctionSpec {
-  name: string;
-  category: FunctionCategory;
-  returns: 'scalar' | 'table';
-  /** One-line description shown in the UI. */
-  summary: string;
-  /** Alternative parameter lists; the first one whose arity fits is used. */
-  overloads: readonly (readonly ParamSpec[])[];
-  /**
-   * For iterators: index of the table argument whose rows are iterated.
-   * Arguments with role 'rowExpression' are evaluated in that row context.
-   */
-  iteratesArgument?: number;
-}
-
-const p = (name: string, role: ArgRole, extra: Partial<ParamSpec> = {}): ParamSpec => ({ name, role, ...extra });
+export type { ArgRole, FunctionCategory, FunctionSpec, ParamSpec } from './spec';
 
 const aggregation = (name: string, summary: string): FunctionSpec => ({
   name,
@@ -75,14 +21,17 @@ const aggregation = (name: string, summary: string): FunctionSpec => ({
   overloads: [[p('column', 'column')]],
 });
 
-const iterator = (name: string, summary: string): FunctionSpec => ({
+const iterator = (name: string, summary: string, extra: ParamSpec[] = []): FunctionSpec => ({
   name,
   category: 'iterator',
   returns: 'scalar',
   summary,
-  overloads: [[p('table', 'table'), p('expression', 'rowExpression')]],
+  overloads: [[p('table', 'table'), p('expression', 'rowExpression'), ...extra]],
   iteratesArgument: 0,
 });
+
+/** MINX and MAXX take an optional TRUE/FALSE "variant" flag (Power BI rejects other values). */
+const variant = p('variant', 'scalar', { optional: true });
 
 const columnInspection = (name: string, summary: string): FunctionSpec => ({
   name,
@@ -125,8 +74,8 @@ const SPECS: FunctionSpec[] = [
   // --- Iterators ---
   iterator('SUMX', 'Goes through a table row by row, calculates something for each row, and adds up the results.'),
   iterator('AVERAGEX', 'Goes through a table row by row, calculates something for each row, and averages the results.'),
-  iterator('MINX', 'Goes through a table row by row, calculates something for each row, and returns the smallest result.'),
-  iterator('MAXX', 'Goes through a table row by row, calculates something for each row, and returns the largest result.'),
+  iterator('MINX', 'Goes through a table row by row, calculates something for each row, and returns the smallest result.', [variant]),
+  iterator('MAXX', 'Goes through a table row by row, calculates something for each row, and returns the largest result.', [variant]),
   iterator('COUNTX', 'Goes through a table row by row, calculates something for each row, and counts the non-blank results.'),
   {
     name: 'FILTER',
@@ -345,7 +294,8 @@ const SPECS: FunctionSpec[] = [
     category: 'iterator',
     returns: 'table',
     summary: 'Builds a new table whose columns are calculated row by row from another table.',
-    overloads: [[p('table', 'table'), p('name', 'scalar', { repeating: true }), p('expression', 'rowExpression', { repeating: true })]],
+    // Power BI also accepts a column on its own, without a name: SELECTCOLUMNS('Sales', 'Sales'[Amount]).
+    overloads: [[p('table', 'table'), p('name', 'scalar', { repeating: true }), p('expression', 'rowExpression', { optional: true, repeating: true })]],
     iteratesArgument: 0,
   },
   {
@@ -416,6 +366,9 @@ const SPECS: FunctionSpec[] = [
   { name: 'BLANK', category: 'logical', returns: 'scalar', summary: 'Returns BLANK.', overloads: [[]] },
   { name: 'TRUE', category: 'logical', returns: 'scalar', summary: 'Returns TRUE.', overloads: [[]] },
   { name: 'FALSE', category: 'logical', returns: 'scalar', summary: 'Returns FALSE.', overloads: [[]] },
+
+  // --- Plain functions: they change no filters and no rows (date, text, maths, statistics, finance, …) ---
+  ...PLAIN_FUNCTIONS,
 ];
 
 const BY_NAME: ReadonlyMap<string, FunctionSpec> = new Map(SPECS.map((spec) => [spec.name, spec]));
@@ -423,9 +376,24 @@ const BY_NAME: ReadonlyMap<string, FunctionSpec> = new Map(SPECS.map((spec) => [
 /** All catalog entries (for documentation and tests). */
 export const FUNCTION_CATALOG: readonly FunctionSpec[] = SPECS;
 
+/**
+ * INFO.TABLES(), INFO.VIEW.MEASURES() and the other INFO functions describe the model itself. They return a
+ * table, change no filters or rows, and take optional restrictions, so one shared entry covers them all.
+ */
+function infoFunction(name: string): FunctionSpec {
+  return {
+    name,
+    category: 'information',
+    returns: 'table',
+    summary: 'A table describing the data model itself (its tables, columns, measures, …).',
+    overloads: [[p('restriction', 'scalar', { optional: true, repeating: true })]],
+  };
+}
+
 /** Case-insensitive lookup. Returns undefined for functions not in the catalog. */
 export function lookupFunction(name: string): FunctionSpec | undefined {
-  return BY_NAME.get(name.toUpperCase());
+  const upper = name.toUpperCase();
+  return BY_NAME.get(upper) ?? (upper.startsWith('INFO.') ? infoFunction(upper) : undefined);
 }
 
 /** Minimum and maximum argument counts of one parameter list (max is Infinity when repeating). */
@@ -468,17 +436,41 @@ function timeIntelligence(): FunctionSpec[] {
     summary,
     overloads: [params],
   });
+  const yearEnd = p('year end date', 'scalar', { optional: true });
+  // Only the year-based functions take a year end (checked against Power BI Desktop: see powerBiArity.ts).
+  const withYearEnd = (period: string) => (period === 'year' ? [dates, yearEnd] : [dates]);
   const toDate = (name: string, period: string) =>
-    spec(name, `The dates from the start of the ${period} up to the last date in the current filter.`, [dates, p('year end date', 'scalar', { optional: true })]);
+    spec(name, `The dates from the start of the ${period} up to the last date in the current filter.`, withYearEnd(period));
   const total = (name: string, period: string) =>
     spec(
       name,
       `Calculates an expression for the ${period} to date: CALCULATE(expression, DATES${name.slice(5)}(dates), filter).`,
-      [p('expression', 'scalar'), dates, p('filter', 'filter', { optional: true }), p('year end date', 'scalar', { optional: true })],
+      [p('expression', 'scalar'), dates, p('filter', 'filter', { optional: true }), ...(period === 'year' ? [yearEnd] : [])],
       'scalar',
     );
   const around = (name: string, which: 'before' | 'after', period: string) =>
-    spec(name, `The whole ${period} ${which} the ${which === 'before' ? 'first' : 'last'} date in the current filter.`, [dates]);
+    spec(name, `The whole ${period} ${which} the ${which === 'before' ? 'first' : 'last'} date in the current filter.`, withYearEnd(period));
+  // Checked in Power BI Desktop: STARTOF… uses the first date in the filter, ENDOF… the last one.
+  const startOf = (period: string) =>
+    spec(`STARTOF${period.toUpperCase()}`, `The first date of the ${period} of the first date in the current filter.`, withYearEnd(period));
+  const endOf = (period: string) =>
+    spec(`ENDOF${period.toUpperCase()}`, `The last date of the ${period} of the last date in the current filter.`, withYearEnd(period));
+  // Checked in Power BI Desktop: CLOSINGBALANCEMONTH(x, dates) = CALCULATE(x, ENDOFMONTH(dates)) and
+  // OPENINGBALANCEMONTH(x, dates) = CALCULATE(x, PREVIOUSDAY(STARTOFMONTH(dates))).
+  const balance = (which: 'OPENING' | 'CLOSING', period: string) =>
+    spec(
+      `${which}BALANCE${period.toUpperCase()}`,
+      which === 'CLOSING'
+        ? `Calculates an expression on the last date of the ${period}: CALCULATE(expression, ENDOF${period.toUpperCase()}(dates), filter).`
+        : `Calculates an expression on the day before the ${period} starts: CALCULATE(expression, PREVIOUSDAY(STARTOF${period.toUpperCase()}(dates)), filter).`,
+      [p('expression', 'scalar'), dates, p('filter', 'filter', { optional: true }), ...(period === 'year' ? [yearEnd] : [])],
+      'scalar',
+    );
+  // DATEADD and DATESINPERIOD: the options for calendars (Microsoft's calendar-based time intelligence page).
+  const extension = p('extension', 'keyword', { optional: true, keywords: ['PRECISE', 'EXTENDED', 'ENDALIGNED'] });
+  const truncation = p('truncation', 'keyword', { optional: true, keywords: ['ANCHORED', 'BLANK'] });
+  const endBehavior = p('end behavior', 'keyword', { optional: true, keywords: ['PRECISE', 'ENDALIGNED'] });
+  const periods = ['week', 'month', 'quarter', 'year'];
   return [
     toDate('DATESYTD', 'year'),
     toDate('DATESQTD', 'quarter'),
@@ -492,10 +484,10 @@ function timeIntelligence(): FunctionSpec[] {
     around('PREVIOUSWEEK', 'before', 'week'),
     around('NEXTWEEK', 'after', 'week'),
     spec('SAMEPERIODLASTYEAR', 'The same dates as the current filter, one year earlier.', [dates]),
-    spec('DATEADD', 'The dates in the current filter, moved by a number of days, months, quarters or years.', [dates, p('number of intervals', 'scalar'), interval]),
+    spec('DATEADD', 'The dates in the current filter, moved by a number of days, months, quarters or years.', [dates, p('number of intervals', 'scalar'), interval, extension, truncation]),
     spec('PARALLELPERIOD', 'The whole months, quarters or years in the current filter, moved by a number of them.', [dates, p('number of intervals', 'scalar'), interval]),
     spec('DATESBETWEEN', 'The dates from a start date to an end date.', [dates, p('start date', 'scalar'), p('end date', 'scalar')]),
-    spec('DATESINPERIOD', 'The dates in a period of a number of days, months, quarters or years, from a start date.', [dates, p('start date', 'scalar'), p('number of intervals', 'scalar'), interval]),
+    spec('DATESINPERIOD', 'The dates in a period of a number of days, months, quarters or years, from a start date.', [dates, p('start date', 'scalar'), p('number of intervals', 'scalar'), interval, endBehavior]),
     around('PREVIOUSDAY', 'before', 'day'),
     around('PREVIOUSMONTH', 'before', 'month'),
     around('PREVIOUSQUARTER', 'before', 'quarter'),
@@ -506,5 +498,8 @@ function timeIntelligence(): FunctionSpec[] {
     around('NEXTYEAR', 'after', 'year'),
     spec('FIRSTDATE', 'The first date in the current filter.', [dates]),
     spec('LASTDATE', 'The last date in the current filter.', [dates]),
+    ...periods.map(startOf),
+    ...periods.map(endOf),
+    ...periods.flatMap((period) => [balance('OPENING', period), balance('CLOSING', period)]),
   ];
 }

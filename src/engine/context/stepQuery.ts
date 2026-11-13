@@ -14,6 +14,7 @@ import type { BindResult } from '../binder/binder';
 import { childrenOf, findNode, type AstNode, type Expr } from '../parser/ast';
 import type { ColumnName } from './model';
 import { columnDax, daxLiteral, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
+import { TOTALS } from './totals';
 import type { TimelineEntry } from './timeline';
 
 /** The row of an iterator the user is looking at: its columns (as the engine names them) and values. */
@@ -192,13 +193,13 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
       const argIndex = parent.args.indexOf(child as Expr);
       if (name === 'RELATEDTABLE') throw new Unsupported('Values inside RELATEDTABLE are not shown yet.');
       // TOTALYTD(expression, dates, [filter], [year end]) is CALCULATE(expression, DATESYTD(dates[, year end]), filter).
-      const total = name ? TOTALS[name] : undefined;
+      const total = name ? TOTALS.get(name) : undefined;
       if (total && argIndex === 0) {
         const [, dates, ...rest] = parent.args;
         const yearEnd = rest.find((a) => a.kind === 'StringLiteral');
         const filter = rest.find((a) => a.kind !== 'StringLiteral' && a.kind !== 'Omitted');
         if (!dates) throw new Unsupported(`${name} has no dates argument.`);
-        const datesDax = `${total}(${text(dates)}${yearEnd ? `, ${text(yearEnd)}` : ''})`;
+        const datesDax = total.dax(text(dates), yearEnd ? text(yearEnd) : undefined);
         expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr},\n${datesDax}${filter ? `,\n${text(filter)}` : ''}\n)`;
         continue;
       }
@@ -286,8 +287,6 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
   }
 }
 
-/** TOTALYTD and friends: CALCULATE with the matching DATES…TD filter. */
-const TOTALS: Record<string, string | undefined> = { TOTALYTD: 'DATESYTD', TOTALQTD: 'DATESQTD', TOTALMTD: 'DATESMTD', TOTALWTD: 'DATESWTD' };
 
 /** The first date, last date and number of dates of a date column, separated by "|". */
 export function dateRangeProbe(column: ColumnName): string {
