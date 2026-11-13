@@ -378,6 +378,32 @@ export function findHints(input: HintInput): Hint[] {
     });
   }
 
+  // --- 11b. LOOKUPVALUE ignores the filters in effect (checked in Power BI Desktop: filters on its table and
+  //      from related tables don't change what it finds).
+  for (const call of calls.filter((c) => named(c, 'LOOKUPVALUE'))) {
+    hints.push({
+      check: 'lookupvalue-ignores-filters',
+      short: "Slicers and CALCULATE filters don't change what it finds.",
+      kind: 'silent',
+      nodeId: call.id,
+      title: 'Ignores the filters in effect',
+      code: text(call),
+      why:
+        'LOOKUPVALUE searches every row of the table, whatever the report, CALCULATE or other tables filter. Only ' +
+        'its own search conditions decide which row it finds. A calculation that respects the filters is ' +
+        'CALCULATE(SELECTEDVALUE(…), …): with Product filtered to Gadgets, it finds nothing for a widget, ' +
+        'where LOOKUPVALUE still does.',
+      // Checked in Power BI Desktop: under Category = "Gadgets", CALCULATE(SELECTEDVALUE('Product'[Category]),
+      // 'Product'[Product] = "Widget Pro") is BLANK, while LOOKUPVALUE(...) still gives "Widgets".
+      suggestion: {
+        dax: lookupAsCalculate(call, text) ?? 'CALCULATE(SELECTEDVALUE(<result column>), <search column> = <value>, …)',
+        note:
+          'Respects the filters on other columns: if they rule the row out, the result is BLANK. Not exactly the same: ' +
+          'a filter on the searched column itself is replaced, and several rows with different values give BLANK, not an error.',
+      },
+    });
+  }
+
   // --- 12. A calendar moves single days by their place in it, not by date (checked in Power BI Desktop:
   //     SAMEPERIODLASTYEAR and DATEADD by YEAR or MONTH, with and without a Month unit in the calendar).
   if (analysis) {
@@ -523,6 +549,18 @@ function replacesOnPurpose(arg: AstNode): boolean {
 }
 
 /** Code on one line (spaces collapsed). */
+/**
+ * LOOKUPVALUE(result, column, value, …) as CALCULATE(SELECTEDVALUE(result), column = value, …), for the
+ * suggestion. Null when there is an alternate result (SELECTEDVALUE's own alternate would differ on ties).
+ */
+function lookupAsCalculate(call: FunctionCall, text: (node: AstNode) => string): string | null {
+  const [result, ...rest] = call.args;
+  if (!result || rest.length === 0 || rest.length % 2 === 1) return null;
+  const conditions: string[] = [];
+  for (let i = 0; i < rest.length; i += 2) conditions.push(`${text(rest[i])} = ${text(rest[i + 1])}`);
+  return `CALCULATE(SELECTEDVALUE(${text(result)}), ${conditions.join(', ')})`;
+}
+
 function oneLine(code: string): string {
   return code.replace(/\s+/g, ' ').trim();
 }

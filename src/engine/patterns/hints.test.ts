@@ -237,6 +237,20 @@ describe('calendar-based time intelligence', () => {
   });
 });
 
+describe('LOOKUPVALUE', () => {
+  it('says it ignores the filters, and suggests the CALCULATE form that respects them', () => {
+    const hint = one(hints(`M = LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro")`), 'lookupvalue-ignores-filters');
+    expect(hint.kind).toBe('silent');
+    expect(hint.suggestion?.dax).toBe(`CALCULATE(SELECTEDVALUE('Product'[Category]), 'Product'[Product] = "Widget Pro")`);
+    expect(hint.suggestion?.note).toContain('Not exactly the same');
+  });
+
+  it('has no rewrite when an alternate result is given (ties would differ)', () => {
+    const hint = one(hints(`M = LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro", "none")`), 'lookupvalue-ignores-filters');
+    expect(hint.suggestion?.dax).toContain('<result column>');
+  });
+});
+
 describe('order', () => {
   it('warnings first, then slow patterns, notes, and things done silently; within a kind, in code order', () => {
     const list = hints('M = VAR s = [Total Sales] RETURN CALCULATE(s, Product[Category] = "Gadgets") / [Order Count] + 0', { reportFilters: RED });

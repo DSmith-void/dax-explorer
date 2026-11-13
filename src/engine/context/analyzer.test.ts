@@ -347,3 +347,24 @@ describe('ALLSELECTED', () => {
     expect(step?.innerContext?.filter.caveats[0]).toContain('ALLSELECTED inside a row-by-row calculation (SUMX)');
   });
 });
+
+describe('LOOKUPVALUE (checked in Power BI Desktop: it ignores every filter in effect)', () => {
+  it('says what it looks up, where, and that the filters do not apply', () => {
+    const source = `CALCULATE(LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro"), 'Product'[Category] = "Gadgets")`;
+    const { step } = run(source);
+    const s = step(`LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro")`);
+    expect(s.summary).toBe(`Looks up 'Product'[Category] where 'Product'[Product] = "Widget Pro", ignoring the filters.`);
+    expect(s.notes[1]).toContain('No matching row gives BLANK');
+    expect(s.notes[1]).toContain('otherwise an error');
+  });
+
+  it('reads an even number of inputs as ending with the alternate result, even a measure', () => {
+    const source = `LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro", [Fallback])`;
+    const { step, analysis } = run(source);
+    expect(step(source).notes[1]).toContain('No matching row gives [Fallback]');
+    expect(analysis.insights.filter((i) => i.kind === 'unknown-function')).toEqual([]);
+    const binding = bind(parse(tokenize(source).tokens).root, CONVENTION);
+    expect(binding.diagnostics).toEqual([]);
+    expect([...binding.references.values()].find((r) => r.key === '[fallback]')?.type).toBe('measure');
+  });
+});

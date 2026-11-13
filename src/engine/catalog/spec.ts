@@ -40,6 +40,7 @@ export type FunctionCategory =
   | 'table'
   | 'scope and filter inspection'
   | 'relationship'
+  | 'lookup'
   | 'time intelligence'
   | 'date and time'
   | 'logical'

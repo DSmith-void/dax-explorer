@@ -203,6 +203,9 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('table or column', 'tableOrColumn')]],
   },
 
+  // --- Lookup ---
+  lookupValue(),
+
   // --- Relationships ---
   {
     name: 'RELATED',
@@ -421,6 +424,29 @@ export function parametersForCall(spec: FunctionSpec, argumentCount: number): Pa
     return result;
   }
   return null;
+}
+
+/**
+ * LOOKUPVALUE(result column, search column, search value, [search column, search value]…, [alternate result]).
+ * A trailing alternate result makes the count of inputs decide what the last one is: odd = only pairs, even =
+ * the last input is the alternate result (a value, so a measure there is not taken for a column). Exact lists
+ * for up to 20 pairs, then an open-ended list. Checked in Power BI Desktop: it ignores every filter in effect.
+ */
+function lookupValue(): FunctionSpec {
+  const pair = [p('search column', 'column'), p('search value', 'scalar')];
+  const pairs = (n: number) => Array.from({ length: n }, () => pair).flat();
+  const head = [p('result column', 'column')];
+  const alternate = p('alternate result', 'scalar');
+  return {
+    name: 'LOOKUPVALUE',
+    category: 'lookup',
+    returns: 'scalar',
+    summary: 'Finds the value of a column in the row where other columns have the given values, searching the whole table (the filters in effect do not apply).',
+    overloads: [
+      ...Array.from({ length: 20 }, (_, i) => [[...head, ...pairs(i + 1)], [...head, ...pairs(i + 1), alternate]]).flat(),
+      [...head, ...pair, p('search column', 'column', { repeating: true }), p('search value', 'scalar', { repeating: true })],
+    ],
+  };
 }
 
 /** Time-intelligence functions. Each returns a table of dates from the date column it is given. */

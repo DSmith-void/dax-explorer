@@ -442,6 +442,21 @@ export function analyzeContext(
       case 'USERELATIONSHIP':
       case 'CROSSFILTER':
         return role === 'filter' ? [] : [`${spec.name} only does something when it is used inside CALCULATE or CALCULATETABLE.`];
+      case 'LOOKUPVALUE': {
+        // Checked in Power BI Desktop: filters on its table, and filters reaching it from other tables (Product,
+        // Date), don't change what it finds; a row context doesn't either. Only its own search conditions count.
+        const [result, ...rest] = node.args;
+        const hasAlternate = rest.length % 2 === 1;
+        const pairs = hasAlternate ? rest.slice(0, -1) : rest;
+        const conditions: string[] = [];
+        for (let i = 0; i + 1 < pairs.length; i += 2) conditions.push(`${snippet(pairs[i], 30)} = ${snippet(pairs[i + 1], 30)}`);
+        const where = conditions.join(' and ');
+        const none = hasAlternate ? snippet(rest[rest.length - 1], 30) : 'BLANK';
+        return [
+          `Looks up ${result ? snippet(result, 30) : '…'} where ${where}, ignoring the filters.`,
+          `It searches every row, whatever the filters shown above say (the report's, CALCULATE's, or ones reaching it from other tables). Only its own conditions (${where}) decide. No matching row gives ${none}. Several matching rows give that value if they all agree, and otherwise ${hasAlternate ? none : 'an error'}.`,
+        ];
+      }
       default:
         break;
     }
