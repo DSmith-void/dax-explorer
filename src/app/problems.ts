@@ -48,7 +48,7 @@ export function listProblems(result: AnalysisResult | null, binding: BindResult 
   }
   for (const insight of analysis?.insights ?? []) {
     const kind: ProblemKind | null =
-      insight.kind === 'column-without-row-context' ? 'warning' : insight.kind === 'not-modeled' || insight.kind === 'unknown-function' ? 'unchecked' : null;
+      insight.kind === 'column-without-row-context' || insight.kind === 'dax-error' ? 'warning' : insight.kind === 'not-modeled' || insight.kind === 'unknown-function' ? 'unchecked' : null;
     if (kind) problems.push({ kind, title: insight.summary, line: where(insight.nodeId).line, nodeId: insight.nodeId });
   }
   // Names: one entry per name (a name used three times is listed once, where it first appears).

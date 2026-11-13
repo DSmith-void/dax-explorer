@@ -507,3 +507,29 @@ describe('SUMMARIZE (checked in Power BI Desktop on Initech)', () => {
     expect(step("ISSUBTOTAL('Product'[Category])").summary).toContain('TRUE on the total row');
   });
 });
+
+describe('GROUPBY and CURRENTGROUP (checked in Power BI Desktop on Initech)', () => {
+  const ok = `GROUPBY(Sales, 'Product'[Category], "Sum", SUMX(CURRENTGROUP(), Sales[Amount]))`;
+
+  it('goes group by group; SUMX goes through the group’s rows, and nothing is filtered for the group', () => {
+    const { step, analysis } = run(ok);
+    expect(step(ok).summary).toBe('GROUPBY groups Sales by Product[Category], one group at a time.');
+    expect(step('Sales[Amount]').summary).toBe('Reads Sales[Amount] from the row that SUMX is currently on.');
+    expect(step('SUMX(CURRENTGROUP(), Sales[Amount])').summary).toContain('the rows of the current group');
+    expect(describeContext(step('SUMX(CURRENTGROUP(), Sales[Amount])').context)[0]).toBe("All of the report's filters");
+    expect(analysis.insights.filter((i) => i.kind === 'dax-error')).toEqual([]);
+  });
+
+  it('refuses anything but one aggregation over CURRENTGROUP(), and CALCULATE or measures', () => {
+    const errors = (source: string) => run(source).analysis.insights.filter((i) => i.kind === 'dax-error').map((i) => i.summary);
+    expect(errors(`GROUPBY(Sales, 'Product'[Category], "M", MEDIANX(CURRENTGROUP(), Sales[Amount]))`)[0]).toContain('must be one SUMX');
+    expect(errors(`GROUPBY(Sales, 'Product'[Category], "S", SUM(Sales[Amount]))`)[0]).toContain('must be one SUMX');
+    expect(errors(`GROUPBY(Sales, 'Product'[Category], "S", SUMX(CURRENTGROUP(), [Total Sales]))`)[0]).toContain("doesn't allow CALCULATE or measures");
+    expect(errors(`GROUPBY(Sales, 'Product'[Category], "S", SUMX(CURRENTGROUP(), 1))`)).toEqual([]);
+  });
+
+  it('CURRENTGROUP() outside GROUPBY is an error', () => {
+    const { analysis } = run('COUNTROWS(CURRENTGROUP())');
+    expect(analysis.insights.map((i) => i.kind)).toContain('dax-error');
+  });
+});

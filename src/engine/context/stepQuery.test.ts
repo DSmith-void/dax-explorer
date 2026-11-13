@@ -173,3 +173,27 @@ describe('loops over a column (FIRSTNONBLANK and the like)', () => {
     expect(q.kind === 'rows' ? q.countDax : '').toBe("COUNTROWS(VALUES('Date'[Date]))");
   });
 });
+
+describe('GROUPBY values', () => {
+  const source = `MAXX(GROUPBY(Sales, 'Product'[Category], "S", SUMX(CURRENTGROUP(), Sales[Amount])), [S])`;
+  const setup = () => {
+    const { root } = parse(tokenize(source).tokens);
+    const binding = bind(root, { mode: 'convention', userChoices: {} });
+    const timeline = buildTimeline(root, binding, analyzeContext(root, binding, source), source);
+    return { root, binding, timeline };
+  };
+
+  it('its groups come from GROUPBY itself, with the column worked out per group', () => {
+    const { root, binding, timeline } = setup();
+    const groups = timeline.find((e) => e.kind === 'iterate' && e.title === 'GROUPBY goes group by group')!;
+    const q = buildStepQuery(groups, { root, binding, source, reportFilters: [], rows: new Map() });
+    expect(q.kind === 'rows' ? q.dax : '').toContain('GROUPBY(\nSales,\n\'Product\'[Category],\n"@DaxExplorerValue",\nSUMX(CURRENTGROUP(), Sales[Amount])\n)');
+  });
+
+  it('values inside the aggregation over CURRENTGROUP() are not shown, with the reason', () => {
+    const { root, binding, timeline } = setup();
+    const inner = timeline.find((e) => e.kind === 'iterate' && e.title === 'SUMX goes row by row')!;
+    const q = buildStepQuery(inner, { root, binding, source, reportFilters: [], rows: new Map() });
+    expect(q).toEqual({ kind: 'none', reason: expect.stringContaining("Values inside GROUPBY's aggregation aren't shown") });
+  });
+});

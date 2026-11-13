@@ -216,9 +216,10 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         if (!choice) throw new NeedsRow(frame.key, parent.id, call.spec.name);
         if (table) throw new Unsupported(`A table calculated for one row of ${call.spec.name} is not shown yet.`);
         const tableArg = parent.args[call.spec.iteratesArgument];
+        if (isCurrentGroup(tableArg)) throw new Unsupported(INSIDE_GROUPBY);
         expr =
-          name === 'SUMMARIZE'
-            ? summarizeRow(text(tableArg), groupByText(parent, call.params, text), choice, expr)
+          name === 'SUMMARIZE' || name === 'GROUPBY'
+            ? groupRow(name, text(tableArg), groupByText(parent, call.params, text), choice, expr)
             : pickRow(loopTable(tableArg, call.params[call.spec.iteratesArgument]?.role, text), choice, expr);
       }
     }
@@ -284,15 +285,16 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         if (!call?.spec || call.spec.iteratesArgument === undefined || !call.params) return { kind: 'none', reason: '' };
         const rowArg = node.args.find((_, i) => call.params![i]?.role === 'rowExpression');
         const tableArg = node.args[call.spec.iteratesArgument];
-        if (call.spec.name === 'SUMMARIZE' && tableArg) {
-          // Its groups, with the first extra column worked out per group: SUMMARIZE itself does that exactly.
+        if (tableArg && isCurrentGroup(tableArg)) return { kind: 'none', reason: INSIDE_GROUPBY };
+        if ((call.spec.name === 'SUMMARIZE' || call.spec.name === 'GROUPBY') && tableArg) {
+          // Its groups, with the first extra column worked out per group: the function itself does that exactly.
           // The count comes from the very same expression: Power BI counted SUMMARIZE(Sales, ROLLUP(…)) without the
           // extra column as 2 rows, with it as 5 (the four categories and the total).
-          const groups = `SUMMARIZE(\n${text(tableArg)},\n${groupByText(node, call.params, text)}`;
+          const groups = `${call.spec.name}(\n${text(tableArg)},\n${groupByText(node, call.params, text)}`;
           const shown = rowArg ? `${groups},\n${daxLiteral(ROW_VALUE_COLUMN)},\n${text(rowArg)}\n)` : `${groups}\n)`;
           const count = inContext(node, `COUNTROWS(${shown})`, false);
           if (!rowArg) return { kind: 'table', dax: inContext(node, shown, true), countDax: count };
-          return { kind: 'rows', dax: inContext(node, shown, true), countDax: count, iteratorName: 'SUMMARIZE' };
+          return { kind: 'rows', dax: inContext(node, shown, true), countDax: count, iteratorName: call.spec.name };
         }
         if (!rowArg || !tableArg) return { kind: 'none', reason: '' };
         if (isTable(rowArg)) return { kind: 'none', reason: `The tables ${call.spec.name} makes for each row are not shown yet.` };
@@ -366,6 +368,12 @@ function pickRow(table: string, choice: RowChoice, expr: string): string {
   return `VAR __DaxExplorerRow =\nFILTER(\n${table},\n${rowConditions(choice)}\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow,\n${expr}\n)\n)`;
 }
 
+/** Power BI only allows CURRENTGROUP() as the table of one aggregation in GROUPBY: nothing inside can be shown alone. */
+const INSIDE_GROUPBY =
+  "Values inside GROUPBY's aggregation aren't shown: Power BI only allows CURRENTGROUP() directly inside it, so the parts can't be calculated on their own.";
+
+const isCurrentGroup = (node: AstNode) => node.kind === 'FunctionCall' && node.name.toUpperCase() === 'CURRENTGROUP';
+
 /** The conditions that find the picked row again, by its column values. */
 function rowConditions(choice: RowChoice): string {
   if (choice.columns.length === 0 || choice.columns.length !== choice.values.length) {
@@ -390,8 +398,8 @@ function groupByText(call: FunctionCall, params: readonly ParamSpec[], of: (node
  * The value of `expr` for one group of SUMMARIZE: the same SUMMARIZE, with `expr` as an extra column, read on
  * the picked group's row. SUMMARIZE itself sets the group's filters (on the table's rows), so this is exact.
  */
-function summarizeRow(table: string, groupBy: string, choice: RowChoice, expr: string): string {
-  return `VAR __DaxExplorerRow =\nFILTER(\nSUMMARIZE(\n${table},\n${groupBy},\n"@DaxExplorerStep",\n${expr}\n),\n${rowConditions(choice)}\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow, [@DaxExplorerStep])\n)`;
+function groupRow(fn: string, table: string, groupBy: string, choice: RowChoice, expr: string): string {
+  return `VAR __DaxExplorerRow =\nFILTER(\n${fn}(\n${table},\n${groupBy},\n"@DaxExplorerStep",\n${expr}\n),\n${rowConditions(choice)}\n)\nRETURN\nIF(\nCOUNTROWS(__DaxExplorerRow) = 0,\nERROR("The picked row is no longer there; pick it again."),\nMAXX(__DaxExplorerRow, [@DaxExplorerStep])\n)`;
 }
 
 /** The nodes from the root down to the node with this id, or null. */

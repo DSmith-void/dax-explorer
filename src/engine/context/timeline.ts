@@ -75,8 +75,12 @@ export interface TimelineEntry {
 
 
 /** What each iterator does with the results of its rows. */
+/** SUMMARIZE and GROUPBY go group by group. */
+const GROUPING = new Set(['SUMMARIZE', 'GROUPBY']);
+
 const COMBINES: Record<string, string> = {
   SUMMARIZE: 'has one row per group, with its extra columns',
+  GROUPBY: 'has one row per group, with its extra columns',
   SUMX: 'adds up the results from every row',
   AVERAGEX: 'averages the results from every row',
   MINX: 'keeps the smallest result',
@@ -288,12 +292,12 @@ export function buildTimeline(
       add({
         kind: 'iterate',
         nodeId: node.id,
-        title: spec.name === 'SUMMARIZE' ? 'SUMMARIZE goes group by group' : `${spec.name} goes row by row`,
+        title: GROUPING.has(spec.name) ? `${spec.name} goes group by group` : `${spec.name} goes row by row`,
         // Worded from the row context itself: when the iterator is also a CALCULATE filter input,
         // its step's summary describes that role instead.
         summary:
-          spec.name === 'SUMMARIZE'
-            ? (step?.summary ?? 'SUMMARIZE goes through its groups one at a time.')
+          GROUPING.has(spec.name)
+            ? (step?.summary ?? `${spec.name} goes through its groups one at a time.`)
             : `${spec.name} goes through ${rowTable(step?.operations) ?? 'a table'} one row at a time.`,
         innerContext: step?.innerContext,
         operations: step?.operations,
@@ -305,7 +309,7 @@ export function buildTimeline(
       add({
         kind: 'iterate-done',
         nodeId: node.id,
-        title: spec.name === 'SUMMARIZE' ? 'SUMMARIZE: after the last group' : `${spec.name}: after the last row`,
+        title: GROUPING.has(spec.name) ? `${spec.name}: after the last group` : `${spec.name}: after the last row`,
         summary: `After the last row, ${spec.name} ${COMBINES[spec.name] ?? 'finishes going through the rows'}.`,
         depth,
       });

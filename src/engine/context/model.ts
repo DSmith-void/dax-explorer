@@ -149,7 +149,9 @@ export type InsightKind =
   | 'variable-fixed'
   | 'column-without-row-context'
   | 'not-modeled'
-  | 'unknown-function';
+  | 'unknown-function'
+  /** DAX shows an error here (a rule Power BI enforces, checked in Power BI Desktop). */
+  | 'dax-error';
 
 /** A noteworthy fact for the Diagnostics & Explanation panel. */
 export interface Insight {

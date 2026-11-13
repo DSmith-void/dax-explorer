@@ -78,6 +78,9 @@ interface ReferenceOccurrence {
   requirement: ColumnRequirement | null;
 }
 
+/** Functions that add columns by a written name ("S"), which [S] can then refer to. */
+const ADDS_COLUMNS = new Set(['ADDCOLUMNS', 'SELECTCOLUMNS', 'SUMMARIZE', 'GROUPBY']);
+
 export function bind(root: Expr | null, options: BindOptions): BindResult {
   const result: BindResult = {
     references: new Map(),
@@ -90,6 +93,8 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
 
   const occurrences: ReferenceOccurrence[] = [];
   const unknown = new Map<string, string>();
+  /** Columns this expression adds by name (ADDCOLUMNS(…, "S", …) and the like): [S] then means that column. */
+  const addedColumns = new Map<string, string>();
 
   // ---- Pass 1: walk the tree, bind calls, collect references and positional evidence ----
   function visit(node: AstNode, requirement: ColumnRequirement | null) {
@@ -128,6 +133,11 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
       });
     }
 
+    if (spec && ADDS_COLUMNS.has(spec.name)) {
+      node.args.forEach((arg, index) => {
+        if (params?.[index]?.name === 'name' && arg.kind === 'StringLiteral') addedColumns.set(arg.value.toLowerCase(), spec.name);
+      });
+    }
     node.args.forEach((arg, index) => {
       const param = params?.[index];
       if (param?.role === 'keyword' && arg.kind === 'TableRef' && !arg.quoted && param.keywords?.includes(arg.name.toUpperCase())) {
@@ -166,6 +176,20 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
         });
       }
       result.references.set(node.id, resolution);
+      continue;
+    }
+    // A column this expression adds itself, like [S] after GROUPBY(…, "S", …): certain, from the code.
+    const bracketName = node.kind === 'BracketRef' ? node.name : null;
+    const addedBy = bracketName !== null ? addedColumns.get(bracketName.toLowerCase()) : undefined;
+    if (bracketName !== null && addedBy) {
+      result.references.set(node.id, {
+        nodeId: node.id,
+        key,
+        type: 'column',
+        source: 'function-signature',
+        detail: `certain: [${bracketName}] is the column "${bracketName}" that ${addedBy} adds in this expression`,
+        locked: true,
+      });
       continue;
     }
     if (options.model) {

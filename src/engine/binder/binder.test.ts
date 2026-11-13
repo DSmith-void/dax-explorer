@@ -338,3 +338,19 @@ describe('SUMMARIZE inputs, told apart by what is written', () => {
     expect(result.diagnostics.map((d) => d.code)).toContain('argument-count');
   });
 });
+
+describe('columns the expression adds itself', () => {
+  it('[S] after GROUPBY(…, "S", …) is that column, not a measure (certain, from the code)', () => {
+    const { references } = bind(rootOf(`MAXX(GROUPBY(Sales, 'Product'[Category], "S", SUMX(CURRENTGROUP(), Sales[Amount])), [S])`), CONVENTION);
+    const s = [...references.values()].find((r) => r.key === '[s]')!;
+    expect({ type: s.type, locked: s.locked }).toEqual({ type: 'column', locked: true });
+    expect(s.detail).toContain('the column "S" that GROUPBY adds');
+  });
+
+  it('also for ADDCOLUMNS, and a measure in the model still wins', () => {
+    const source = `SUMX(ADDCOLUMNS(VALUES('Product'[Category]), "Total Sales", 1), [Total Sales])`;
+    expect([...bind(rootOf(source), CONVENTION).references.values()].find((r) => r.key === '[total sales]')?.type).toBe('column');
+    const model = createModelIndex({ tables: ['Product'], columns: [{ table: 'Product', name: 'Category' }], measures: [{ table: 'Product', name: 'Total Sales', expression: '1' }] });
+    expect([...bind(rootOf(source), { ...CONVENTION, model }).references.values()].find((r) => r.key === '[total sales]')?.type).toBe('measure');
+  });
+});

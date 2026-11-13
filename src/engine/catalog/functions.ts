@@ -227,6 +227,14 @@ const SPECS: FunctionSpec[] = [
 
   // --- Grouping ---
   summarize(),
+  groupBy(),
+  {
+    name: 'CURRENTGROUP',
+    category: 'table',
+    returns: 'table',
+    summary: "Inside GROUPBY: the rows of the table that belong to the current group (only as the table of SUMX, AVERAGEX, …).",
+    overloads: [[]],
+  },
   {
     name: 'ROLLUP',
     category: 'table',
@@ -517,24 +525,38 @@ function lookupValue(): FunctionSpec {
  * holding only the group's columns, and with the table filtered to the group's rows.
  */
 function summarize(): FunctionSpec {
+  return grouping('SUMMARIZE', 'Groups the rows of a table by some columns, with optional extra columns worked out once per group.');
+}
+
+/**
+ * GROUPBY(table, group-by column…, [name, expression]…): written like SUMMARIZE. Checked in Power BI Desktop:
+ * each extra column must be one SUMX, AVERAGEX, MINX, MAXX, COUNTX, COUNTAX or PRODUCTX over CURRENTGROUP(),
+ * nothing is filtered per group, and CALCULATE or measures aren't allowed.
+ */
+function groupBy(): FunctionSpec {
+  return grouping('GROUPBY', 'Groups the rows of a table by some columns; extra columns add up each group’s rows with SUMX(CURRENTGROUP(), …) and the like.');
+}
+
+/** SUMMARIZE and GROUPBY: group-by columns until the first text name, then name/expression pairs. */
+function grouping(name: string, summary: string): FunctionSpec {
   const table = p('table', 'table');
-  const groupBy = p('group by column', 'column');
-  const name = p('name', 'scalar');
+  const groupByColumn = p('group by column', 'column');
+  const columnName = p('name', 'scalar');
   const expression = p('expression', 'rowExpression');
   return {
-    name: 'SUMMARIZE',
+    name,
     category: 'table',
     returns: 'table',
-    summary: 'Groups the rows of a table by some columns, with optional extra columns worked out once per group.',
-    overloads: [[table, groupBy, p('group by column, or name', 'column', { optional: true, repeating: true })]],
+    summary,
+    overloads: [[table, groupByColumn, p('group by column, or name', 'column', { optional: true, repeating: true })]],
     iteratesArgument: 0,
     paramsFor: (args) => {
       if (args.length < 2) return null;
       const params = [table];
       let i = 1;
-      for (; i < args.length && args[i].kind !== 'StringLiteral'; i++) params.push(groupBy);
+      for (; i < args.length && args[i].kind !== 'StringLiteral'; i++) params.push(groupByColumn);
       if ((args.length - i) % 2 !== 0) return null;
-      for (; i < args.length; i += 2) params.push(name, expression);
+      for (; i < args.length; i += 2) params.push(columnName, expression);
       return params;
     },
   };

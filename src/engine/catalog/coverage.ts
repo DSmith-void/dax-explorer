@@ -59,7 +59,7 @@ const status = (kind: CoverageStatus, reason: string, names: string) =>
   names.split(/\s+/).filter(Boolean).map((name) => [name, { status: kind, reason }] as const);
 
 export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reason: string }> = new Map([
-  ...status('wave-2', 'groups rows; its extra columns are worked out row by row', 'GROUPBY CURRENTGROUP ADDMISSINGITEMS'),
+  ...status('wave-2', 'groups rows; its extra columns are worked out row by row', 'ADDMISSINGITEMS'),
   ...status(
     'wave-2',
     'builds or combines tables; the app needs the shape of the table it returns',

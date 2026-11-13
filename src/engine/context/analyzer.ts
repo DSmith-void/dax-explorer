@@ -56,6 +56,14 @@ import { TOTALS } from './totals';
  * @param initial the context the expression starts in: the report's filters F by default, or, for a measure
  *   called by another measure, the filters that caller passes in.
  */
+/** The aggregations Power BI accepts in GROUPBY's columns, over CURRENTGROUP() (checked in Power BI Desktop). */
+const GROUPBY_AGGREGATIONS = new Set(['SUMX', 'AVERAGEX', 'MINX', 'MAXX', 'COUNTX', 'COUNTAX', 'PRODUCTX']);
+
+/** A node and everything inside it. */
+function allNodesOf(node: AstNode): AstNode[] {
+  return [node, ...childrenOf(node).flatMap((c) => allNodesOf(c.node))];
+}
+
 export function analyzeContext(
   root: Expr | null,
   binding: BindResult,
@@ -67,6 +75,8 @@ export function analyzeContext(
   const steps = new Map<number, Step>();
   const insights: Insight[] = [];
   const variables = new Map<number, { name: string; line: number; context: EvalContext; shape: TableShape | null }>();
+  /** The rows CURRENTGROUP() stands for, in the GROUPBY being worked out (innermost last). */
+  const currentGroups: TableShape[] = [];
   const lineOf = createLineMap(source);
   /**
    * Boolean CALCULATE filters such as Product[Color] = "Red" are shorthand for
@@ -242,6 +252,11 @@ export function analyzeContext(
         const name = specOf(expr)?.name;
         const args = expr.args;
         switch (name) {
+          case 'CURRENTGROUP': {
+            const group = currentGroups[currentGroups.length - 1];
+            return group ? { ...group, description: `the rows of the current group (${group.description})` } : { kind: 'unknown', description };
+          }
+          case 'GROUPBY':
           case 'SUMMARIZE': {
             // Its rows have the group-by columns (and the extra columns, which have no lineage to a table).
             const firstName = args.findIndex((a, i) => i > 0 && a.kind === 'StringLiteral');
@@ -438,6 +453,18 @@ export function analyzeContext(
     }
     if (spec.name === 'SUMMARIZE') {
       visitSummarize(node, ctx, call.params);
+      return;
+    }
+    if (spec.name === 'GROUPBY') {
+      visitGroupBy(node, ctx, call.params);
+      return;
+    }
+    if (spec.name === 'CURRENTGROUP' && currentGroups.length === 0) {
+      // Checked in Power BI Desktop: CURRENTGROUP() outside GROUPBY is an error.
+      const summary = 'CURRENTGROUP() only works inside GROUPBY (an error here).';
+      const message = 'CURRENTGROUP() stands for the rows of the current group of GROUPBY, as the table of SUMX, AVERAGEX and the like. Outside GROUPBY there is no group, so DAX shows an error.';
+      insights.push({ kind: 'dax-error', nodeId: node.id, summary, message });
+      record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [message] });
       return;
     }
     if (spec.iteratesArgument !== undefined) {
@@ -642,6 +669,66 @@ export function analyzeContext(
           ? [
               `Each extra column is worked out once per group: it can read the group's columns (${byText}), and ${tableText} is filtered to that group's rows. That filter is on ${tableText} itself, so removing filters from another table (such as ALL on a related table) doesn't remove it; removing filters from ${tableText} does.`,
             ]
+          : []),
+      ],
+    });
+  }
+
+  /**
+   * GROUPBY(table, group-by columns…, name, expression…), as Power BI Desktop does it (checked on Initech):
+   *  - it lists the groups like SUMMARIZE, with the filters in effect;
+   *  - each extra column must be one SUMX, AVERAGEX, MINX, MAXX, COUNTX, COUNTAX or PRODUCTX over CURRENTGROUP()
+   *    (the group's rows); anything else, CALCULATE or a measure is an error;
+   *  - nothing is filtered for the group: COUNTROWS(Sales) inside saw all of Sales for every group.
+   */
+  function visitGroupBy(node: FunctionCall, ctx: EvalContext, params: ParamSpec[]) {
+    const tableArg = node.args[0];
+    const groupArgs = node.args.filter((_, i) => i > 0 && params[i]?.role === 'column');
+    const columns = groupColumns(groupArgs);
+    node.args.forEach((arg, i) => {
+      if (params[i]?.role !== 'rowExpression') visit(arg, ctx, params[i]?.role ?? null);
+    });
+    const tableText = tableArg ? snippet(tableArg, 30) : 'the table';
+    const byText = columns.length > 0 ? columns.map(columnText).join(', ') : 'nothing';
+    const extra = node.args.filter((_, i) => params[i]?.role === 'rowExpression');
+    currentGroups.push(tableArg ? shapeOf(tableArg) : { kind: 'unknown', description: tableText });
+    for (const expression of extra) {
+      visit(expression, ctx, 'rowExpression');
+      const all = allNodesOf(expression);
+      const calculates = all.some(
+        (n) => (n.kind === 'FunctionCall' && ['CALCULATE', 'CALCULATETABLE'].includes(n.name.toUpperCase())) || ((n.kind === 'BracketRef' || n.kind === 'ColumnRef') && binding.references.get(n.id)?.type === 'measure'),
+      );
+      const allowed =
+        expression.kind === 'FunctionCall' &&
+        GROUPBY_AGGREGATIONS.has(expression.name.toUpperCase()) &&
+        expression.args[0]?.kind === 'FunctionCall' &&
+        expression.args[0].name.toUpperCase() === 'CURRENTGROUP';
+      if (calculates || !allowed) {
+        const summary = calculates
+          ? "GROUPBY doesn't allow CALCULATE or measures in its columns (an error)."
+          : 'An extra column of GROUPBY must be one SUMX, AVERAGEX, MINX, MAXX, COUNTX, COUNTAX or PRODUCTX over CURRENTGROUP() (an error).';
+        const message = calculates
+          ? 'Power BI refuses CALCULATE in GROUPBY’s columns, and a measure acts as a CALCULATE. To use a measure per group, use ADDCOLUMNS(SUMMARIZE(…), "Name", [Measure]) instead.'
+          : 'Power BI only accepts one aggregation over the group’s rows here, such as SUMX(CURRENTGROUP(), Sales[Amount]), whose expression uses the rows’ columns or a constant. MEDIANX, CONCATENATEX, COUNTROWS(CURRENTGROUP()), FILTER(CURRENTGROUP(), …) or two aggregations combined are refused.';
+        insights.push({ kind: 'dax-error', nodeId: expression.id, summary, message });
+        const step = steps.get(expression.id);
+        if (step) {
+          step.summary = summary;
+          step.notes = [message, ...step.notes];
+        }
+      }
+    }
+    currentGroups.pop();
+    record({
+      nodeId: node.id,
+      context: ctx,
+      operations: [],
+      innerContext: ctx,
+      summary: `GROUPBY groups ${tableText} by ${byText}, one group at a time.`,
+      notes: [
+        `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
+        ...(extra.length > 0
+          ? [`Each extra column goes through the group's rows (CURRENTGROUP()) with SUMX, AVERAGEX or the like. Nothing is filtered for the group, so CALCULATE and measures aren't allowed.`]
           : []),
       ],
     });
