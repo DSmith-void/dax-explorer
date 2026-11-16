@@ -1,5 +1,141 @@
 [
  {
+  "id": "addmissingitems|gadgets-2025|1:SUMMARIZE goes group by group|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|1:SUMMARIZE goes group by group|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|2:SUM|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|2:SUM|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|4:ADDMISSINGITEMS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|4:ADDMISSINGITEMS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|4:ADDMISSINGITEMS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|5:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|5:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets-2025|5:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|gadgets|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets|1:SUMMARIZE goes group by group|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|gadgets|2:SUM|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets|4:ADDMISSINGITEMS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets|4:ADDMISSINGITEMS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|gadgets|5:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|gadgets|5:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|no-filters|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|no-filters|1:SUMMARIZE goes group by group|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|no-filters|4:ADDMISSINGITEMS|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|no-filters|4:ADDMISSINGITEMS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|no-filters|5:COUNTROWS|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|no-filters|5:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|year-2025|1:SUMMARIZE goes group by group|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|year-2025|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|year-2025|1:SUMMARIZE goes group by group|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|year-2025|2:SUM|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|year-2025|4:ADDMISSINGITEMS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|year-2025|4:ADDMISSINGITEMS|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|year-2025|4:ADDMISSINGITEMS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|year-2025|5:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "addmissingitems|year-2025|5:COUNTROWS|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "addmissingitems|year-2025|5:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
   "id": "all-customer-other-table|gadgets-2025|2:CALCULATE applies its filters|filtered:Date[Year]",
   "expect": true
  },
@@ -1936,6 +2072,78 @@
   "expect": true
  },
  {
+  "id": "isonorafter|gadgets-2025|1:MAX|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets-2025|1:MAX|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets-2025|2:ISONORAFTER|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets-2025|2:ISONORAFTER|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets-2025|3:IF|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets-2025|3:IF|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets|1:MAX|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "isonorafter|gadgets|1:MAX|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets|2:ISONORAFTER|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "isonorafter|gadgets|2:ISONORAFTER|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|gadgets|3:IF|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "isonorafter|gadgets|3:IF|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|no-filters|1:MAX|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "isonorafter|no-filters|2:ISONORAFTER|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "isonorafter|no-filters|3:IF|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "isonorafter|year-2025|1:MAX|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|year-2025|2:ISONORAFTER|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "isonorafter|year-2025|3:IF|filtered:Date[Year]",
+  "expect": true
+ },
+ {
   "id": "january-sales|gadgets-2025|2:CALCULATE applies its filters|filtered:Date[Month]",
   "expect": true
  },
@@ -2173,6 +2381,446 @@
  },
  {
   "id": "lastnonblank-filter|year-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets-2025|1:LINEST|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets-2025|1:LINEST|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets-2025|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets-2025|1:LINEST|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets-2025|2:MAXX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets-2025|2:MAXX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets-2025|2:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets-2025|2:MAXX goes row by row|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets-2025|3:Read [Slope1]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets-2025|3:Read [Slope1]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets-2025|3:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets-2025|3:Read [Slope1]|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets|1:LINEST|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets|1:LINEST|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets|2:MAXX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets|2:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets|2:MAXX goes row by row|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets|3:Read [Slope1]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|gadgets|3:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|gadgets|3:Read [Slope1]|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|no-filters|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|no-filters|1:LINEST|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|no-filters|2:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|no-filters|2:MAXX goes row by row|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|no-filters|3:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|no-filters|3:Read [Slope1]|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|year-2025|1:LINEST|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|year-2025|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|year-2025|1:LINEST|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|year-2025|2:MAXX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|year-2025|2:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|year-2025|2:MAXX goes row by row|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|year-2025|3:Read [Slope1]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-slope|year-2025|3:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-slope|year-2025|3:Read [Slope1]|filtered:Sales[Quantity]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|1:LINEST|error",
+  "expect": "error"
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|1:LINEST|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|1:LINEST|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|2:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|2:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|gadgets-2025|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|gadgets|1:LINEST|error",
+  "expect": "error"
+ },
+ {
+  "id": "linest-two-tables|gadgets|1:LINEST|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|gadgets|1:LINEST|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|gadgets|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|gadgets|2:COUNTROWS|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|gadgets|2:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|gadgets|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|no-filters|1:LINEST|error",
+  "expect": "error"
+ },
+ {
+  "id": "linest-two-tables|no-filters|1:LINEST|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|no-filters|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|no-filters|2:COUNTROWS|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|no-filters|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|year-2025|1:LINEST|error",
+  "expect": "error"
+ },
+ {
+  "id": "linest-two-tables|year-2025|1:LINEST|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|year-2025|1:LINEST|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linest-two-tables|year-2025|2:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linest-two-tables|year-2025|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets-2025|1:LINESTX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|1:LINESTX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|1:LINESTX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets-2025|2:Read Sales[Amount]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|2:Read Sales[Amount]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|2:Read Sales[Amount]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets-2025|3:RELATED|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|3:RELATED|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|3:RELATED|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets-2025|5:MAXX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|5:MAXX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|5:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets-2025|6:Read [Slope1]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|6:Read [Slope1]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets-2025|6:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|1:LINESTX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|1:LINESTX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets|1:LINESTX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|2:Read Sales[Amount]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|2:Read Sales[Amount]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets|2:Read Sales[Amount]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|3:RELATED|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|3:RELATED|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets|3:RELATED|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|5:MAXX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|5:MAXX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets|5:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|6:Read [Slope1]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|gadgets|6:Read [Slope1]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|gadgets|6:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|1:LINESTX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|1:LINESTX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|2:Read Sales[Amount]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|2:Read Sales[Amount]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|3:RELATED|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|3:RELATED|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|5:MAXX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|5:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|6:Read [Slope1]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|no-filters|6:Read [Slope1]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|year-2025|1:LINESTX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|year-2025|1:LINESTX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|year-2025|2:Read Sales[Amount]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|year-2025|2:Read Sales[Amount]|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|year-2025|3:RELATED|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|year-2025|3:RELATED|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|year-2025|5:MAXX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|year-2025|5:MAXX goes row by row|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "linestx-related|year-2025|6:Read [Slope1]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "linestx-related|year-2025|6:Read [Slope1]|filtered:Sales[Amount]",
   "expect": false
  },
  {
@@ -2573,6 +3221,118 @@
  },
  {
   "id": "month-filter|year-2025|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|1:NAMEOF|error",
+  "expect": "error"
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|1:NAMEOF|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|1:NAMEOF|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|1:NAMEOF|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|2:LEN|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|2:LEN|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets-2025|2:LEN|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|gadgets|1:NAMEOF|error",
+  "expect": "error"
+ },
+ {
+  "id": "nameof-expression|gadgets|1:NAMEOF|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets|1:NAMEOF|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|gadgets|2:LEN|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|gadgets|2:LEN|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|no-filters|1:NAMEOF|error",
+  "expect": "error"
+ },
+ {
+  "id": "nameof-expression|no-filters|1:NAMEOF|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|no-filters|2:LEN|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|year-2025|1:NAMEOF|error",
+  "expect": "error"
+ },
+ {
+  "id": "nameof-expression|year-2025|1:NAMEOF|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|year-2025|1:NAMEOF|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-expression|year-2025|2:LEN|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-expression|year-2025|2:LEN|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "nameof-measure|gadgets-2025|1:NAMEOF|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|gadgets-2025|1:NAMEOF|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|gadgets-2025|2:LEN|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|gadgets-2025|2:LEN|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|gadgets|1:NAMEOF|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|gadgets|2:LEN|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|year-2025|1:NAMEOF|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "nameof-measure|year-2025|2:LEN|filtered:Date[Year]",
   "expect": true
  },
  {
@@ -3592,6 +4352,102 @@
   "expect": false
  },
  {
+  "id": "sample-filter|gadgets-2025|1:SAMPLE goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|1:SAMPLE goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|2:Read 'Product'[Category]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|2:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|5:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets-2025|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets|1:SAMPLE goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets|2:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|gadgets|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|no-filters|1:SAMPLE goes row by row|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "sample-filter|no-filters|2:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "sample-filter|no-filters|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|no-filters|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|year-2025|1:SAMPLE goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|year-2025|1:SAMPLE goes row by row|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "sample-filter|year-2025|2:Read 'Product'[Category]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|year-2025|2:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "sample-filter|year-2025|5:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|year-2025|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|year-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "sample-filter|year-2025|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
   "id": "series-filter|gadgets-2025|2:CALCULATE applies its filters|filtered:Date[Year]",
   "expect": true
  },
@@ -3925,6 +4781,214 @@
  },
  {
   "id": "summarize-all-product|year-2025|6:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|gadgets-2025|1:SUMMARIZE goes group by group|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|4:Read 'Product'[Category]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|4:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|7:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|7:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|8:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets-2025|8:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|1:SUMMARIZE goes group by group|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|gadgets|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|gadgets|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|4:Read 'Product'[Category]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|gadgets|4:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|7:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|7:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|8:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|gadgets|8:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|no-filters|1:SUMMARIZE goes group by group|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|4:Read 'Product'[Category]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|4:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|7:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|no-filters|7:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|no-filters|8:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|no-filters|8:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|year-2025|1:SUMMARIZE goes group by group|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|year-2025|1:SUMMARIZE goes group by group|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|year-2025|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|year-2025|3:SUBSTITUTEWITHINDEX goes row by row|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|year-2025|4:Read 'Product'[Category]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|year-2025|4:Read 'Product'[Category]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|year-2025|7:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|year-2025|7:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "swi-filter|year-2025|8:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "swi-filter|year-2025|8:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|gadgets-2025|2:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "tableof-all|gadgets-2025|2:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|gadgets-2025|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "tableof-all|gadgets-2025|3:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|gadgets|2:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|gadgets|3:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|no-filters|2:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|no-filters|3:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|year-2025|2:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "tableof-all|year-2025|2:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "tableof-all|year-2025|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "tableof-all|year-2025|3:Calculate [Total Sales]|filtered:Product[Category]",
   "expect": false
  },
  {
@@ -4278,6 +5342,222 @@
  {
   "id": "top-plant|year-2025|9:Use TopPlant|filtered:Plant[Plant Name]",
   "expect": false
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|1:TOPNSKIP goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|1:TOPNSKIP goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|2:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|2:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|5:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets-2025|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets|1:TOPNSKIP goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets|2:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|gadgets|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|no-filters|1:TOPNSKIP goes row by row|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-filter|no-filters|2:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-filter|no-filters|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|no-filters|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|year-2025|1:TOPNSKIP goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|year-2025|1:TOPNSKIP goes row by row|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-filter|year-2025|2:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|year-2025|2:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-filter|year-2025|5:CALCULATE applies its filters|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|year-2025|5:CALCULATE applies its filters|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|year-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-filter|year-2025|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|1:VALUES|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|1:VALUES|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|2:TOPNSKIP goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|2:TOPNSKIP goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|3:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|5:SUMX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|5:SUMX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets-2025|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets|1:VALUES|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|gadgets|1:VALUES|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets|2:TOPNSKIP goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|gadgets|2:TOPNSKIP goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|gadgets|3:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets|5:SUMX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|gadgets|5:SUMX goes row by row|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|gadgets|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|gadgets|6:Calculate [Total Sales]|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|no-filters|1:VALUES|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|no-filters|2:TOPNSKIP goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|no-filters|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|no-filters|5:SUMX goes row by row|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|no-filters|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": false
+ },
+ {
+  "id": "topnskip-loop|year-2025|1:VALUES|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|year-2025|2:TOPNSKIP goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|year-2025|3:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|year-2025|5:SUMX goes row by row|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "topnskip-loop|year-2025|6:Calculate [Total Sales]|filtered:Date[Year]",
+  "expect": true
  },
  {
   "id": "total-sales-row-by-row|gadgets-2025|1:SUMX goes row by row|filtered:Date[Year]",

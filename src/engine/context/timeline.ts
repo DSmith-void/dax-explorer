@@ -317,7 +317,8 @@ export function buildTimeline(
       return;
     }
 
-    node.args.forEach((arg, i) => walk(arg, depth + 1, params[i]?.role ?? null, inFilterInput));
+    // A reference only named (NAMEOF, TABLEOF) isn't calculated: no moment of its own.
+    node.args.forEach((arg, i) => params[i]?.role !== 'name' && walk(arg, depth + 1, params[i]?.role ?? null, inFilterInput));
     // Inside a filter input, the input as a whole gets one moment (added by the caller).
     if (inFilterInput) return;
     add({

@@ -65,6 +65,18 @@ const AWKWARD: LibraryMeasure[] = [
   ['filters-table', `COUNTROWS(FILTERS('Product'))`],
   ['dt-date-filter', `CALCULATE([Total Sales], 'Date'[Date] >= dt"2025-01-01")`],
   ['dt-datatable', `MAXX(DATATABLE("D", DATETIME, {{dt"2025-01-01"}}), [D])`],
+  ['topnskip-filter', `CALCULATE([Total Sales], TOPNSKIP(1, 0, VALUES('Product'[Category]), [Total Sales], DESC))`],
+  ['topnskip-loop', `SUMX(TOPNSKIP(2, 0, VALUES('Date'[Year]), [Total Sales]), [Total Sales])`],
+  ['sample-filter', `CALCULATE([Total Sales], SAMPLE(2, VALUES('Product'[Category]), 'Product'[Category], ASC))`],
+  ['swi-filter', `CALCULATE([Total Sales], SUBSTITUTEWITHINDEX(SUMMARIZE(Sales, 'Product'[Category], 'Date'[Year]), "Idx", VALUES('Product'[Category]), 'Product'[Category], ASC))`],
+  ['linest-slope', `MAXX(LINEST(Sales[Amount], Sales[Quantity]), [Slope1])`],
+  ['linestx-related', `MAXX(LINESTX(Sales, Sales[Amount], RELATED('Date'[Year])), [Slope1])`],
+  ['linest-two-tables', `COUNTROWS(LINEST(Sales[Amount], 'Date'[Year]))`],
+  ['nameof-measure', `LEN(NAMEOF([Total Sales]))`],
+  ['nameof-expression', `LEN(NAMEOF(SUM(Sales[Amount])))`],
+  ['tableof-all', `CALCULATE([Total Sales], ALL(TABLEOF('Product'[Category])))`],
+  ['addmissingitems', `COUNTROWS(ADDMISSINGITEMS('Product'[Category], SUMMARIZE(Sales, 'Product'[Category], "S", SUM(Sales[Amount])), 'Product'[Category]))`],
+  ['isonorafter', `IF(ISONORAFTER(MAX('Date'[Year]), 2025, ASC), 1, 0)`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

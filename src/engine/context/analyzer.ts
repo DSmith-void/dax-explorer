@@ -1,5 +1,5 @@
 import type { BindResult } from '../binder/binder';
-import type { ArgRole, FunctionSpec, ParamSpec } from '../catalog/functions';
+import { linestColumnNames, type ArgRole, type FunctionSpec, type ParamSpec } from '../catalog/functions';
 import { childrenOf, findNode, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall } from '../parser/ast';
 import { createLineMap } from '../source';
 import { columnText, entryText, filterSignature, relationshipChangeText, removalText } from './describe';
@@ -242,6 +242,9 @@ export function analyzeContext(
 
   // ------------------------------------------------------------ table shapes
 
+  /** LINEST's or LINESTX's result columns, when they can be told. */
+  const linestColumns = (call: FunctionCall) => linestColumnNames(binding.calls.get(call.id)?.params ?? null, call.args);
+
   function shapeOf(expr: Expr): TableShape {
     const description = snippet(expr);
     switch (expr.kind) {
@@ -293,6 +296,27 @@ export function analyzeContext(
           // run on Initech (it needs a stored date column); it makes its table like CALENDAR (documentation).
           case 'GENERATESERIES':
             return { kind: 'unlinked', description, names: ['Value'] };
+          case 'LINEST':
+          case 'LINESTX': {
+            const names = linestColumns(expr);
+            return names ? { kind: 'unlinked', description, names } : { kind: 'unlinked', description };
+          }
+          case 'TABLEOF': {
+            // Checked in Power BI Desktop: the column's table (COUNTROWS gave Product's 12 rows).
+            const ref = args[0];
+            return ref?.kind === 'ColumnRef' ? { kind: 'table', table: ref.table, description } : { kind: 'unknown', description };
+          }
+          case 'SUBSTITUTEWITHINDEX': {
+            // Checked in Power BI Desktop: the first table's other columns keep their link (Year stayed filtered).
+            const [table, , index] = args;
+            const kept = table ? shapeOf(table) : null;
+            const removed = index ? shapeOf(index) : null;
+            if (kept?.kind === 'columns' && removed?.kind === 'columns') {
+              const columns = kept.columns.filter((c) => !removed.columns.some((r) => sameColumn(r, c)));
+              if (columns.length > 0) return { kind: 'columns', columns, description };
+            }
+            return { kind: 'unknown', description };
+          }
           case 'CALENDAR':
           case 'CALENDARAUTO':
             return { kind: 'unlinked', description, names: ['Date'] };
@@ -383,8 +407,11 @@ export function analyzeContext(
           case 'CALCULATETABLE':
           case 'ADDCOLUMNS':
           case 'RELATEDTABLE':
-          case 'TOPN': {
-            const inner = name === 'TOPN' ? args[1] : args[0];
+          case 'TOPN':
+          // Checked in Power BI Desktop: both keep the link (as CALCULATE filters, ISFILTERED TRUE).
+          case 'TOPNSKIP':
+          case 'SAMPLE': {
+            const inner = name === 'TOPN' || name === 'SAMPLE' ? args[1] : name === 'TOPNSKIP' ? args[2] : args[0];
             if (!inner) return { kind: 'unknown', description };
             const innerShape = shapeOf(inner);
             return { ...innerShape, description: `${name} over ${innerShape.description}` } as TableShape;
@@ -417,6 +444,12 @@ export function analyzeContext(
     if (ctx.unknownReason) {
       record({ nodeId: node.id, context: ctx, operations: [], notes: [] });
       visitChildren(node, ctx);
+      return;
+    }
+    if (role === 'name') {
+      // NAMEOF and TABLEOF only use the reference itself (checked in Power BI Desktop: an expression is an error).
+      const summary = `Not calculated: only the name of ${snippet(node, 40)} is used.`;
+      record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [summary] });
       return;
     }
     switch (node.kind) {
@@ -567,6 +600,32 @@ export function analyzeContext(
         summary: `ALLCROSSFILTERED takes a table, not ${snippet(first, 30)} (an error here).`,
         message: `ALLCROSSFILTERED removes the filters of a whole table, so its input must be a table name, such as 'Product'. To remove the filter on one column, use REMOVEFILTERS(${snippet(first, 40)}).`,
       };
+    }
+    if ((name === 'NAMEOF' || name === 'TABLEOF') && first) {
+      // Checked in Power BI Desktop: NAMEOF(SUM(…)) and TABLEOF(VALUES(…)) are errors; NAMEOF needs a column
+      // written with its table.
+      const reference = binding.references.get(first.id);
+      const isReference =
+        first.kind === 'ColumnRef' ||
+        (first.kind === 'BracketRef' && reference?.type !== 'column') ||
+        (first.kind === 'TableRef' && name === 'NAMEOF');
+      if (!isReference) {
+        const what = first.kind === 'BracketRef' ? `a column written without its table (${snippet(first, 30)})` : snippet(first, 30);
+        return {
+          summary: `${name} needs a reference, not ${what} (an error here).`,
+          message: `${name} only takes the name of a measure, a column written with its table ('Table'[Column])${name === 'NAMEOF' ? ', a table' : ''} or a calendar. Nothing inside it is calculated, so ${what} can't be used.`,
+        };
+      }
+    }
+    if (name === 'LINEST') {
+      // Checked in Power BI Desktop: LINEST(Sales[Amount], 'Date'[Year]) is an error.
+      const tables = node.args.flatMap((a) => (a.kind === 'ColumnRef' ? [a.table.toLowerCase()] : []));
+      if (new Set(tables).size > 1) {
+        return {
+          summary: "LINEST's columns must all be from one table (an error here).",
+          message: 'LINEST fits a line through the values of columns of one table, row by row. With columns from different tables there are no rows to pair them, so DAX shows an error. To use a value from a related table, use LINESTX over the table, with RELATED for the other column.',
+        };
+      }
     }
     if (name === 'FILTERS' && first?.kind === 'TableRef') {
       return {
@@ -752,6 +811,10 @@ export function analyzeContext(
         `Row by row (row context): the inputs marked "per row" are calculated for each row. This doesn't filter anything by itself.`,
         // Checked in Power BI Desktop: GENERATE(VALUES(Category), VALUES(Product[Product])) gave all 12 products for
         // each category (48 rows); with CALCULATETABLE around the second table, each category's own (12 rows).
+        // Checked in Power BI Desktop: on Initech (a DirectQuery model) TOPNSKIP with a skip above 0 was an error.
+        ...(spec.name === 'TOPNSKIP' && !(node.args[1]?.kind === 'NumberLiteral' && node.args[1].value === 0)
+          ? ['On a DirectQuery model (data read straight from its source), skipping rows is an error; on an imported model it works.']
+          : []),
         ...(spec.name === 'GENERATE' || spec.name === 'GENERATEALL'
           ? [`The second table is worked out for each row, but the row filters nothing in it unless it is wrapped in CALCULATETABLE (which turns the row into a filter).`]
           : []),
@@ -1239,7 +1302,11 @@ export function analyzeContext(
             const removals: Removal[] = [];
             for (const a of arg.args) {
               const column = columnOf(a);
+              // TABLEOF('Product'[Category]) is the table 'Product' (checked in Power BI Desktop: ALL(TABLEOF(…))
+              // removed the filter on Category).
+              const tableOf = a.kind === 'FunctionCall' && specOf(a)?.name === 'TABLEOF' && a.args[0]?.kind === 'ColumnRef' ? a.args[0].table : null;
               if (a.kind === 'TableRef') removals.push({ kind: 'table', table: a.name, except: [] });
+              else if (tableOf) removals.push({ kind: 'table', table: tableOf, except: [] });
               else if (column) removals.push({ kind: 'column', column });
               else return { kind: 'not-modeled', description: `the app can't work out ${spec.name}(${snippet(a)}) yet` };
             }

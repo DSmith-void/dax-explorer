@@ -18,6 +18,7 @@ const ROLE_TEXT: Record<ArgRole, string> = {
   filter: 'a filter (or a filter remover such as ALL)',
   rowExpression: 'calculated for each row',
   keyword: 'an option word',
+  name: 'only its name is used (not calculated)',
 };
 
 interface ContextInspectorPanelProps {

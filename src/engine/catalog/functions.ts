@@ -338,6 +338,105 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('last month of the year', 'scalar', { optional: true })]],
   },
 
+  // --- Picking and indexing rows (checked in Power BI Desktop) ---
+  {
+    // Largest first unless ASC is written (like TOPN), but exactly N rows even with ties (TOPN gave 4 for a tie,
+    // TOPNSKIP 1). On a DirectQuery model, skipping rows (a skip above 0) is an error.
+    name: 'TOPNSKIP',
+    category: 'iterator',
+    returns: 'table',
+    summary: 'Goes through a table row by row, sorts the rows (largest first unless ASC), skips some and keeps the next N, exactly N even with ties.',
+    overloads: [
+      [
+        p('N', 'scalar'),
+        p('rows to skip', 'scalar'),
+        p('table', 'table'),
+        p('order by', 'rowExpression', { optional: true, repeating: true }),
+        p('order', 'keyword', { optional: true, repeating: true, keywords: ['ASC', 'DESC'] }),
+      ],
+    ],
+    iteratesArgument: 2,
+  },
+  {
+    // SAMPLE(2, VALUES(Category), Category, ASC) gave the first and the last category.
+    name: 'SAMPLE',
+    category: 'iterator',
+    returns: 'table',
+    summary: 'Goes through a table row by row, sorts the rows, and keeps N rows spread evenly from first to last.',
+    overloads: [
+      [
+        p('N', 'scalar'),
+        p('table', 'table'),
+        p('order by', 'rowExpression', { repeating: true }),
+        p('order', 'keyword', { optional: true, repeating: true, keywords: ['ASC', 'DESC'] }),
+      ],
+    ],
+    iteratesArgument: 1,
+  },
+  {
+    // The first table's columns that the index table also has are replaced by one number column (from 0).
+    name: 'SUBSTITUTEWITHINDEX',
+    category: 'iterator',
+    returns: 'table',
+    summary: "Replaces the columns a table shares with an index table by one number column: each row's position in the sorted index table (from 0).",
+    overloads: [
+      [
+        p('table', 'table'),
+        p('name', 'scalar'),
+        p('index table', 'table'),
+        p('order by', 'rowExpression', { repeating: true }),
+        p('order', 'keyword', { optional: true, repeating: true, keywords: ['ASC', 'DESC'] }),
+      ],
+    ],
+    iteratesArgument: 2,
+  },
+  {
+    // Shows the missing values of the show-all columns, from the filters here (4 with no filter, 2 under a
+    // two-category filter), with blanks in the other columns. Mainly used in Power BI's own queries.
+    name: 'ADDMISSINGITEMS',
+    category: 'table',
+    returns: 'table',
+    summary: "Adds rows for the values of the show-all columns that a table leaves out (taken from the filters here), with blanks in its other columns.",
+    overloads: [[p('show-all column or table', 'tableOrColumn'), p('more', 'scalar', { optional: true, repeating: true })]],
+    paramsFor: (args) => {
+      const table = args.findIndex((a) => a.kind !== 'ColumnRef' && a.kind !== 'BracketRef');
+      if (table === -1) return null;
+      return args.map((a, i) =>
+        i < table ? p('show-all column', 'column') : i === table ? p('table', 'table') : a.kind === 'ColumnRef' || a.kind === 'BracketRef' ? p('group by column', 'column') : p('filter table', 'table'),
+      );
+    },
+  },
+
+  // --- Regression (checked in Power BI Desktop: a one-row table of results; follows the filters) ---
+  linest('LINEST'),
+  linest('LINESTX'),
+
+  // --- Names (checked in Power BI Desktop: only references, which are not calculated) ---
+  {
+    name: 'NAMEOF',
+    category: 'information',
+    returns: 'scalar',
+    summary: "The name of a column, measure, table or calendar, as text (a column as 'Table'[Column], a measure with its home table).",
+    overloads: [
+      [
+        p('reference', 'name'),
+        p('part', 'keyword', { optional: true, keywords: ['TABLE', 'COLUMN', 'MEASURE', 'CALENDAR', 'FULL', 'SELF', 'PARENT'] }),
+        p('quoting', 'keyword', { optional: true, keywords: ['ESCAPED', 'UNESCAPED', 'MINIMALLYESCAPED'] }),
+      ],
+    ],
+  },
+  {
+    name: 'TABLEOF',
+    category: 'information',
+    returns: 'table',
+    summary: "The table a column, measure or calendar belongs to (a measure's home table).",
+    overloads: [[p('reference', 'name')]],
+  },
+
+  // --- Comparing with a starting point (checked in Power BI Desktop: ASC unless DESC; ties go to the next pair) ---
+  startAt('ISAFTER', 'TRUE when the values come after the starting values in the given order (ASC unless DESC), comparing the first pair, then the next pair on a tie.'),
+  startAt('ISONORAFTER', 'TRUE when the values come after, or are equal to, the starting values in the given order (ASC unless DESC), comparing pair by pair.'),
+
   // --- Grouping ---
   summarize(),
   groupBy(),
@@ -648,6 +747,98 @@ function summarize(): FunctionSpec {
  */
 function groupBy(): FunctionSpec {
   return grouping('GROUPBY', 'Groups the rows of a table by some columns; extra columns add up each group’s rows with SUMX(CURRENTGROUP(), …) and the like.');
+}
+
+/**
+ * LINEST(y column, x column…, [with intercept]) and LINESTX(table, y, x…, [with intercept]): the inputs end with
+ * an optional TRUE/FALSE, told apart by what is written. LINEST's columns must be from one table (checked).
+ */
+function linest(name: 'LINEST' | 'LINESTX'): FunctionSpec {
+  const isX = name === 'LINESTX';
+  const value = isX ? p('y', 'rowExpression') : p('y column', 'column');
+  const x = isX ? p('x', 'rowExpression') : p('x column', 'column');
+  const intercept = p('with intercept', 'scalar');
+  const table = p('table', 'table');
+  const isConstant = (a: { kind: string; name?: string }) =>
+    a.kind === 'BooleanLiteral' || (a.kind === 'FunctionCall' && ['TRUE', 'FALSE'].includes((a.name ?? '').toUpperCase()));
+  return {
+    name,
+    category: isX ? 'iterator' : 'statistical',
+    returns: 'table',
+    summary: isX
+      ? 'Goes through a table row by row and fits a straight line through the values worked out for each row (least squares); returns one row of results such as [Slope1] and [Intercept].'
+      : 'Fits a straight line through the values of columns of one table, under the filters here (least squares); returns one row of results such as [Slope1] and [Intercept].',
+    overloads: [isX ? [table, value, x, p('x or with intercept', 'scalar', { optional: true, repeating: true })] : [value, x, p('x column or with intercept', 'column', { optional: true, repeating: true })]],
+    ...(isX ? { iteratesArgument: 0 } : {}),
+    paramsFor: (args) => {
+      const start = isX ? 1 : 0;
+      if (args.length < start + 2) return null;
+      const last = args[args.length - 1] as { kind: string; name?: string };
+      const withConstant = args.length > start + 2 && isConstant(last);
+      const params: ParamSpec[] = isX ? [table] : [];
+      for (let i = start; i < args.length - (withConstant ? 1 : 0); i++) params.push(i === start ? value : x);
+      return withConstant ? [...params, intercept] : params;
+    },
+  };
+}
+
+/**
+ * The columns of LINEST's or LINESTX's one-row result, or null when they can't be told. Checked in Power BI
+ * Desktop with one x: Slope1, Intercept, StandardErrorSlope1, StandardErrorIntercept, CoefficientOfDetermination,
+ * StandardError, FStatistic, DegreesOfFreedom, RegressionSumOfSquares, ResidualSumOfSquares; with FALSE, there is
+ * no Intercept (what else changes isn't checked, so then null). Slope2… for more x values (documentation).
+ */
+export function linestColumnNames(params: readonly ParamSpec[] | null, args: readonly { kind: string; value?: unknown; name?: string; args?: unknown[] }[]): string[] | null {
+  if (!params) return null;
+  const intercept = params.findIndex((p) => p.name === 'with intercept');
+  if (intercept !== -1) {
+    const a = args[intercept];
+    const isTrue = (a?.kind === 'BooleanLiteral' && a.value === true) || (a?.kind === 'FunctionCall' && a.name?.toUpperCase() === 'TRUE' && a.args?.length === 0);
+    if (!isTrue) return null;
+  }
+  const count = params.filter((p) => p.name === 'x' || p.name === 'x column').length;
+  const each = (prefix: string) => Array.from({ length: count }, (_, i) => `${prefix}${i + 1}`);
+  return [
+    ...each('Slope'),
+    'Intercept',
+    ...each('StandardErrorSlope'),
+    'StandardErrorIntercept',
+    'CoefficientOfDetermination',
+    'StandardError',
+    'FStatistic',
+    'DegreesOfFreedom',
+    'RegressionSumOfSquares',
+    'ResidualSumOfSquares',
+  ];
+}
+
+/** ISAFTER / ISONORAFTER(value, start, [ASC|DESC], …): groups of a value, a starting value and an optional order. */
+function startAt(name: string, summary: string): FunctionSpec {
+  const value = p('value', 'scalar');
+  const start = p('starting value', 'scalar');
+  const order = p('order', 'keyword', { keywords: ['ASC', 'DESC'] });
+  return {
+    name,
+    category: 'logical',
+    returns: 'scalar',
+    summary,
+    overloads: [[value, start, p('order, value, starting value', 'scalar', { optional: true, repeating: true })]],
+    paramsFor: (args) => {
+      const params: ParamSpec[] = [];
+      let i = 0;
+      while (i < args.length) {
+        if (i + 1 >= args.length) return null;
+        params.push(value, start);
+        i += 2;
+        const a = args[i] as { kind: string; name?: string; quoted?: boolean } | undefined;
+        if (a?.kind === 'TableRef' && !a.quoted && ['ASC', 'DESC'].includes((a.name ?? '').toUpperCase())) {
+          params.push(order);
+          i++;
+        }
+      }
+      return params;
+    },
+  };
 }
 
 /**

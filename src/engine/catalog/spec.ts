@@ -17,6 +17,8 @@ export type ArgRole =
   | 'filter'
   /** Evaluated once per row of the iterated table, in a row context. */
   | 'rowExpression'
+  /** A reference that is not calculated: only its name or its table is used (NAMEOF, TABLEOF). */
+  | 'name'
   /** A keyword such as ASC/DESC or BOTH; see `keywords`. */
   | 'keyword';
 

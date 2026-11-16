@@ -87,6 +87,8 @@ describe('every catalog function can be explained', () => {
           return "'Sales'[Amount]";
         case 'keyword':
           return param.keywords![0];
+        case 'name':
+          return "'Sales'[Amount]";
         case 'filter':
           return "'Sales'[Amount] > 1";
         default:

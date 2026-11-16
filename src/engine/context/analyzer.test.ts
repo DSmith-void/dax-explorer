@@ -672,3 +672,57 @@ describe('dates written as dt"…" (checked in Power BI Desktop)', () => {
     expect(run(`DATATABLE("D", DATETIME, {{dt"2025-01-01"}})`).analysis.insights.filter((i) => i.kind === 'dax-error')).toEqual([]);
   });
 });
+
+describe('Wave 2 group 4 (checked in Power BI Desktop on Initech)', () => {
+  const errors = (source: string) => run(source).analysis.insights.filter((i) => i.kind === 'dax-error').map((i) => i.summary);
+  const category = [{ kind: 'columns', columns: [{ table: 'Product', column: 'Category' }] }];
+
+  it('TOPNSKIP and SAMPLE go row by row and keep the link as CALCULATE filters', () => {
+    for (const filter of [`TOPNSKIP(1, 0, VALUES('Product'[Category]), [Total Sales], DESC)`, `SAMPLE(1, VALUES('Product'[Category]), [Total Sales], DESC)`]) {
+      const source = `CALCULATE([Total Sales], ${filter})`;
+      const { step } = run(source);
+      expect(step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual(category);
+      expect(step('[Total Sales]', 1).context.rows.map((r) => r.functionName)).toEqual([filter.slice(0, filter.indexOf('('))]);
+    }
+  });
+
+  it('TOPNSKIP says skipping rows is an error on DirectQuery, only when it skips', () => {
+    const notes = (source: string) => run(source).step(source).notes.join(' ');
+    expect(notes(`TOPNSKIP(1, 2, VALUES('Product'[Category]), [Total Sales])`)).toContain('DirectQuery');
+    expect(notes(`TOPNSKIP(1, 0, VALUES('Product'[Category]), [Total Sales])`)).not.toContain('DirectQuery');
+  });
+
+  it("SUBSTITUTEWITHINDEX keeps the first table's other columns, and adds the named index column", () => {
+    const table = `SUBSTITUTEWITHINDEX(SUMMARIZE(Sales, 'Product'[Category], 'Date'[Year]), "Idx", VALUES('Product'[Category]), 'Product'[Category], ASC)`;
+    const source = `CALCULATE([Total Sales], ${table})`;
+    expect(run(source).step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual([{ kind: 'columns', columns: [{ table: 'Date', column: 'Year' }] }]);
+    expect(run(`MAXX(${table}, [Idx])`).step('[Idx]').summary).toBe('Reads [Idx] from the row that MAXX is currently on.');
+  });
+
+  it('LINEST and LINESTX give one row with [Slope1], [Intercept] and the like; LINEST needs columns of one table', () => {
+    expect(run(`MAXX(LINEST(Sales[Amount], Sales[Quantity]), [Slope1])`).step('[Slope1]').summary).toBe('Reads [Slope1] from the row that MAXX is currently on.');
+    expect(run(`MAXX(LINESTX(Sales, Sales[Amount], Sales[Quantity]), [Intercept])`).step('[Intercept]').summary).toBe('Reads [Intercept] from the row that MAXX is currently on.');
+    expect(errors(`LINEST(Sales[Amount], 'Date'[Year])`)[0]).toContain('one table');
+    expect(errors(`LINEST(Sales[Amount], Sales[Quantity], TRUE)`)).toEqual([]);
+  });
+
+  it('NAMEOF and TABLEOF only use a reference, which is not calculated', () => {
+    const { step, analysis } = run(`NAMEOF('Product'[Category])`);
+    expect(step(`'Product'[Category]`).summary).toBe("Not calculated: only the name of 'Product'[Category] is used.");
+    expect(analysis.insights.filter((i) => i.kind === 'column-without-row-context')).toEqual([]);
+    expect(errors(`NAMEOF(SUM(Sales[Amount]))`)[0]).toContain('needs a reference');
+    expect(errors(`COUNTROWS(TABLEOF(VALUES('Product'[Category])))`)[0]).toContain('needs a reference');
+    expect(errors(`NAMEOF([Total Sales], MEASURE)`)).toEqual([]);
+  });
+
+  it("ALL(TABLEOF('Product'[Category])) removes the filters of the whole Product table", () => {
+    const source = `CALCULATE([Total Sales], ALL(TABLEOF('Product'[Category])))`;
+    expect(run(source).step(source).innerContext!.filter.removals).toEqual([{ kind: 'table', table: 'Product', except: [] }]);
+  });
+
+  it('ISAFTER and ISONORAFTER take groups of value, starting value and an optional ASC or DESC', () => {
+    expect(errors(`ISONORAFTER(1, 1, ASC, 3, 2)`)).toEqual([]);
+    const { analysis } = run(`ISAFTER(2, 1, DESC)`);
+    expect(analysis.insights.filter((i) => i.kind === 'unknown-function')).toEqual([]);
+  });
+});

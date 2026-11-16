@@ -48,8 +48,6 @@ export const REFERENCE_FUNCTIONS: readonly string[] = `
   .filter(Boolean);
 
 export type CoverageStatus =
-  /** Next: needs its own rules in the engine (it changes filters or rows, or builds a table with a known shape). */
-  | 'wave-2'
   /** Later: a new concept that needs its own design (window functions, SUMMARIZECOLUMNS, calculation groups). */
   | 'later'
   /** Not for measures: only valid in visual calculations, or used internally by Power BI's own queries. */
@@ -59,14 +57,6 @@ const status = (kind: CoverageStatus, reason: string, names: string) =>
   names.split(/\s+/).filter(Boolean).map((name) => [name, { status: kind, reason }] as const);
 
 export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reason: string }> = new Map([
-  ...status('wave-2', 'groups rows; its extra columns are worked out row by row', 'ADDMISSINGITEMS'),
-  ...status(
-    'wave-2',
-    'builds or combines tables; the app needs the shape of the table it returns',
-    'SUBSTITUTEWITHINDEX TOPNSKIP SAMPLE LINEST LINESTX',
-  ),
-  ...status('wave-2', 'compares a row with a starting point (START AT); takes ASC/DESC keywords', 'ISAFTER ISONORAFTER'),
-  ...status('wave-2', 'its input is a name, not a value: nothing is calculated', 'NAMEOF TABLEOF'),
   ...status('later', 'window functions: a new concept (rows before or after the current one)', 'INDEX OFFSET WINDOW RANK ROWNUMBER ORDERBY PARTITIONBY MATCHBY'),
   ...status('later', 'SUMMARIZECOLUMNS inside a measure, and its helpers', 'SUMMARIZECOLUMNS IGNORE ROLLUPADDISSUBTOTAL ROLLUPISSUBTOTAL NONVISUAL'),
   ...status('later', 'calculation groups', 'SELECTEDMEASURE SELECTEDMEASURENAME SELECTEDMEASUREFORMATSTRING ISSELECTEDMEASURE'),
