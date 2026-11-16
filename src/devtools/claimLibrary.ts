@@ -77,6 +77,16 @@ const AWKWARD: LibraryMeasure[] = [
   ['tableof-all', `CALCULATE([Total Sales], ALL(TABLEOF('Product'[Category])))`],
   ['addmissingitems', `COUNTROWS(ADDMISSINGITEMS('Product'[Category], SUMMARIZE(Sales, 'Product'[Category], "S", SUM(Sales[Amount])), 'Product'[Category]))`],
   ['isonorafter', `IF(ISONORAFTER(MAX('Date'[Year]), 2025, ASC), 1, 0)`],
+  ['offset-previous-year', `CALCULATE([Total Sales], OFFSET(-1, ALL('Date'[Year]), ORDERBY('Date'[Year])))`],
+  ['offset-in-loop', `SUMX(VALUES('Date'[Year]), CALCULATE([Total Sales], OFFSET(-1, ALL('Date'[Year]), ORDERBY('Date'[Year]))))`],
+  ['offset-partition', `CALCULATE([Total Sales], OFFSET(-1, ALL('Date'[Year], 'Date'[Month Number]), ORDERBY('Date'[Month Number]), PARTITIONBY('Date'[Year])))`],
+  ['offset-no-table', `CALCULATE([Total Sales], OFFSET(-1, ORDERBY('Date'[Year])))`],
+  ['offset-bare', `COUNTROWS(OFFSET(-1))`],
+  ['index-first-year', `CALCULATE([Total Sales], INDEX(1, ALL('Date'[Year]), ORDERBY('Date'[Year])))`],
+  ['window-running-total', `CALCULATE([Total Sales], WINDOW(1, ABS, 0, REL, ALL('Date'[Year]), ORDERBY('Date'[Year])))`],
+  ['rank-categories', `RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`],
+  ['rownumber-categories', `ROWNUMBER(ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`],
+  ['rank-in-loop', `MAXX(VALUES('Product'[Category]), RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC)))`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

@@ -1,6 +1,6 @@
 import type { BindResult } from '../binder/binder';
-import { linestColumnNames, type ArgRole, type FunctionSpec, type ParamSpec } from '../catalog/functions';
-import { childrenOf, findNode, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall } from '../parser/ast';
+import { linestColumnNames, WINDOW_FUNCTIONS, windowRelation, type ArgRole, type FunctionSpec, type ParamSpec } from '../catalog/functions';
+import { childrenOf, findNode, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall, type TableRef } from '../parser/ast';
 import { createLineMap } from '../source';
 import { columnText, entryText, filterSignature, relationshipChangeText, removalText } from './describe';
 import type {
@@ -294,6 +294,11 @@ export function analyzeContext(
           // Checked in Power BI Desktop: tables made from values have no link to the model's columns; as a
           // CALCULATE filter each filtered nothing (the grand total, ISFILTERED FALSE). CALENDARAUTO couldn't be
           // run on Initech (it needs a stored date column); it makes its table like CALENDAR (documentation).
+          // Checked in Power BI Desktop: their rows keep the table's link (as CALCULATE filters, ISFILTERED TRUE).
+          case 'OFFSET':
+          case 'INDEX':
+          case 'WINDOW':
+            return { ...windowTable(expr).shape, description } as TableShape;
           case 'GENERATESERIES':
             return { kind: 'unlinked', description, names: ['Value'] };
           case 'LINEST':
@@ -553,6 +558,10 @@ export function analyzeContext(
       record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [message] });
       return;
     }
+    if (WINDOW_FUNCTIONS.has(spec.name)) {
+      visitWindow(node, ctx, spec, call.params);
+      return;
+    }
     if (spec.iteratesArgument !== undefined) {
       visitIterator(node, ctx, spec, call.params);
       return;
@@ -783,6 +792,104 @@ export function analyzeContext(
     // Table functions (CROSSJOIN, UNION, EXCEPT, …): what the result is.
     if (spec.category === 'table') return [spec.summary];
     return [];
+  }
+
+  /** The table a window function works in: the one written, or ALLSELECTED of its ORDERBY and PARTITIONBY columns. */
+  function windowTable(node: FunctionCall): { shape: TableShape; written: boolean } {
+    const params = binding.calls.get(node.id)?.params ?? null;
+    const index = windowRelation(params, node.args);
+    if (index !== -1) return { shape: shapeOf(node.args[index]), written: true };
+    const parts = node.args.filter((a): a is FunctionCall => a.kind === 'FunctionCall' && ['ORDERBY', 'PARTITIONBY'].includes(specOf(a)?.name ?? ''));
+    const refs = parts.flatMap((part) => part.args).filter((a) => !(a.kind === 'TableRef' && binding.keywordNodeIds.has(a.id)));
+    const columns = refs.map(columnOf);
+    const description = `ALLSELECTED(${refs.map((r) => snippet(r, 30)).join(', ')})`;
+    if (columns.length > 0 && columns.every((c): c is ColumnName => c !== null && c.table !== '')) return { shape: { kind: 'columns', columns, description }, written: false };
+    return { shape: { kind: 'unknown', description }, written: false };
+  }
+
+  /**
+   * OFFSET, INDEX, WINDOW, RANK and ROWNUMBER, as Power BI Desktop does them (checked on Initech):
+   *  - the current row comes from a loop's row when one has the table's columns, otherwise from the filters;
+   *  - when the filters leave several rows, OFFSET, INDEX and WINDOW work from each and return all the rows found
+   *    (no filter: OFFSET(-1) over the years gave 2 rows), while RANK and ROWNUMBER give BLANK;
+   *  - ORDERBY's expressions are worked out for each row of the table (a column it doesn't have is an error);
+   *  - with no table written, it is ALLSELECTED of the ORDERBY and PARTITIONBY columns; with neither, an error.
+   */
+  function visitWindow(node: FunctionCall, ctx: EvalContext, spec: FunctionSpec, params: ParamSpec[]) {
+    const { shape, written } = windowTable(node);
+    const isPart = (a: Expr) => a.kind === 'FunctionCall' && ['ORDERBY', 'PARTITIONBY', 'MATCHBY'].includes(specOf(a)?.name ?? '');
+    node.args.forEach((arg, i) => {
+      if (!isPart(arg)) visit(arg, ctx, params[i]?.role ?? null);
+    });
+    const row: RowContext = { nodeId: node.id, functionName: spec.name, table: shape };
+    const rowCtx: EvalContext = { ...ctx, rows: [...ctx.rows, row] };
+    node.args.forEach((arg) => {
+      if (isPart(arg)) visit(arg, rowCtx, 'scalar');
+    });
+
+    const orderBy = node.args.find((a): a is FunctionCall => a.kind === 'FunctionCall' && specOf(a)?.name === 'ORDERBY');
+    const partitionBy = node.args.find((a): a is FunctionCall => a.kind === 'FunctionCall' && specOf(a)?.name === 'PARTITIONBY');
+    if (!written && !orderBy && !partitionBy) {
+      const summary = `${spec.name} needs a table (or ORDERBY) in a measure (an error here).`;
+      const message = `Without a table or ORDERBY, ${spec.name} only works in visual calculations. In a measure, DAX shows an error. Write the table to work in, such as ALLSELECTED('Date'[Year]), and ORDERBY('Date'[Year]).`;
+      insights.push({ kind: 'dax-error', nodeId: node.id, summary, message });
+      record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [message] });
+      return;
+    }
+
+    const table = shape.description;
+    const literal = (a: Expr | undefined): number | null =>
+      a?.kind === 'NumberLiteral' ? a.value : a?.kind === 'UnaryOp' && a.operator === '-' && a.operand.kind === 'NumberLiteral' ? -a.operand.value : null;
+    const rowsWord = (n: number) => (Math.abs(n) === 1 ? 'row' : 'rows');
+    const what = (() => {
+      const n = literal(node.args[0]);
+      switch (spec.name) {
+        case 'OFFSET':
+          return n === null ? `the row ${snippet(node.args[0], 20)} rows away from the current one` : n === 0 ? 'the current row' : `the row ${Math.abs(n) === 1 ? 'just' : `${Math.abs(n)} rows`} ${n < 0 ? 'before' : 'after'} the current one`;
+        case 'INDEX':
+          return n === null ? `the row at position ${snippet(node.args[0], 20)}` : n === 1 ? 'the first row' : n === -1 ? 'the last row' : n > 0 ? `row number ${n}` : `row number ${-n} from the end`;
+        case 'WINDOW': {
+          // Each position counts from the current row unless ABS follows it (checked: REL by default).
+          const positions = params.flatMap((param, i) => (param.name === 'from' || param.name === 'to' ? [i] : []));
+          const place = (i: number) => {
+            const v = literal(node.args[i]);
+            const absolute = node.args[i + 1]?.kind === 'TableRef' && (node.args[i + 1] as TableRef).name.toUpperCase() === 'ABS';
+            if (v === null) return `position ${snippet(node.args[i], 20)}`;
+            if (absolute) return v === 1 ? 'the first row' : v === -1 ? 'the last row' : v > 0 ? `row ${v}` : `row ${-v} from the end`;
+            return v === 0 ? 'the current row' : `${Math.abs(v)} ${rowsWord(v)} ${v < 0 ? 'before' : 'after'} the current one`;
+          };
+          return positions.length === 2 ? `the rows from ${place(positions[0])} to ${place(positions[1])}` : 'the rows between its two positions';
+        }
+        case 'RANK':
+          return 'the rank of the current row';
+        default:
+          return 'the number of the current row';
+      }
+    })();
+    const order = orderBy && orderBy.args.length > 0 ? `sorted by ${orderBy.args.map((a) => snippet(a, 30)).join(', ')}` : "sorted by the table's own columns";
+    const summary = `${spec.name}: ${what} of ${table}, ${order}.`;
+
+    // Where the current row comes from: the nearest loop whose row has the table's columns, else the filters.
+    const tableColumns = shape.kind === 'columns' ? shape.columns : [];
+    const loop = [...readableRows(ctx)]
+      .reverse()
+      .find((r) => (shape.kind === 'table' ? r.table.kind === 'table' && same(r.table.table, shape.table) : tableColumns.length > 0 && tableColumns.every((c) => rowHasColumn(r, c))));
+    const scalar = spec.returns === 'scalar';
+    const notes = [
+      spec.name === 'INDEX'
+        ? `It picks by position in the sorted table, whatever the current row is.`
+        : loop
+          ? `The current row is the row ${loop.functionName} is on.`
+          : `The current row comes from the filters here: the row of ${table} they leave. ${
+              scalar
+                ? 'When they leave more than one (on a total, for example), it gives BLANK.'
+                : 'When they leave more than one (on a total, for example), it does this for each of them and returns all the rows it finds together.'
+            }`,
+      ...(partitionBy ? [`It counts within each value of ${partitionBy.args.map((a) => snippet(a, 30)).join(', ')} separately.`] : []),
+      ...(orderBy ? [`ORDERBY's expressions are worked out for each row of ${table}, to sort them (ASC unless DESC).`] : []),
+      ...(written ? [] : [`No table is written, so it uses ${table}: the rows the visual's filters allow, so the result depends on how the visual is built.`]),
+    ];
+    record({ nodeId: node.id, context: ctx, operations: [], summary, notes });
   }
 
   function visitIterator(node: FunctionCall, ctx: EvalContext, spec: FunctionSpec, params: ParamSpec[]) {
@@ -1090,7 +1197,7 @@ export function analyzeContext(
             ? `Adds ${entryText(c.entry)} on top of the existing filters (only inside this ${spec.name}).`
             : `Sets ${entryText(c.entry)} (only inside this ${spec.name}).`;
         // ALLNOBLANKROW ignores the filters: its own note (how it differs from ALL) stays.
-        const ignoresFilters = arg.kind === 'FunctionCall' && specOf(arg)?.name === 'ALLNOBLANKROW';
+        const ignoresFilters = arg.kind === 'FunctionCall' && (specOf(arg)?.name === 'ALLNOBLANKROW' || WINDOW_FUNCTIONS.has(specOf(arg)?.name ?? ''));
         step.notes = [
           ...(c.entry.mode === 'intersect' ? ['Only rows that pass both this filter and the ones already there are included.'] : []),
           ...(ignoresFilters ? step.notes : [`Its condition is checked using the filters from before the ${spec.name} (shown above).`]),

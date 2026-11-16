@@ -57,7 +57,6 @@ const status = (kind: CoverageStatus, reason: string, names: string) =>
   names.split(/\s+/).filter(Boolean).map((name) => [name, { status: kind, reason }] as const);
 
 export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reason: string }> = new Map([
-  ...status('later', 'window functions: a new concept (rows before or after the current one)', 'INDEX OFFSET WINDOW RANK ROWNUMBER ORDERBY PARTITIONBY MATCHBY'),
   ...status('later', 'SUMMARIZECOLUMNS inside a measure, and its helpers', 'SUMMARIZECOLUMNS IGNORE ROLLUPADDISSUBTOTAL ROLLUPISSUBTOTAL NONVISUAL'),
   ...status('later', 'calculation groups', 'SELECTEDMEASURE SELECTEDMEASURENAME SELECTEDMEASUREFORMATSTRING ISSELECTEDMEASURE'),
   ...status('later', 'needs a feature the app does not read yet (detail rows, full-text search, models in the Service)', 'DETAILROWS TEXTCONTAINS TEXTSIMILARITY EXTERNALMEASURE'),

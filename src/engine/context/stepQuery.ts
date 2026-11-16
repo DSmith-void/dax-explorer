@@ -12,7 +12,7 @@
  */
 import type { BindResult } from '../binder/binder';
 import { childrenOf, findNode, type AstNode, type Expr, type FunctionCall } from '../parser/ast';
-import type { ParamSpec } from '../catalog/functions';
+import { lookupFunction, WINDOW_FUNCTIONS, windowRelation, type ParamSpec } from '../catalog/functions';
 import type { ColumnName } from './model';
 import { columnDax, daxLiteral, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
 import { TOTALS } from './totals';
@@ -195,6 +195,9 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
       if (!call?.spec || !call.params) throw new Unsupported(`${parent.name} isn't known to the app, so what happens inside it can't be reproduced.`);
       const argIndex = parent.args.indexOf(child as Expr);
       if (name === 'RELATEDTABLE') throw new Unsupported('Values inside RELATEDTABLE are not shown yet.');
+      if (name === 'ORDERBY' || name === 'PARTITIONBY' || name === 'MATCHBY') {
+        throw new Unsupported(`${name} works this out for each row of the table it sorts, so there is no single value here.`);
+      }
       // TOTALYTD(expression, dates, [filter], [year end]) is CALCULATE(expression, DATESYTD(dates[, year end]), filter).
       const total = name ? TOTALS.get(name) : undefined;
       if (total && argIndex === 0) {
@@ -418,6 +421,13 @@ function functionNames(root: AstNode): Set<string> {
   const names = new Set<string>();
   const visit = (n: AstNode) => {
     if (n.kind === 'FunctionCall') names.add(n.name.toUpperCase());
+    // A window function with no table written works in ALLSELECTED of its columns (checked in Power BI Desktop).
+    if (n.kind === 'FunctionCall' && WINDOW_FUNCTIONS.has(n.name.toUpperCase())) {
+      const spec = lookupFunction(n.name);
+      // (Without ORDERBY or PARTITIONBY either, it is an error rather than visual-dependent.)
+      const sorted = n.args.some((a) => a.kind === 'FunctionCall' && ['ORDERBY', 'PARTITIONBY'].includes(a.name.toUpperCase()));
+      if (sorted && spec?.paramsFor && windowRelation(spec.paramsFor(n.args), n.args) === -1) names.add('ALLSELECTED');
+    }
     for (const child of childrenOf(n)) visit(child.node);
   };
   visit(root);

@@ -437,6 +437,35 @@ const SPECS: FunctionSpec[] = [
   startAt('ISAFTER', 'TRUE when the values come after the starting values in the given order (ASC unless DESC), comparing the first pair, then the next pair on a tie.'),
   startAt('ISONORAFTER', 'TRUE when the values come after, or are equal to, the starting values in the given order (ASC unless DESC), comparing pair by pair.'),
 
+  // --- Window functions (checked in Power BI Desktop): a row (or rows, or a number) found from the current row ---
+  windowFunction('OFFSET', 'The row a number of rows before (negative) or after the current row, in a sorted table.'),
+  windowFunction('INDEX', 'The row at a position in a sorted table (1 is the first, -1 the last), whatever the current row is.'),
+  windowFunction('WINDOW', 'The rows between two positions in a sorted table, each counted from the current row (unless ABS) — for example, a running total.'),
+  windowFunction('RANK', 'The rank of the current row in a sorted table (tied rows get the same rank).'),
+  windowFunction('ROWNUMBER', 'The position of the current row in a sorted table (ties are broken by the other columns, so every row gets its own number).'),
+  {
+    name: 'ORDERBY',
+    category: 'other',
+    returns: 'table',
+    summary: 'Inside OFFSET, INDEX, WINDOW, RANK and ROWNUMBER: how to sort the rows (each expression is worked out for every row; ASC unless DESC).',
+    overloads: [[p('expression', 'scalar', { optional: true, repeating: true }), p('order', 'keyword', { optional: true, repeating: true, keywords: ['ASC', 'DESC'] })]],
+    paramsFor: (args) => args.map((a) => (isKeyword(a, ['ASC', 'DESC']) ? p('order', 'keyword', { keywords: ['ASC', 'DESC'] }) : p('expression', 'scalar'))),
+  },
+  {
+    name: 'PARTITIONBY',
+    category: 'other',
+    returns: 'table',
+    summary: 'Inside OFFSET, INDEX, WINDOW, RANK and ROWNUMBER: counts within each value of these columns separately.',
+    overloads: [[p('column', 'column', { optional: true, repeating: true })]],
+  },
+  {
+    name: 'MATCHBY',
+    category: 'other',
+    returns: 'table',
+    summary: 'Inside OFFSET, INDEX, WINDOW, RANK and ROWNUMBER: the columns that identify the current row.',
+    overloads: [[p('column', 'column', { optional: true, repeating: true })]],
+  },
+
   // --- Grouping ---
   summarize(),
   groupBy(),
@@ -780,6 +809,101 @@ function linest(name: 'LINEST' | 'LINESTX'): FunctionSpec {
       return withConstant ? [...params, intercept] : params;
     },
   };
+}
+
+/** Whether an input is one of these keywords, written bare (ASC, DEFAULT, …). */
+function isKeyword(a: { kind: string }, words: readonly string[]): boolean {
+  const ref = a as { kind: string; name?: string; quoted?: boolean };
+  return ref.kind === 'TableRef' && !ref.quoted && words.includes((ref.name ?? '').toUpperCase());
+}
+
+const isCallTo = (a: { kind: string }, name: string) => a.kind === 'FunctionCall' && ((a as { name?: string }).name ?? '').toUpperCase() === name;
+
+/** The window functions: OFFSET, INDEX, WINDOW, RANK and ROWNUMBER. */
+export const WINDOW_FUNCTIONS: ReadonlySet<string> = new Set(['OFFSET', 'INDEX', 'WINDOW', 'RANK', 'ROWNUMBER']);
+
+/**
+ * OFFSET(delta, [relation], [ORDERBY], [blanks], [PARTITIONBY], [MATCHBY], [reset]) and the others: after their own
+ * first inputs, the inputs are told apart by what is written (an ORDERBY(…) call, a keyword, the table).
+ * Checked in Power BI Desktop: WINDOW's ABS/REL are optional (REL unless ABS); blanks takes DEFAULT, KEEP, FIRST or
+ * LAST; RESET can't be used with ORDERBY or PARTITIONBY.
+ */
+function windowFunction(name: string, summary: string): FunctionSpec {
+  const kind = p('ABS or REL', 'keyword', { keywords: ['ABS', 'REL'] });
+  const leading: Record<string, ParamSpec[]> = {
+    OFFSET: [p('rows to move', 'scalar')],
+    INDEX: [p('position', 'scalar')],
+    WINDOW: [p('from', 'scalar'), kind, p('to', 'scalar'), kind],
+    RANK: [p('ties', 'keyword', { keywords: ['SKIP', 'DENSE'] })],
+    ROWNUMBER: [],
+  };
+  const rest = [
+    p('relation', 'table'),
+    p('order by', 'scalar'),
+    p('blanks', 'keyword', { keywords: ['DEFAULT', 'KEEP', 'FIRST', 'LAST'] }),
+    p('partition by', 'scalar'),
+    p('match by', 'scalar'),
+    p('reset', 'scalar'),
+  ];
+  const optional = (list: ParamSpec[]) => list.map((x) => ({ ...x, optional: true }));
+  const overloads: ParamSpec[][] = {
+    OFFSET: [[leading.OFFSET[0], ...optional(rest)]],
+    INDEX: [[leading.INDEX[0], ...optional(rest)]],
+    WINDOW: [
+      [leading.WINDOW[0], leading.WINDOW[2], ...optional(rest)],
+      [leading.WINDOW[0], kind, leading.WINDOW[2], kind, ...optional(rest)],
+    ],
+    // Power BI allows any number of inputs for RANK.
+    RANK: [[{ ...leading.RANK[0], optional: true }, { ...rest[0], optional: true }, p('more', 'scalar', { optional: true, repeating: true })]],
+    ROWNUMBER: [optional(rest)],
+  }[name]!;
+  return {
+    name,
+    category: 'other',
+    returns: name === 'RANK' || name === 'ROWNUMBER' ? 'scalar' : 'table',
+    summary,
+    overloads,
+    paramsFor: (args) => {
+      const params: ParamSpec[] = [];
+      let i = 0;
+      const take = (param: ParamSpec) => {
+        params.push(param);
+        i++;
+      };
+      if (name === 'OFFSET' || name === 'INDEX') take(leading[name][0]);
+      if (name === 'WINDOW') {
+        for (const part of [leading.WINDOW[0], leading.WINDOW[2]]) {
+          if (i >= args.length) return null;
+          take(part);
+          if (args[i] && isKeyword(args[i], ['ABS', 'REL'])) take(kind);
+        }
+      }
+      if (name === 'RANK' && args[0] && (isKeyword(args[0], ['SKIP', 'DENSE']) || args[0].kind === 'Omitted')) take(leading.RANK[0]);
+      // The table comes next, unless it is left out (then ORDERBY or PARTITIONBY comes straight away).
+      const isPart = (a: { kind: string }) => ['ORDERBY', 'PARTITIONBY', 'MATCHBY'].some((n) => isCallTo(a, n));
+      // (Left out with a comma, it is still the table's place.)
+      const isOption = (a: { kind: string }) => isKeyword(a, ['DEFAULT', 'KEEP', 'FIRST', 'LAST', 'NONE', 'LOWESTPARENT', 'HIGHESTPARENT']);
+      if (args[i] && !isPart(args[i]) && !isOption(args[i])) take(rest[0]);
+      for (; i < args.length; i++) {
+        const a = args[i];
+        if (isCallTo(a, 'ORDERBY')) params.push(rest[1]);
+        else if (isCallTo(a, 'PARTITIONBY')) params.push(rest[3]);
+        else if (isCallTo(a, 'MATCHBY')) params.push(rest[4]);
+        else if (isKeyword(a, ['DEFAULT', 'KEEP', 'FIRST', 'LAST'])) params.push(rest[2]);
+        else if (isKeyword(a, ['NONE', 'LOWESTPARENT', 'HIGHESTPARENT'])) params.push(p('reset', 'keyword', { keywords: ['NONE', 'LOWESTPARENT', 'HIGHESTPARENT'] }));
+        else if (a.kind === 'Omitted') params.push(p('left out', 'scalar', { optional: true }));
+        else params.push(rest[5]);
+      }
+      return params;
+    },
+  };
+}
+
+/** A window function's table (relation), or null when none is written (then it is ALLSELECTED of its columns). */
+export function windowRelation(params: readonly ParamSpec[] | null, args: readonly { kind: string }[]): number {
+  if (!params) return -1;
+  const i = params.findIndex((x) => x.name === 'relation');
+  return i !== -1 && args[i] && args[i].kind !== 'Omitted' ? i : -1;
 }
 
 /**

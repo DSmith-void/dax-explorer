@@ -726,3 +726,60 @@ describe('Wave 2 group 4 (checked in Power BI Desktop on Initech)', () => {
     expect(analysis.insights.filter((i) => i.kind === 'unknown-function')).toEqual([]);
   });
 });
+
+describe('window functions (checked in Power BI Desktop on Initech)', () => {
+  const errors = (source: string) => run(source).analysis.insights.filter((i) => i.kind === 'dax-error').map((i) => i.summary);
+  const year = [{ kind: 'columns', columns: [{ table: 'Date', column: 'Year' }] }];
+
+  it('OFFSET as a CALCULATE filter filters the table’s columns, and says which row it picks', () => {
+    const offset = `OFFSET(-1, ALL('Date'[Year]), ORDERBY('Date'[Year]))`;
+    const source = `CALCULATE([Total Sales], ${offset})`;
+    const { step } = run(source);
+    expect(step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual(year);
+    expect(run(offset).step(offset).summary).toBe(`OFFSET: the row just before the current one of ALL('Date'[Year]), sorted by 'Date'[Year].`);
+    expect(step(offset).notes.join(' ')).toContain('returns all the rows it finds together');
+  });
+
+  it('the current row comes from a loop whose row has the table’s columns', () => {
+    const offset = `OFFSET(-1, ALL('Date'[Year]), ORDERBY('Date'[Year]))`;
+    const { step } = run(`SUMX(VALUES('Date'[Year]), CALCULATE([Total Sales], ${offset}))`);
+    expect(step(offset).notes[0]).toBe('The current row is the row SUMX is on.');
+  });
+
+  it('RANK and ROWNUMBER give BLANK when the filters leave more than one row', () => {
+    const rank = `RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`;
+    expect(run(rank).step(rank).notes[0]).toContain('it gives BLANK');
+  });
+
+  it("ORDERBY's expressions are worked out for each row of the table (a measure: for that row)", () => {
+    const { step } = run(`RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`);
+    expect(step('[Total Sales]').context.rows.map((r) => r.functionName)).toEqual(['RANK']);
+    expect(step('[Total Sales]').summary).toContain('for the current row of RANK');
+    const bad = run(`OFFSET(-1, ALL('Date'[Month Number]), ORDERBY('Date'[Year]))`);
+    expect(bad.step(`'Date'[Year]`).summary).toContain("isn't in the current row of OFFSET");
+  });
+
+  it('INDEX picks by position; WINDOW says which rows', () => {
+    const index = `INDEX(-1, ALL('Date'[Year]), ORDERBY('Date'[Year]))`;
+    expect(run(index).step(index).summary).toContain('the last row');
+    const window = `WINDOW(1, ABS, 0, REL, ALL('Date'[Year]), ORDERBY('Date'[Year]))`;
+    expect(run(window).step(window).summary).toContain('the rows from the first row to the current row');
+    const relative = `WINDOW(-1, 0, ALL('Date'[Year]), ORDERBY('Date'[Year]))`;
+    expect(run(relative).step(relative).summary).toContain('the rows from 1 row before the current one to the current row');
+  });
+
+  it('with no table written, it uses ALLSELECTED of the ORDERBY columns; with neither, an error', () => {
+    const offset = `OFFSET(-1, ORDERBY('Date'[Year]))`;
+    const source = `CALCULATE([Total Sales], ${offset})`;
+    const { step } = run(source);
+    expect(step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual(year);
+    expect(step(offset).notes.join(' ')).toContain("ALLSELECTED('Date'[Year])");
+    expect(errors(`COUNTROWS(OFFSET(-1))`)[0]).toContain('needs a table');
+    expect(errors(`ROWNUMBER()`)[0]).toContain('needs a table');
+  });
+
+  it('PARTITIONBY counts within each value separately', () => {
+    const offset = `OFFSET(-1, ALL('Date'[Year], 'Date'[Month Number]), ORDERBY('Date'[Month Number]), PARTITIONBY('Date'[Year]))`;
+    expect(run(offset).step(offset).notes.join(' ')).toContain("within each value of 'Date'[Year] separately");
+  });
+});
