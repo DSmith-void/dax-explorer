@@ -23,7 +23,23 @@ public static class ModelReader
             columns,
             Query(connection, "EVALUATE INFO.VIEW.MEASURES()"),
             Query(connection, "EVALUATE INFO.VIEW.RELATIONSHIPS()"),
-            ReadCalendars(connection, tables, columns));
+            ReadCalendars(connection, tables, columns),
+            ReadCalculationGroups(connection, tables));
+    }
+
+    /// <summary>Calculation groups and their items; none when the engine refuses the INFO functions.</summary>
+    private static List<CalculationGroupInfo> ReadCalculationGroups(AdomdConnection connection, List<Row> tables)
+    {
+        try
+        {
+            var groups = Query(connection, "EVALUATE INFO.CALCULATIONGROUPS()");
+            if (groups.Count == 0) return [];
+            return ModelBuilder.BuildCalculationGroups(tables, groups, Query(connection, "EVALUATE INFO.CALCULATIONITEMS()"));
+        }
+        catch (AdomdException)
+        {
+            return [];
+        }
     }
 
     /// <summary>

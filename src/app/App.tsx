@@ -133,6 +133,7 @@ export function App() {
           table: c.table,
           groups: c.groups.map((g) => ({ unit: g.unit, primary: g.primaryColumn, associated: g.associatedColumns })),
         })),
+        calculationGroups: (connectedModel.model.calculationGroups ?? []).map((g) => ({ table: g.table, items: g.items.map((i) => i.name) })),
       };
     }
     return isBuiltInExample ? INITECH_MODEL : null;

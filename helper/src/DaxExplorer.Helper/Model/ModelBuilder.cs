@@ -97,13 +97,44 @@ public static class ModelBuilder
         return result;
     }
 
+    /// <summary>
+    /// Calculation groups from INFO.CALCULATIONGROUPS and INFO.CALCULATIONITEMS; groups refer to their table by the
+    /// ID of INFO.VIEW.TABLES. Items are listed in their order (Ordinal).
+    /// </summary>
+    public static List<CalculationGroupInfo> BuildCalculationGroups(IEnumerable<Row> tables, IEnumerable<Row> groups, IEnumerable<Row> items)
+    {
+        var tableNames = tables.Where(r => r.Text("ID") is not null).ToDictionary(r => r.RequiredText("ID"), r => r.RequiredText("Name"));
+        var itemList = items.ToList();
+        var result = new List<CalculationGroupInfo>();
+        foreach (var group in groups)
+        {
+            if (!tableNames.TryGetValue(group.RequiredText("TableID"), out var table)) continue;
+            var id = group.RequiredText("ID");
+            var groupItems = itemList
+                .Where(i => i.Text("CalculationGroupID") == id)
+                .Select(i => new CalculationItemInfo(i.RequiredText("Name"), i.Text("Expression") ?? string.Empty, Number(i["Ordinal"])))
+                .OrderBy(i => i.Ordinal)
+                .ToList();
+            result.Add(new CalculationGroupInfo(table, Number(group["Precedence"]), groupItems));
+        }
+        return result;
+    }
+
+    private static int Number(object? value) => value switch
+    {
+        null or DBNull => 0,
+        string s => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0,
+        var other => Convert.ToInt32(other, CultureInfo.InvariantCulture),
+    };
+
     public static ModelMetadata Build(
         string databaseName,
         IEnumerable<Row> tables,
         IEnumerable<Row> columns,
         IEnumerable<Row> measures,
         IEnumerable<Row> relationships,
-        IReadOnlyList<CalendarInfo>? calendars = null) =>
+        IReadOnlyList<CalendarInfo>? calendars = null,
+        IReadOnlyList<CalculationGroupInfo>? calculationGroups = null) =>
         new(
             databaseName,
             tables.Select(r => new TableInfo(r.RequiredText("Name"), r.Flag("IsHidden"), r.Text("Expression"), r.Text("DataCategory"))).ToList(),
@@ -139,5 +170,6 @@ public static class ModelBuilder
                     r.Flag("IsActive"),
                     r.Text("CrossFilteringBehavior") ?? "OneDirection"))
                 .ToList(),
-            calendars ?? []);
+            calendars ?? [],
+            calculationGroups ?? []);
 }

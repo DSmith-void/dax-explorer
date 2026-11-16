@@ -114,7 +114,9 @@ describe('buildStepQuery', () => {
 
     const typedByHand = steps('S = DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED(Product)))', WIDGETS).query('DIVIDE');
     expect(typedByHand.kind === 'none' && typedByHand.reason).toContain('Take the report filters from a visual');
-    const calculationGroups = steps('S = SELECTEDMEASURE()').query('SELECTEDMEASURE: not followed');
+    const item = steps('S = SELECTEDMEASURE()');
+    const title = item.timeline.find((e) => e.nodeId !== null && e.title.includes('SELECTEDMEASURE'))!.title;
+    const calculationGroups = item.query(title);
     expect(calculationGroups.kind === 'none' && calculationGroups.reason).toContain('calculation groups');
   });
 

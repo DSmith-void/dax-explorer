@@ -514,6 +514,37 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('filter table', 'table')]],
   },
 
+  // --- Calculation groups (checked in Power BI Desktop: outside a calculation item, each is an error, as there
+  //     is no measure being rewritten) ---
+  {
+    name: 'SELECTEDMEASURE',
+    category: 'other',
+    returns: 'scalar',
+    summary: "In a calculation item's code: the measure the item is rewriting (the one in the visual), worked out here.",
+    overloads: [[]],
+  },
+  {
+    name: 'SELECTEDMEASURENAME',
+    category: 'other',
+    returns: 'scalar',
+    summary: "In a calculation item's code: the name of the measure the item is rewriting, as text.",
+    overloads: [[]],
+  },
+  {
+    name: 'SELECTEDMEASUREFORMATSTRING',
+    category: 'other',
+    returns: 'scalar',
+    summary: "In a calculation item's code: the format string of the measure the item is rewriting.",
+    overloads: [[]],
+  },
+  {
+    name: 'ISSELECTEDMEASURE',
+    category: 'other',
+    returns: 'scalar',
+    summary: "In a calculation item's code: TRUE when the measure the item is rewriting is one of these.",
+    overloads: [[p('measure', 'name'), p('measure', 'name', { optional: true, repeating: true })]],
+  },
+
   // --- Grouping ---
   summarize(),
   groupBy(),

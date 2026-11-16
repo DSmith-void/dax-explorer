@@ -495,6 +495,27 @@ export function findHints(input: HintInput): Hint[] {
     });
   }
 
+  // --- 11d. The connected model has calculation groups: a visual, slicer or filter that picks one of their items
+  //      rewrites the measure with the item's code first, which the steps here don't show. (Not for a calculation
+  //      item's own code, which uses SELECTEDMEASURE and the like.)
+  const calculationGroups = input.model?.calculationGroups ?? [];
+  const isItemCode = calls.some((c) => named(c, 'SELECTEDMEASURE', 'SELECTEDMEASURENAME', 'SELECTEDMEASUREFORMATSTRING', 'ISSELECTEDMEASURE'));
+  if (calculationGroups.length > 0 && !isItemCode) {
+    const list = calculationGroups.map((g) => `${g.table} (${g.items.slice(0, 4).join(', ')}${g.items.length > 4 ? ', …' : ''})`).join('; ');
+    hints.push({
+      check: 'calculation-groups',
+      kind: 'note',
+      nodeId: root.id,
+      title: 'This model has calculation groups',
+      short: 'A visual can rewrite this measure with one of their items.',
+      why:
+        `This model has calculation groups: ${list}. When a visual, slicer or filter picks one of their items, Power BI ` +
+        `rewrites this measure with the item's code before working it out (SELECTEDMEASURE() in the item stands for this ` +
+        `measure). The steps here explain the measure as written, without any item. If the report filters you give pick ` +
+        `an item, the values shown may be the rewritten ones, and then not match the steps.`,
+    });
+  }
+
   // --- 11e. A CALCULATE filter that filters nothing: its table lost the link to the model's columns. Checked in
   //      Power BI Desktop: UNION(VALUES('Product'[Category]), {"Extra"}) and EXCEPT({"Widgets", …}, …) as filters
   //      gave the grand total, with ISFILTERED FALSE.

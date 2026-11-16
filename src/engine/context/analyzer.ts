@@ -567,6 +567,21 @@ export function analyzeContext(
       record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [message] });
       return;
     }
+    if (spec.name === 'SELECTEDMEASURE') {
+      // Stands for the measure being rewritten: worked out like a measure reference (context transition inside a
+      // loop). Outside a calculation item it is an error (checked in Power BI Desktop).
+      const measure = measureStep(node.id, 'The measure being rewritten (SELECTEDMEASURE())', ctx, true);
+      record({
+        nodeId: node.id,
+        context: ctx,
+        ...measure,
+        notes: [
+          ...measure.notes,
+          "This is code for a calculation item: it runs when a visual, slicer or filter picks the item, and SELECTEDMEASURE() is the measure in the visual. Anywhere else there is no such measure, and DAX shows an error.",
+        ],
+      });
+      return;
+    }
     if (WINDOW_FUNCTIONS.has(spec.name)) {
       visitWindow(node, ctx, spec, call.params);
       return;

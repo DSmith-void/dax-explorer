@@ -338,3 +338,18 @@ describe('a CALCULATE filter that filters nothing (checked in Power BI Desktop: 
     expect(checks(hints(`M = CALCULATE([Total Sales], EXCEPT(VALUES('Product'[Category]), {"Widgets"}))`))).not.toContain('filters-nothing');
   });
 });
+
+describe('a model with calculation groups', () => {
+  const withGroups = { ...INITECH_MODEL, calculationGroups: [{ table: 'Time Calc', items: ['Current', 'PY', 'YTD'] }] };
+
+  it('notes that a visual can rewrite the measure with an item', () => {
+    const hint = one(hints('M = [Total Sales]', { model: withGroups }), 'calculation-groups');
+    expect(hint.kind).toBe('note');
+    expect(hint.why).toContain('Time Calc (Current, PY, YTD)');
+  });
+
+  it("is quiet without calculation groups, and for a calculation item's own code", () => {
+    expect(checks(hints('M = [Total Sales]'))).not.toContain('calculation-groups');
+    expect(checks(hints('M = CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR(\'Date\'[Date]))', { model: withGroups }))).not.toContain('calculation-groups');
+  });
+});

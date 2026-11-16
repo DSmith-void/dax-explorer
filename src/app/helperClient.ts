@@ -87,6 +87,14 @@ export interface ModelMetadata {
   relationships: RelationshipInfo[];
   /** Calendars (calendar-based time intelligence). Older helpers don't send them. */
   calendars?: CalendarInfo[];
+  /** Calculation groups, with their items in order. Older helpers don't send them. */
+  calculationGroups?: CalculationGroupInfo[];
+}
+
+export interface CalculationGroupInfo {
+  table: string;
+  precedence: number;
+  items: { name: string; expression: string; ordinal: number }[];
 }
 
 export interface CalendarInfo {

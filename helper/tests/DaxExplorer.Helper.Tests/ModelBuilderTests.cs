@@ -148,4 +148,24 @@ public class ModelBuilderTests
     [InlineData("[", "[")]
     public void Strips_brackets_from_result_column_names(string raw, string expected) =>
         Assert.Equal(expected, Row.NormalizeColumnName(raw));
+
+    [Fact]
+    public void Reads_calculation_groups_with_their_items_in_order()
+    {
+        // The shape INFO.CALCULATIONGROUPS / INFO.CALCULATIONITEMS return (checked in Power BI Desktop: IDs, not names).
+        var groups = ModelBuilder.BuildCalculationGroups(
+            tables: [R(("ID", 30L), ("Name", "Time Calc")), R(("ID", 22L), ("Name", "Sales"))],
+            groups: [R(("ID", 7L), ("TableID", 30L), ("Precedence", 10L))],
+            items:
+            [
+                R(("ID", 2L), ("CalculationGroupID", 7L), ("Name", "PY"), ("Expression", "CALCULATE(SELECTEDMEASURE(), SAMEPERIODLASTYEAR('Date'[Date]))"), ("Ordinal", 1L)),
+                R(("ID", 1L), ("CalculationGroupID", 7L), ("Name", "Current"), ("Expression", "SELECTEDMEASURE()"), ("Ordinal", 0L)),
+                R(("ID", 9L), ("CalculationGroupID", 99L), ("Name", "Other group"), ("Expression", "1"), ("Ordinal", 0L)),
+            ]);
+
+        var group = Assert.Single(groups);
+        Assert.Equal(("Time Calc", 10), (group.Table, group.Precedence));
+        Assert.Equal(["Current", "PY"], group.Items.Select(i => i.Name));
+        Assert.Equal("SELECTEDMEASURE()", group.Items[0].Expression);
+    }
 }

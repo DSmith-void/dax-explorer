@@ -828,3 +828,18 @@ describe('SUMMARIZECOLUMNS in a measure (checked in Power BI Desktop on Initech)
     expect(run(source).step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual([{ kind: 'columns', columns: [category] }]);
   });
 });
+
+describe('calculation item code (checked in Power BI Desktop: outside an item, these are errors)', () => {
+  it('SELECTEDMEASURE() is the measure being rewritten: in a loop, worked out for the current row', () => {
+    const { step } = run(`SUMX(VALUES('Date'[Year]), SELECTEDMEASURE())`);
+    const selected = step('SELECTEDMEASURE()');
+    expect(selected.operations.map((o) => o.kind)).toEqual(['context-transition']);
+    expect(selected.notes.join(' ')).toContain('code for a calculation item');
+  });
+
+  it('ISSELECTEDMEASURE names measures without working them out', () => {
+    const { step, analysis } = run(`IF(ISSELECTEDMEASURE([Total Sales]), 1, 0)`);
+    expect(step('[Total Sales]').summary).toBe('Not calculated: only the name of [Total Sales] is used.');
+    expect(analysis.insights.filter((i) => i.kind === 'unknown-function')).toEqual([]);
+  });
+});

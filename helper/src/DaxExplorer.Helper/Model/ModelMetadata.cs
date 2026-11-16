@@ -7,7 +7,17 @@ public sealed record ModelMetadata(
     IReadOnlyList<ColumnInfo> Columns,
     IReadOnlyList<MeasureInfo> Measures,
     IReadOnlyList<RelationshipInfo> Relationships,
-    IReadOnlyList<CalendarInfo>? Calendars = null);
+    IReadOnlyList<CalendarInfo>? Calendars = null,
+    IReadOnlyList<CalculationGroupInfo>? CalculationGroups = null);
+
+/// <summary>
+/// A calculation group: a table whose items rewrite the measure in a visual when a filter picks one of them
+/// (SELECTEDMEASURE() in an item's code stands for that measure).
+/// </summary>
+/// <param name="Precedence">The order when several groups apply (higher first, per the documentation).</param>
+public sealed record CalculationGroupInfo(string Table, int Precedence, IReadOnlyList<CalculationItemInfo> Items);
+
+public sealed record CalculationItemInfo(string Name, string Expression, int Ordinal);
 
 /// <summary>
 /// A calendar (Power BI's calendar-based time intelligence, preview): a name, the table it is defined on, and

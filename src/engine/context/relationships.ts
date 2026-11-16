@@ -51,6 +51,11 @@ export interface RelationshipModel {
   sortBy?: readonly { column: ColumnName; by: ColumnName }[];
   /** Calendars (calendar-based time intelligence): named sets of a table's columns, by unit of time. */
   calendars?: readonly Calendar[];
+  /**
+   * Calculation groups (their table, and their items' names): when a filter picks an item, Power BI rewrites the
+   * measure in the visual with the item's code.
+   */
+  calculationGroups?: readonly { table: string; items: readonly string[] }[];
 }
 
 /**
