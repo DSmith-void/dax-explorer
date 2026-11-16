@@ -37,6 +37,14 @@ const AWKWARD: LibraryMeasure[] = [
   ['column-inside-calculate', `SUMX('Product', CALCULATE('Product'[List Price] + 0))`],
   ['earlier-classic', `SUMX('Product', COUNTROWS(FILTER('Product', 'Product'[List Price] < EARLIER('Product'[List Price]))))`],
   ['lastnonblank-filter', `CALCULATE([Total Sales], LASTNONBLANK('Date'[Date], [Total Sales]))`],
+  ['crossjoin-filter', `CALCULATE([Total Sales], CROSSJOIN(VALUES('Product'[Category]), VALUES('Date'[Year])))`],
+  ['except-filter', `CALCULATE([Total Sales], EXCEPT(VALUES('Product'[Category]), {"Widgets"}))`],
+  ['intersect-filter', `CALCULATE([Total Sales], INTERSECT(ALL('Product'[Category]), {"Widgets", "Gadgets"}))`],
+  ['union-unlinked', `CALCULATE([Total Sales], UNION(VALUES('Product'[Category]), {"Extra"}))`],
+  ['except-list-first', `CALCULATE([Total Sales], EXCEPT({"Widgets", "Gadgets"}, VALUES('Product'[Category])))`],
+  ['naturaljoin-filter', `CALCULATE([Total Sales], NATURALINNERJOIN(VALUES('Product'[Category]), ALL('Product'[Category], 'Product'[Product])))`],
+  ['generate-loop', `SUMX(GENERATE(VALUES('Product'[Category]), TOPN(1, VALUES('Date'[Year]))), [Total Sales])`],
+  ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 
 export const CLAIM_LIBRARY: readonly LibraryMeasure[] = [

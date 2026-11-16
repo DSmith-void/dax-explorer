@@ -79,6 +79,11 @@ export interface FilterContext {
 export type TableShape =
   | { kind: 'columns'; columns: ColumnName[]; description: string }
   | { kind: 'table'; table: string; description: string }
+  /**
+   * Columns with no link to the model's columns (no lineage), such as UNION with a {…} list: as a CALCULATE
+   * filter it filters nothing (checked in Power BI Desktop).
+   */
+  | { kind: 'unlinked'; description: string }
   | { kind: 'unknown'; description: string };
 
 export interface RowContext {
@@ -151,7 +156,9 @@ export type InsightKind =
   | 'not-modeled'
   | 'unknown-function'
   /** DAX shows an error here (a rule Power BI enforces, checked in Power BI Desktop). */
-  | 'dax-error';
+  | 'dax-error'
+  /** A CALCULATE filter that filters nothing: its table isn't linked to the model's columns. */
+  | 'filters-nothing';
 
 /** A noteworthy fact for the Diagnostics & Explanation panel. */
 export interface Insight {

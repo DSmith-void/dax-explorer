@@ -326,3 +326,15 @@ describe('SUMMARIZE extra columns (checked in Power BI Desktop: ALL on another t
     expect(checks(hints(`M = COUNTROWS(SUMMARIZE(Sales, 'Product'[Category]))`))).not.toContain('summarize-extra-columns');
   });
 });
+
+describe('a CALCULATE filter that filters nothing (checked in Power BI Desktop: the grand total)', () => {
+  it('warns for UNION with a {…} list', () => {
+    const hint = one(hints(`M = CALCULATE([Total Sales], UNION(VALUES('Product'[Category]), {"Extra"}))`), 'filters-nothing');
+    expect(hint.kind).toBe('warning');
+    expect(hint.why).toContain('TREATAS');
+  });
+
+  it('is quiet when the filter keeps its link', () => {
+    expect(checks(hints(`M = CALCULATE([Total Sales], EXCEPT(VALUES('Product'[Category]), {"Widgets"}))`))).not.toContain('filters-nothing');
+  });
+});

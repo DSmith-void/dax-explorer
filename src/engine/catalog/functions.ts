@@ -225,6 +225,61 @@ const SPECS: FunctionSpec[] = [
     },
   ]),
 
+  // --- Combining tables (checked in Power BI Desktop: which columns keep their link to the model) ---
+  ...(['CROSSJOIN', 'UNION'] as const).map(
+    (name): FunctionSpec => ({
+      name,
+      category: 'table',
+      returns: 'table',
+      summary:
+        name === 'CROSSJOIN'
+          ? 'Every combination of the rows of the tables.'
+          : 'The rows of all the tables together; their columns stay linked to the model only if they are the same columns.',
+      overloads: [[p('table', 'table'), p('table', 'table'), p('table', 'table', { optional: true, repeating: true })]],
+    }),
+  ),
+  {
+    name: 'EXCEPT',
+    category: 'table',
+    returns: 'table',
+    summary: "The rows of the first table that aren't in the second.",
+    overloads: [[p('table', 'table'), p('table to take away', 'table')]],
+  },
+  {
+    name: 'INTERSECT',
+    category: 'table',
+    returns: 'table',
+    summary: 'The rows of the first table that are also in the second.',
+    overloads: [[p('table', 'table'), p('other table', 'table')]],
+  },
+  {
+    name: 'NATURALINNERJOIN',
+    category: 'table',
+    returns: 'table',
+    summary: 'Joins two tables on the columns they have in common, keeping the rows that match.',
+    overloads: [[p('left table', 'table'), p('right table', 'table')]],
+  },
+  {
+    name: 'NATURALLEFTOUTERJOIN',
+    category: 'table',
+    returns: 'table',
+    summary: 'Joins two tables on the columns they have in common, keeping every row of the first table.',
+    overloads: [[p('left table', 'table'), p('right table', 'table')]],
+  },
+  ...(['GENERATE', 'GENERATEALL'] as const).map(
+    (name): FunctionSpec => ({
+      name,
+      category: 'iterator',
+      returns: 'table',
+      summary:
+        name === 'GENERATE'
+          ? 'Goes through a table row by row, works out a second table for each row, and joins them (rows with an empty second table are left out).'
+          : 'Goes through a table row by row, works out a second table for each row, and joins them (rows with an empty second table are kept, with blanks).',
+      overloads: [[p('table', 'table'), p('table for each row', 'rowExpression')]],
+      iteratesArgument: 0,
+    }),
+  ),
+
   // --- Grouping ---
   summarize(),
   groupBy(),

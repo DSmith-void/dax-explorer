@@ -533,3 +533,47 @@ describe('GROUPBY and CURRENTGROUP (checked in Power BI Desktop on Initech)', ()
     expect(analysis.insights.map((i) => i.kind)).toContain('dax-error');
   });
 });
+
+describe('functions that combine tables (checked in Power BI Desktop on Initech)', () => {
+  const lastFilter = (source: string) => {
+    const { step } = run(source);
+    const inner = step(source).innerContext ?? step(source).context;
+    return inner.filter.entries[inner.filter.entries.length - 1];
+  };
+
+  it('CROSSJOIN of two columns filters both', () => {
+    const entry = lastFilter(`CALCULATE([Total Sales], CROSSJOIN(VALUES('Product'[Category]), VALUES('Date'[Year])))`);
+    expect(entry.target).toEqual({ kind: 'columns', columns: [{ table: 'Product', column: 'Category' }, { table: 'Date', column: 'Year' }] });
+  });
+
+  it('UNION of the same column keeps the link; EXCEPT and INTERSECT keep the first table\'s', () => {
+    const category = { kind: 'columns', columns: [{ table: 'Product', column: 'Category' }] };
+    expect(lastFilter(`CALCULATE([Total Sales], UNION(VALUES('Product'[Category]), VALUES('Product'[Category])))`).target).toEqual(category);
+    expect(lastFilter(`CALCULATE([Total Sales], EXCEPT(VALUES('Product'[Category]), {"Widgets"}))`).target).toEqual(category);
+    expect(lastFilter(`CALCULATE([Total Sales], INTERSECT(VALUES('Product'[Category]), {"Widgets"}))`).target).toEqual(category);
+  });
+
+  it('UNION with a {…} list, or EXCEPT starting with one, filters nothing', () => {
+    for (const filter of [`UNION(VALUES('Product'[Category]), {"Extra"})`, `EXCEPT({"Widgets", "Gadgets"}, VALUES('Product'[Category]))`, `UNION(VALUES('Product'[Category]), VALUES('Customer'[Region]))`]) {
+      const source = `CALCULATE([Total Sales], ${filter})`;
+      const { step, analysis } = run(source);
+      expect(step(source).innerContext!.filter.entries).toEqual([]);
+      expect(analysis.insights.map((i) => i.kind)).toContain('filters-nothing');
+      expect(step(filter).summary).toContain('filters nothing here');
+    }
+  });
+
+  it('a table it cannot place stays "not checked", not a guess', () => {
+    const source = `CALCULATE([Total Sales], CROSSJOIN(VALUES('Product'[Category]), Sales))`;
+    expect(lastFilter(source).target.kind).not.toBe('columns');
+  });
+
+  it('GENERATE goes row by row, and says the row filters nothing in the second table', () => {
+    const source = `SUMX(GENERATE(VALUES('Product'[Category]), TOPN(1, VALUES('Date'[Year]))), [Total Sales])`;
+    const { step } = run(source);
+    const generate = step(`GENERATE(VALUES('Product'[Category]), TOPN(1, VALUES('Date'[Year])))`);
+    expect(generate.notes.join(' ')).toContain('unless it is wrapped in CALCULATETABLE');
+    const inner = step(`TOPN(1, VALUES('Date'[Year]))`).context;
+    expect(inner.rows.map((r) => r.functionName)).toEqual(['GENERATE']);
+  });
+});

@@ -63,7 +63,7 @@ export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reaso
   ...status(
     'wave-2',
     'builds or combines tables; the app needs the shape of the table it returns',
-    'CROSSJOIN UNION EXCEPT INTERSECT NATURALINNERJOIN NATURALLEFTOUTERJOIN GENERATE GENERATEALL DATATABLE ROW GENERATESERIES CALENDAR CALENDARAUTO SUBSTITUTEWITHINDEX TOPNSKIP SAMPLE LINEST LINESTX',
+    'DATATABLE ROW GENERATESERIES CALENDAR CALENDARAUTO SUBSTITUTEWITHINDEX TOPNSKIP SAMPLE LINEST LINESTX',
   ),
   ...status('wave-2', 'changes or reads filters in its own way', 'ALLNOBLANKROW ALLCROSSFILTERED FILTERS'),
   ...status('wave-2', 'compares a row with a starting point (START AT); takes ASC/DESC keywords', 'ISAFTER ISONORAFTER'),

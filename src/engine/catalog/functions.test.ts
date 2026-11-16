@@ -23,7 +23,8 @@ const NOT_PROBED_RELIABLY = new Set(['TRUE', 'FALSE', 'NOT', /* accepts and igno
 /** What each of Power BI's input kinds may be in the catalog (see powerBiArity.ts for the letters). */
 const ACCEPTED_ROLES: Record<string, string[]> = {
   C: ['column', 'tableOrColumn'],
-  T: ['table', 'tableOrColumn'],
+  // A table, possibly worked out once per row (GENERATE's second table).
+  T: ['table', 'tableOrColumn', 'rowExpression'],
   // "a table reference expression": a table, or a column of one (ALL('Sales'[Amount]) is valid).
   R: ['table', 'tableOrColumn', 'column'],
   // "a column name": the name of a new column, written as text (or as a column).

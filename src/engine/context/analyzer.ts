@@ -252,6 +252,38 @@ export function analyzeContext(
         const name = specOf(expr)?.name;
         const args = expr.args;
         switch (name) {
+          // Checked in Power BI Desktop (as CALCULATE filters, with ISFILTERED and values): each keeps the link of
+          // its columns to the model (lineage) when its inputs are model columns.
+          case 'CROSSJOIN':
+          case 'GENERATE':
+          case 'GENERATEALL':
+          case 'NATURALINNERJOIN':
+          case 'NATURALLEFTOUTERJOIN': {
+            const shapes = args.map(shapeOf);
+            if (shapes.length > 0 && shapes.every((s) => s.kind === 'columns')) {
+              const columns: ColumnName[] = [];
+              for (const s of shapes) for (const c of s.kind === 'columns' ? s.columns : []) if (!columns.some((x) => sameColumn(x, c))) columns.push(c);
+              return { kind: 'columns', columns, description };
+            }
+            return { kind: 'unknown', description };
+          }
+          case 'UNION': {
+            // The same columns in every input keep their link; different columns or a {…} list lose it.
+            const shapes = args.map(shapeOf);
+            const first = shapes[0];
+            const sameAsFirst = (s: TableShape) =>
+              first?.kind === 'columns' && s.kind === 'columns' && s.columns.length === first.columns.length && s.columns.every((c, i) => sameColumn(c, first.columns[i]));
+            if (first && shapes.every(sameAsFirst)) return first.kind === 'columns' ? { kind: 'columns', columns: first.columns, description } : { kind: 'unknown', description };
+            const linkedOrList = args.every((a, i) => a.kind === 'TableConstructor' || shapes[i].kind === 'columns' || shapes[i].kind === 'unlinked');
+            return linkedOrList ? { kind: 'unlinked', description } : { kind: 'unknown', description };
+          }
+          case 'EXCEPT':
+          case 'INTERSECT': {
+            // The first table's link; a {…} list first has none.
+            if (args[0]?.kind === 'TableConstructor') return { kind: 'unlinked', description };
+            const first = args[0] ? shapeOf(args[0]) : null;
+            return first?.kind === 'columns' || first?.kind === 'unlinked' ? { ...first, description } : { kind: 'unknown', description };
+          }
           case 'CURRENTGROUP': {
             const group = currentGroups[currentGroups.length - 1];
             return group ? { ...group, description: `the rows of the current group (${group.description})` } : { kind: 'unknown', description };
@@ -579,6 +611,8 @@ export function analyzeContext(
     if (spec.category === 'scope and filter inspection') {
       return [`Checks the filters shown above. ${spec.summary}`];
     }
+    // Table functions (CROSSJOIN, UNION, EXCEPT, …): what the result is.
+    if (spec.category === 'table') return [spec.summary];
     return [];
   }
 
@@ -606,6 +640,11 @@ export function analyzeContext(
       summary: `${spec.name} goes through ${row.table.description} one row at a time.`,
       notes: [
         `Row by row (row context): the inputs marked "per row" are calculated for each row. This doesn't filter anything by itself.`,
+        // Checked in Power BI Desktop: GENERATE(VALUES(Category), VALUES(Product[Product])) gave all 12 products for
+        // each category (48 rows); with CALCULATETABLE around the second table, each category's own (12 rows).
+        ...(spec.name === 'GENERATE' || spec.name === 'GENERATEALL'
+          ? [`The second table is worked out for each row, but the row filters nothing in it unless it is wrapped in CALCULATETABLE (which turns the row into a filter).`]
+          : []),
         // Checked in Power BI Desktop: smallest first, text alphabetically (Month gave Apr first), no sort-by.
         ...(nonBlank
           ? [
@@ -747,6 +786,8 @@ export function analyzeContext(
     | { kind: 'relationship'; change: RelationshipChange }
     | { kind: 'filter'; entry: FilterEntry }
     | { kind: 'not-modeled'; description: string }
+    /** A table with no link to the model's columns: as a filter it filters nothing (checked in Power BI). */
+    | { kind: 'filters-nothing'; description: string }
     | { kind: 'none' };
 
   function visitCalculate(node: FunctionCall, ctx: EvalContext, spec: FunctionSpec) {
@@ -836,6 +877,19 @@ export function analyzeContext(
       }
     }
     for (const { arg, c } of classified) {
+      if (c.kind === 'filters-nothing') {
+        // Checked in Power BI Desktop: UNION(VALUES('Product'[Category]), {"Extra"}) as a filter gave the grand
+        // total, with ISFILTERED('Product'[Category]) FALSE.
+        const summary = `${snippet(arg, 40)} filters nothing here.`;
+        const message = c.description.charAt(0).toUpperCase() + c.description.slice(1) + '.';
+        insights.push({ kind: 'filters-nothing', nodeId: arg.id, summary, message });
+        const step = steps.get(arg.id);
+        if (step) {
+          step.summary = summary;
+          step.notes = [message];
+        }
+        continue;
+      }
       if (c.kind !== 'not-modeled') continue;
       fc = { ...fc, caveats: [...fc.caveats, c.description] };
       operations.push({ kind: 'not-modeled', nodeId: arg.id, description: c.description });
@@ -1193,6 +1247,12 @@ export function analyzeContext(
 
   function tableFilter(arg: Expr, origin: FilterEntry['origin'], mode: FilterEntry['mode']): FilterArgument {
     const shape = shapeOf(arg);
+    if (shape.kind === 'unlinked') {
+      return {
+        kind: 'filters-nothing',
+        description: `${snippet(arg, 60)} isn't linked to any column of the model (its columns lost that link, called lineage), so as a filter it filters nothing`,
+      };
+    }
     return {
       kind: 'filter',
       entry: { target: targetOfShape(shape), condition: `limited to the rows of ${snippet(arg, 80)}`, origin, mode },

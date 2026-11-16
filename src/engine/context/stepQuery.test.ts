@@ -212,3 +212,14 @@ describe('a CALCULATE without filters inside a loop (found by the claim checker)
     expect(q.kind === 'scalar' ? q.dax : '').toContain('MAXX(__DaxExplorerRow,\nCALCULATE(\nSUM(Sales[Amount])\n)\n)');
   });
 });
+
+describe('GENERATE rows', () => {
+  it('are not shown yet (each row makes a table), with the reason rather than a guess', () => {
+    const source = "GENERATE(VALUES('Product'[Category]), TOPN(1, VALUES('Date'[Year])))";
+    const { root } = parse(tokenize(source).tokens);
+    const binding = bind(root, { mode: 'convention', userChoices: {} });
+    const timeline = buildTimeline(root, binding, analyzeContext(root, binding, source), source);
+    const q = buildStepQuery(timeline.find((e) => e.kind === 'iterate')!, { root, binding, source, reportFilters: [], rows: new Map() });
+    expect(q).toEqual({ kind: 'none', reason: 'The tables GENERATE makes for each row are not shown yet.' });
+  });
+});

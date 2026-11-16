@@ -495,6 +495,26 @@ export function findHints(input: HintInput): Hint[] {
     });
   }
 
+  // --- 11e. A CALCULATE filter that filters nothing: its table lost the link to the model's columns. Checked in
+  //      Power BI Desktop: UNION(VALUES('Product'[Category]), {"Extra"}) and EXCEPT({"Widgets", …}, …) as filters
+  //      gave the grand total, with ISFILTERED FALSE.
+  for (const insight of analysis?.insights ?? []) {
+    if (insight.kind !== 'filters-nothing') continue;
+    const arg = findNode(root, insight.nodeId);
+    hints.push({
+      check: 'filters-nothing',
+      short: 'The calculation inside sees the same rows as without it.',
+      kind: 'warning',
+      nodeId: insight.nodeId,
+      title: 'This filter filters nothing',
+      code: arg ? oneLine(text(arg)) : undefined,
+      why:
+        `${insight.message} This happens when a UNION mixes different columns or a {…} list, or when EXCEPT or ` +
+        `INTERSECT starts with a {…} list: the result has values, but no link to a column of the model. Start with ` +
+        `a model column (VALUES('Table'[Column]) or a filter on it), or use TREATAS to link a list to a column.`,
+    });
+  }
+
   // --- 12. A calendar moves single days by their place in it, not by date (checked in Power BI Desktop:
   //     SAMEPERIODLASTYEAR and DATEADD by YEAR or MONTH, with and without a Month unit in the calendar).
   if (analysis) {
