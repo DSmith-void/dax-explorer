@@ -90,6 +90,16 @@ const AWKWARD: LibraryMeasure[] = [
   ['offset-two-after', `CALCULATE([Total Sales], OFFSET(2, ALL('Date'[Year])))`],
   ['index-last-year', `CALCULATE([Total Sales], INDEX(-1, ALL('Date'[Year]), ORDERBY('Date'[Year], ASC)))`],
   ['rownumber-years', `ROWNUMBER(ALL('Date'[Year]), ORDERBY('Date'[Year], DESC))`],
+  ['sc-count', `COUNTROWS(SUMMARIZECOLUMNS('Product'[Category], "S", [Total Sales]))`],
+  ['sc-max-sum', `MAXX(SUMMARIZECOLUMNS('Product'[Category], "S", SUM(Sales[Amount])), [S])`],
+  ['sc-filter-table', `MAXX(SUMMARIZECOLUMNS('Product'[Category], FILTER(ALL('Date'[Year]), 'Date'[Year] = 2025), "S", [Total Sales]), [S])`],
+  ['sc-all-inside', `MAXX(SUMMARIZECOLUMNS('Product'[Category], "A", CALCULATE([Total Sales], ALL('Product'))), [A])`],
+  ['sc-in-loop', `SUMX(VALUES('Date'[Year]), MAXX(SUMMARIZECOLUMNS('Product'[Category], "S", SUM(Sales[Amount])), [S]))`],
+  ['sc-two-tables', `MAXX(SUMMARIZECOLUMNS('Product'[Category], 'Date'[Year], "S", [Total Sales]), [S])`],
+  ['sc-column-alone', `COUNTROWS(SUMMARIZECOLUMNS('Product'[Category], "C", 'Product'[Category]))`],
+  ['sc-as-filter', `CALCULATE([Total Sales], SUMMARIZECOLUMNS('Product'[Category], TREATAS({"Widgets"}, 'Product'[Category])))`],
+  ['sc-rollup', `COUNTROWS(SUMMARIZECOLUMNS(ROLLUPADDISSUBTOTAL('Product'[Category], "IsTotal"), "S", [Total Sales]))`],
+  ['sc-ignore', `COUNTROWS(SUMMARIZECOLUMNS('Product'[Category], "B", IGNORE(BLANK())))`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

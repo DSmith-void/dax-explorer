@@ -57,7 +57,7 @@ const status = (kind: CoverageStatus, reason: string, names: string) =>
   names.split(/\s+/).filter(Boolean).map((name) => [name, { status: kind, reason }] as const);
 
 export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reason: string }> = new Map([
-  ...status('later', 'SUMMARIZECOLUMNS inside a measure, and its helpers', 'SUMMARIZECOLUMNS IGNORE ROLLUPADDISSUBTOTAL ROLLUPISSUBTOTAL NONVISUAL'),
+  ...status('excluded', "used by Power BI's own visual queries: it refused every way of writing it we tried in a measure", 'ROLLUPISSUBTOTAL'),
   ...status('later', 'calculation groups', 'SELECTEDMEASURE SELECTEDMEASURENAME SELECTEDMEASUREFORMATSTRING ISSELECTEDMEASURE'),
   ...status('later', 'needs a feature the app does not read yet (detail rows, full-text search, models in the Service)', 'DETAILROWS TEXTCONTAINS TEXTSIMILARITY EXTERNALMEASURE'),
   ...status('excluded', 'only works in visual calculations, not in measures', 'FIRST LAST LOOKUP LOOKUPWITHTOTALS MOVINGAVERAGE NEXT PREVIOUS RANGE RUNNINGSUM COLLAPSE COLLAPSEALL EXPAND EXPANDALL ISATLEVEL'),

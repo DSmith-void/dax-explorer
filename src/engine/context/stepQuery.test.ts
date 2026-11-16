@@ -223,3 +223,45 @@ describe('GENERATE rows', () => {
     expect(q).toEqual({ kind: 'none', reason: 'The tables GENERATE makes for each row are not shown yet.' });
   });
 });
+
+describe('SUMMARIZECOLUMNS values (checked in Power BI Desktop: a picked group matches SUMMARIZECOLUMNS)', () => {
+  const source = `MAXX(SUMMARIZECOLUMNS('Product'[Category], TREATAS({"Widgets", "Gadgets"}, 'Product'[Category]), "S", [Total Sales]), [S])`;
+  const setup = () => {
+    const { root } = parse(tokenize(source).tokens);
+    const binding = bind(root, { mode: 'convention', userChoices: {} });
+    const timeline = buildTimeline(root, binding, analyzeContext(root, binding, source), source);
+    return { root, binding, timeline };
+  };
+
+  it('its groups come from SUMMARIZECOLUMNS itself, with the value column in IGNORE (same groups)', () => {
+    const { root, binding, timeline } = setup();
+    const groups = timeline.find((e) => e.title === 'SUMMARIZECOLUMNS goes group by group')!;
+    const q = buildStepQuery(groups, { root, binding, source, reportFilters: [], rows: new Map() });
+    expect(q.kind === 'rows' ? q.dax : '').toContain('"@DaxExplorerValue",\nIGNORE([Total Sales])');
+  });
+
+  it("a step inside works out one picked group: its values as filters, with the filter tables", () => {
+    const { root, binding, timeline } = setup();
+    const groups = timeline.find((e) => e.title === 'SUMMARIZECOLUMNS goes group by group')!;
+    const rows = new Map<string, RowChoice>([[rowKey('root', groups.nodeId!), { columns: ["'Product'[Category]"], values: ['Gadgets'] }]]);
+    const measure = timeline.find((e) => e.nodeId !== null && e.title.includes('[Total Sales]'))!;
+    const q = buildStepQuery(measure, { root, binding, source, reportFilters: [], rows, frameKey: 'root' });
+    expect(q.kind === 'scalar' ? q.dax : '').toContain(`TREATAS({"Widgets", "Gadgets"}, 'Product'[Category]),\nTREATAS({("Gadgets")}, 'Product'[Category])`);
+  });
+});
+
+describe('SUMMARIZECOLUMNS picked group (found by the claim checker)', () => {
+  it('finds the group by its model columns only, not by its extra columns ([S])', () => {
+    const source = `MAXX(SUMMARIZECOLUMNS('Product'[Category], "S", SUM(Sales[Amount])), [S])`;
+    const { root } = parse(tokenize(source).tokens);
+    const binding = bind(root, { mode: 'convention', userChoices: {} });
+    const timeline = buildTimeline(root, binding, analyzeContext(root, binding, source), source);
+    const groups = timeline.find((e) => e.title === 'SUMMARIZECOLUMNS goes group by group')!;
+    const rows = new Map<string, RowChoice>([[rowKey('root', groups.nodeId!), { columns: ["'Product'[Category]", '[S]'], values: ['Gadgets', 125106.12] }]]);
+    const sum = timeline.find((e) => e.title === 'SUM')!;
+    const q = buildStepQuery(sum, { root, binding, source, reportFilters: [], rows, frameKey: 'root' });
+    const dax = q.kind === 'scalar' ? q.dax : '';
+    expect(dax).toContain(`TREATAS({("Gadgets")}, 'Product'[Category])`);
+    expect(dax).not.toContain('[S])');
+  });
+});

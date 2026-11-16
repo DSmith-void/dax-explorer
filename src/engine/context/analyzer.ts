@@ -1,6 +1,6 @@
 import type { BindResult } from '../binder/binder';
 import { linestColumnNames, WINDOW_FUNCTIONS, windowRelation, type ArgRole, type FunctionSpec, type ParamSpec } from '../catalog/functions';
-import { childrenOf, findNode, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall, type TableRef } from '../parser/ast';
+import { childrenOf, findNode, type AstNode, type BracketRef, type ColumnRef, type Expr, type FunctionCall, type StringLiteral, type TableRef } from '../parser/ast';
 import { createLineMap } from '../source';
 import { columnText, entryText, filterSignature, relationshipChangeText, removalText } from './describe';
 import type {
@@ -335,6 +335,11 @@ export function analyzeContext(
             const group = currentGroups[currentGroups.length - 1];
             return group ? { ...group, description: `the rows of the current group (${group.description})` } : { kind: 'unknown', description };
           }
+          // Checked in Power BI Desktop: its group columns keep their link (as a CALCULATE filter, ISFILTERED TRUE).
+          case 'SUMMARIZECOLUMNS': {
+            const columns = summarizeColumnsGroups(expr);
+            return columns.length > 0 ? { kind: 'columns', columns, description } : { kind: 'unknown', description };
+          }
           case 'GROUPBY':
           case 'SUMMARIZE': {
             // Its rows have the group-by columns (and the extra columns, which have no lineage to a table).
@@ -548,6 +553,10 @@ export function analyzeContext(
     }
     if (spec.name === 'GROUPBY') {
       visitGroupBy(node, ctx, call.params);
+      return;
+    }
+    if (spec.name === 'SUMMARIZECOLUMNS') {
+      visitSummarizeColumns(node, ctx, call.params);
       return;
     }
     if (spec.name === 'CURRENTGROUP' && currentGroups.length === 0) {
@@ -1010,6 +1019,99 @@ export function analyzeContext(
    *    (the group's rows); anything else, CALCULATE or a measure is an error;
    *  - nothing is filtered for the group: COUNTROWS(Sales) inside saw all of Sales for every group.
    */
+  /** SUMMARIZECOLUMNS's group-by columns, including those inside ROLLUPADDISSUBTOTAL and ROLLUPGROUP. */
+  function summarizeColumnsGroups(node: FunctionCall): ColumnName[] {
+    const params = binding.calls.get(node.id)?.params ?? [];
+    const columns: ColumnName[] = [];
+    node.args.forEach((arg, i) => {
+      const name = params[i]?.name;
+      if (name === 'group by column') {
+        const c = columnOf(arg);
+        if (c) columns.push(c);
+      } else if (name === 'group by' && arg.kind === 'FunctionCall') {
+        for (const inner of arg.args) {
+          const c = inner.kind === 'ColumnRef' || inner.kind === 'BracketRef' ? columnOf(inner) : null;
+          if (c) columns.push(c);
+        }
+      }
+    });
+    return columns;
+  }
+
+  /**
+   * SUMMARIZECOLUMNS inside a measure, as Power BI Desktop does it (checked on Initech):
+   *  - it follows the filters around it (under Gadgets, one group), and its own filter tables apply to the groups
+   *    and the extra columns;
+   *  - each group's values become filters for the extra columns (ISFILTERED TRUE; ALL('Product') inside removes
+   *    them: the grand total), and there is no current row (a column on its own is an error);
+   *  - a loop's row around it doesn't filter the groups (unless CALCULATE is used), but its columns can still be
+   *    read in the extra columns, and a measure there sees it through its own context transition;
+   *  - groups where every extra column is BLANK are left out (IGNORE(…) columns don't count); with columns of one
+   *    table, the combinations that exist; of different tables, every combination;
+   *  - the same name twice is an error.
+   */
+  function visitSummarizeColumns(node: FunctionCall, ctx: EvalContext, params: ParamSpec[]) {
+    const origin: FilterEntry['origin'] = { kind: 'calculate', nodeId: node.id, functionName: 'SUMMARIZECOLUMNS' };
+    node.args.forEach((arg, i) => {
+      if (params[i]?.name !== 'expression') visit(arg, ctx, params[i]?.role ?? null);
+    });
+    const groups = summarizeColumnsGroups(node);
+    // The filters the extra columns see: the filter tables, then each group's values.
+    let fc = ctx.filter;
+    node.args.forEach((arg, i) => {
+      if (params[i]?.name !== 'filter table') return;
+      const inner = arg.kind === 'FunctionCall' && specOf(arg)?.name === 'NONVISUAL' ? arg.args[0] : arg;
+      const c = inner ? tableFilter(inner, origin, 'replace') : null;
+      if (c?.kind === 'filter') fc = addFilter(fc, c.entry).fc;
+      else fc = { ...fc, caveats: [...fc.caveats, `the app can't work out the filter ${snippet(arg)} of SUMMARIZECOLUMNS`] };
+    });
+    for (const column of groups) {
+      fc = addFilter(fc, { target: { kind: 'columns', columns: [column] }, condition: "= the current group's value", origin, mode: 'replace' }).fc;
+    }
+    const inner: EvalContext = { ...ctx, filter: fc };
+    const expressions = node.args.filter((_, i) => params[i]?.name === 'expression');
+    for (const expression of expressions) visit(expression, inner, 'scalar');
+
+    // The same name twice is an error.
+    const names = node.args.filter((a, i): a is StringLiteral => params[i]?.name === 'name' && a.kind === 'StringLiteral');
+    const repeated = names.find((n, i) => names.findIndex((m) => same(m.value, n.value)) !== i);
+    if (repeated) {
+      const summary = `SUMMARIZECOLUMNS has the name "${repeated.value}" twice (an error).`;
+      const message = `Each extra column of SUMMARIZECOLUMNS needs its own name; the same name twice is an error.`;
+      insights.push({ kind: 'dax-error', nodeId: node.id, summary, message });
+    }
+
+    const byText = groups.length > 0 ? groups.map(columnText).join(', ') : null;
+    const tables = new Set(groups.map((c) => c.table.toLowerCase()));
+    const loops = readableRows(ctx);
+    record({
+      nodeId: node.id,
+      context: ctx,
+      operations: [],
+      innerContext: inner,
+      summary: repeated
+        ? `SUMMARIZECOLUMNS has the name "${repeated.value}" twice (an error).`
+        : byText
+          ? `SUMMARIZECOLUMNS groups by ${byText}, one group at a time.`
+          : 'SUMMARIZECOLUMNS gives one row, with its extra columns worked out once.',
+      notes: [
+        ...(byText
+          ? [
+              `It lists ${tables.size > 1 ? `every combination of ${byText} (they come from different tables)` : `the combinations of ${byText} that exist`} that the filters shown above allow. ${
+                expressions.length > 0 ? 'Groups where every extra column is BLANK are left out (a column wrapped in IGNORE doesn’t count).' : ''
+              }`.trim(),
+              "For the extra columns, each group's values become filters (so ALL on their table inside removes them). There is no current row: a column on its own there is an error.",
+            ]
+          : []),
+        ...(loops.length > 0
+          ? [
+              `The row of ${loops[loops.length - 1].functionName} doesn't filter the groups (unless CALCULATE is used); its columns can still be read in the extra columns, and a measure there sees it, through its own context transition.`,
+            ]
+          : []),
+      ],
+    });
+  }
+
   function visitGroupBy(node: FunctionCall, ctx: EvalContext, params: ParamSpec[]) {
     const tableArg = node.args[0];
     const groupArgs = node.args.filter((_, i) => i > 0 && params[i]?.role === 'column');

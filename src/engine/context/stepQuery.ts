@@ -216,6 +216,24 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
         expr = `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr}${filters.length > 0 ? `,\n${filters.join(',\n')}` : ''}\n)`;
         continue;
       }
+      if (name === 'SUMMARIZECOLUMNS' && call.params[argIndex]?.name === 'expression') {
+        // One group: its values as filters, with SUMMARIZECOLUMNS's own filter tables (checked in Power BI Desktop:
+        // CALCULATE([Total Sales], TREATAS({"Gadgets"}, 'Product'[Category])) matched its value for Gadgets).
+        if (hasRollup(parent)) throw new Unsupported('Groups of SUMMARIZECOLUMNS with subtotal rows are not shown yet.');
+        const choice = options.rows.get(rowKey(frame.key, parent.id));
+        if (!choice) throw new NeedsRow(frame.key, parent.id, 'SUMMARIZECOLUMNS');
+        if (table) throw new Unsupported('A table calculated for one group of SUMMARIZECOLUMNS is not shown yet.');
+        const filters = parent.args.filter((_, i) => call.params![i]?.name === 'filter table').map(text);
+        // Only the group's columns (Table[Column]): the extra columns ([S]) are in the picked row too (found by the
+        // claim checker: passing [S] to TREATAS is an error).
+        const picked = choice.columns.map((c, i) => ({ dax: columnNameDax(c), value: choice.values[i] })).filter((c) => c.dax !== null && !c.dax.startsWith('['));
+        if (picked.length === 0) throw new Unsupported('The picked group has no column to find it by.');
+        const columns = picked.map((c) => c.dax!);
+        const values = picked.map((c) => daxLiteral(c.value));
+        const group = `TREATAS({(${values.join(', ')})}, ${columns.join(', ')})`;
+        expr = `CALCULATE(\n${expr},\n${[...filters, group].join(',\n')}\n)`;
+        continue;
+      }
       if (call.spec.iteratesArgument !== undefined && call.params[argIndex]?.role === 'rowExpression') {
         const choice = options.rows.get(rowKey(frame.key, parent.id));
         if (!choice) throw new NeedsRow(frame.key, parent.id, call.spec.name);
@@ -287,6 +305,17 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
       case 'iterate': {
         if (node?.kind !== 'FunctionCall') return { kind: 'none', reason: '' };
         const call = spec(node);
+        if (call?.spec?.name === 'SUMMARIZECOLUMNS' && call.params) {
+          // Its groups, with the first extra column worked out per group: SUMMARIZECOLUMNS itself does that
+          // exactly. The value column is wrapped in IGNORE, so the groups shown are the same as without it.
+          if (hasRollup(node)) return { kind: 'none', reason: 'Groups of SUMMARIZECOLUMNS with subtotal rows are not shown yet.' };
+          const first = node.args.find((_, i) => call.params![i]?.name === 'expression');
+          const written = node.args.map(text).join(',\n');
+          const count = inContext(node, `COUNTROWS(SUMMARIZECOLUMNS(\n${written}\n))`, false);
+          if (!first) return { kind: 'table', dax: inContext(node, `SUMMARIZECOLUMNS(\n${written}\n)`, true), countDax: count };
+          const shown = `SUMMARIZECOLUMNS(\n${written},\n${daxLiteral(ROW_VALUE_COLUMN)},\nIGNORE(${text(first)})\n)`;
+          return { kind: 'rows', dax: inContext(node, shown, true), countDax: count, iteratorName: 'SUMMARIZECOLUMNS' };
+        }
         if (!call?.spec || call.spec.iteratesArgument === undefined || !call.params) return { kind: 'none', reason: '' };
         const rowArg = node.args.find((_, i) => call.params![i]?.role === 'rowExpression');
         const tableArg = node.args[call.spec.iteratesArgument];
@@ -447,4 +476,9 @@ export function rowColumns(columns: readonly string[]): { indexes: number[]; val
 export function evaluateText(query: Extract<StepQuery, { dax: string }>): string {
   if (query.kind === 'scalar' && query.visual) return `EVALUATE\n${query.dax}`;
   return query.kind === 'scalar' ? `EVALUATE\nROW("value",\n${query.dax}\n)` : `EVALUATE\n${query.dax}`;
+}
+
+/** Whether SUMMARIZECOLUMNS adds subtotal rows (ROLLUPADDISSUBTOTAL), whose groups can't be picked by value yet. */
+function hasRollup(node: AstNode): boolean {
+  return node.kind === 'FunctionCall' && node.args.some((a) => a.kind === 'FunctionCall' && a.name.toUpperCase() === 'ROLLUPADDISSUBTOTAL');
 }

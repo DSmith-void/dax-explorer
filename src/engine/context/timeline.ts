@@ -76,11 +76,12 @@ export interface TimelineEntry {
 
 /** What each iterator does with the results of its rows. */
 /** SUMMARIZE and GROUPBY go group by group. */
-const GROUPING = new Set(['SUMMARIZE', 'GROUPBY']);
+const GROUPING = new Set(['SUMMARIZE', 'GROUPBY', 'SUMMARIZECOLUMNS']);
 
 const COMBINES: Record<string, string> = {
   SUMMARIZE: 'has one row per group, with its extra columns',
   GROUPBY: 'has one row per group, with its extra columns',
+  SUMMARIZECOLUMNS: 'has one row per group, with its extra columns (groups where every extra column is BLANK are left out)',
   SUMX: 'adds up the results from every row',
   AVERAGEX: 'averages the results from every row',
   MINX: 'keeps the smallest result',
@@ -283,6 +284,21 @@ export function buildTimeline(
         depth,
       });
       if (first) walk(first, depth + 1, spec.returns === 'table' ? 'table' : 'scalar', false);
+      return;
+    }
+
+    // SUMMARIZECOLUMNS goes group by group, with no table to go through: its group columns and filters first,
+    // then its extra columns, once per group.
+    const isExtraColumn = (i: number) => spec.name === 'SUMMARIZECOLUMNS' && params[i]?.name === 'expression';
+    if (spec.name === 'SUMMARIZECOLUMNS' && node.args.some((_, i) => isExtraColumn(i))) {
+      node.args.forEach((arg, i) => {
+        if (!isExtraColumn(i)) walk(arg, depth + 1, params[i]?.role ?? null, inFilterInput);
+      });
+      add({ kind: 'iterate', nodeId: node.id, title: 'SUMMARIZECOLUMNS goes group by group', summary: step?.summary ?? '', innerContext: step?.innerContext, operations: step?.operations, depth });
+      node.args.forEach((arg, i) => {
+        if (isExtraColumn(i)) walk(arg, depth + 1, 'scalar', false);
+      });
+      add({ kind: 'iterate-done', nodeId: node.id, title: 'SUMMARIZECOLUMNS: after the last group', summary: `After the last group, SUMMARIZECOLUMNS ${COMBINES.SUMMARIZECOLUMNS}.`, depth });
       return;
     }
 

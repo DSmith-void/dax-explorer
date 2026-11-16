@@ -79,7 +79,7 @@ interface ReferenceOccurrence {
 }
 
 /** Functions that add columns by a written name ("S"), which [S] can then refer to. */
-const ADDS_COLUMNS = new Set(['ADDCOLUMNS', 'SELECTCOLUMNS', 'SUMMARIZE', 'GROUPBY', 'ROW', 'DATATABLE', 'SUBSTITUTEWITHINDEX']);
+const ADDS_COLUMNS = new Set(['ADDCOLUMNS', 'SELECTCOLUMNS', 'SUMMARIZE', 'GROUPBY', 'ROW', 'DATATABLE', 'SUBSTITUTEWITHINDEX', 'SUMMARIZECOLUMNS', 'ROLLUPADDISSUBTOTAL']);
 /** Functions whose table has a column with a fixed name (checked in Power BI Desktop: [Value] and [Date]). */
 const IMPLIED_COLUMNS: Record<string, string> = { GENERATESERIES: 'Value', CALENDAR: 'Date', CALENDARAUTO: 'Date' };
 

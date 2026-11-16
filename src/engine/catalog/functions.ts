@@ -466,6 +466,54 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('column', 'column', { optional: true, repeating: true })]],
   },
 
+  // --- SUMMARIZECOLUMNS (checked in Power BI Desktop, inside measures) ---
+  {
+    name: 'SUMMARIZECOLUMNS',
+    category: 'table',
+    returns: 'table',
+    summary: "Groups by columns, with extra columns worked out for each group (the group's values as filters); groups where every extra column is BLANK are left out.",
+    overloads: [[p('group by column', 'column'), p('more', 'scalar', { optional: true, repeating: true })]],
+    paramsFor: (args) => {
+      const params: ParamSpec[] = [];
+      for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (a.kind === 'StringLiteral') {
+          params.push(p('name', 'scalar'));
+          if (i + 1 >= args.length) return null;
+          params.push(p('expression', 'scalar'));
+          i++;
+        } else if (a.kind === 'ColumnRef' || a.kind === 'BracketRef') params.push(p('group by column', 'column'));
+        else if (isCallTo(a, 'ROLLUPADDISSUBTOTAL') || isCallTo(a, 'ROLLUPGROUP')) params.push(p('group by', 'scalar'));
+        else params.push(p('filter table', 'table'));
+      }
+      return params;
+    },
+  },
+  {
+    // Checked in Power BI Desktop: (filter table,) column, "name" … : a total row per level, its name column TRUE.
+    name: 'ROLLUPADDISSUBTOTAL',
+    category: 'table',
+    returns: 'table',
+    summary: 'Inside SUMMARIZECOLUMNS: adds subtotal rows for these group columns, with a TRUE/FALSE column saying which rows are subtotals.',
+    overloads: [[p('group by column', 'column'), p('name', 'scalar'), p('more', 'scalar', { optional: true, repeating: true })]],
+    paramsFor: (args) =>
+      args.map((a) => (a.kind === 'ColumnRef' || a.kind === 'BracketRef' ? p('group by column', 'column') : a.kind === 'StringLiteral' ? p('name', 'scalar') : p('filter table', 'table'))),
+  },
+  {
+    name: 'IGNORE',
+    category: 'other',
+    returns: 'scalar',
+    summary: "Inside SUMMARIZECOLUMNS: this extra column doesn't count when groups with only BLANK values are left out.",
+    overloads: [[p('expression', 'scalar')]],
+  },
+  {
+    name: 'NONVISUAL',
+    category: 'other',
+    returns: 'table',
+    summary: "Inside SUMMARIZECOLUMNS: a filter that, in a visual's query, doesn't change the totals (documentation). In a measure it filters like the other filters.",
+    overloads: [[p('filter table', 'table')]],
+  },
+
   // --- Grouping ---
   summarize(),
   groupBy(),

@@ -795,3 +795,36 @@ describe('RANK and ROWNUMBER ties (checked in Power BI Desktop: all tied gave 1,
     expect(run(number).step(number).notes[0]).toContain("more than one row of ALL('Product'[Category])");
   });
 });
+
+describe('SUMMARIZECOLUMNS in a measure (checked in Power BI Desktop on Initech)', () => {
+  const category = { table: 'Product', column: 'Category' };
+  const errors = (source: string) => run(source).analysis.insights.filter((i) => i.kind === 'dax-error' || i.kind === 'column-without-row-context').map((i) => i.summary);
+
+  it("the extra columns see each group's values as filters, after its filter tables", () => {
+    const source = `SUMMARIZECOLUMNS('Product'[Category], TREATAS({"Widgets"}, 'Product'[Category]), "S", [Total Sales])`;
+    const { step } = run(source);
+    expect(step(source).summary).toBe('SUMMARIZECOLUMNS groups by Product[Category], one group at a time.');
+    const entries = step('[Total Sales]').context.filter.entries;
+    expect(entries.at(-1)).toMatchObject({ target: { kind: 'columns', columns: [category] }, condition: "= the current group's value" });
+  });
+
+  it('ALL inside an extra column removes the group filter; a column on its own is an error', () => {
+    const { step } = run(`SUMMARIZECOLUMNS('Product'[Category], "A", CALCULATE([Total Sales], ALL('Product')))`);
+    expect(step(`CALCULATE([Total Sales], ALL('Product'))`).innerContext!.filter.entries).toEqual([]);
+    expect(errors(`SUMMARIZECOLUMNS('Product'[Category], "C", 'Product'[Category])`)[0]).toContain('no current row');
+  });
+
+  it("says a loop's row doesn't filter the groups, and that blank groups are left out", () => {
+    const sc = `SUMMARIZECOLUMNS('Product'[Category], "S", SUM(Sales[Amount]))`;
+    const notes = run(`SUMX(VALUES('Date'[Year]), COUNTROWS(${sc}))`).step(sc).notes.join(' ');
+    expect(notes).toContain("The row of SUMX doesn't filter the groups");
+    expect(notes).toContain('every extra column is BLANK are left out');
+    expect(run(`SUMMARIZECOLUMNS('Product'[Category], 'Customer'[Region])`).step(`SUMMARIZECOLUMNS('Product'[Category], 'Customer'[Region])`).notes[0]).toContain('every combination');
+  });
+
+  it('the same name twice is an error; as a CALCULATE filter it filters its group columns', () => {
+    expect(errors(`SUMMARIZECOLUMNS('Product'[Category], "S", 1, "S", 2)`)[0]).toContain('twice');
+    const source = `CALCULATE([Total Sales], SUMMARIZECOLUMNS('Product'[Category], TREATAS({"Widgets"}, 'Product'[Category])))`;
+    expect(run(source).step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual([{ kind: 'columns', columns: [category] }]);
+  });
+});
