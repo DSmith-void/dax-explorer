@@ -86,7 +86,9 @@ export function findCalendar(model: RelationshipModel | null, name: string): Cal
 
 /**
  * The columns a calendar function filters, from what Power BI does (checked against Power BI Desktop):
- *  - `result`: the columns of the dates it returns: the primary column of each unit.
+ *  - `result`: the columns of the dates it returns: the primary column of each unit. Its dates land on some of
+ *    them, depending on the filters coming in (with a week filter coming in, DATESYTD filters the year and week
+ *    primaries); associated columns never stay filtered.
  *  - `cleared`: the columns whose earlier filters it replaces: every column tagged with a unit (primary and
  *    associated), and the time-related ones too, except for DATEADD and SAMEPERIODLASTYEAR, which keep them.
  *    Untagged columns of the table keep their filters (Microsoft's documentation).
@@ -184,8 +186,10 @@ export function wholeTableDateRule(model: RelationshipModel, column: ColumnName)
   const isDate = (model.dateColumns ?? []).some((c) => same(c.table, column.table) && same(c.column, column.column));
   if (!isDate) return null;
   if ((model.dateTables ?? []).some((t) => same(t, column.table))) return `${column.table} is marked as a date table`;
+  // Only on the relationship's "one" side: a filter on the many side's date column (a fact table's order date)
+  // leaves the table's other filters alone (checked in Power BI Desktop).
   const keyOfRelationship = model.relationships.some(
-    (r) => (same(r.toTable, column.table) && same(r.toColumn, column.column)) || (same(r.fromTable, column.table) && same(r.fromColumn, column.column)),
+    (r) => (same(r.toTable, column.table) && same(r.toColumn, column.column) && !r.toMany) || (same(r.fromTable, column.table) && same(r.fromColumn, column.column) && !r.fromMany),
   );
   return keyOfRelationship ? `${column.table}[${column.column}] is a date column that a relationship uses` : null;
 }

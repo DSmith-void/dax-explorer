@@ -2128,10 +2128,28 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-/* Value and visual-row tables fit their box (they still scroll when there are many columns). */
+/* Value and visual-row tables fill their box, and grow wider (scrolling sideways) when they have many columns,
+   rather than squeezing each column until its text wraps a few letters per line. */
 .value-table .token-table,
 .visual-rows .token-table {
-  min-width: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.value-table .token-table th,
+.value-table .token-table td,
+.visual-rows .token-table th,
+.visual-rows .token-table td {
+  white-space: nowrap;
+}
+
+/* A long text value is cut to one line; the whole value shows on hover. */
+.value-table .cell-text {
+  display: inline-block;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
 }
 
 .value-table .token-table td.num {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { INITECH_MODEL } from '../../samples/initechModel';
 import { bind } from '../binder/binder';
+import { saysFiltered } from '../claims/claims';
 import { splitMeasureDefinition } from '../definition';
 import { tokenize } from '../lexer/lexer';
 import { parse } from '../parser/parser';
@@ -32,6 +33,13 @@ describe('time intelligence in CALCULATE', () => {
       "The report's filters, except any filter on table Date",
       'Date[Date] = every date from the start of the year up to the last date in the current filter  (added by CALCULATE)',
     ]);
+  });
+
+  it("a filter on the fact table's date column (the many side) clears nothing else (checked in Power BI Desktop)", () => {
+    const { calculate } = explain('M = CALCULATE([Total Sales], KEEPFILTERS(NOT ISBLANK(Sales[Ship Date])))');
+    expect(calculate.operations.map((op) => op.kind)).toEqual(['add-filter']);
+    const plain = explain('M = CALCULATE([Total Sales], Sales[Date] = DATE(2024, 1, 1))');
+    expect(plain.calculate.operations.map((op) => op.kind)).toEqual(['add-filter']);
   });
 
   it('without the model, it says nothing about the rest of the Date table (not guessed)', () => {
@@ -155,8 +163,22 @@ describe('calendar-based time intelligence', () => {
 
   it("replaces the filters on the calendar's columns, and names the calendar", () => {
     expect(calendarFilter("M = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Fiscal Calendar'))")).toEqual([
-      "Filter Date[Year], Date[Year Month], Date[Date] = the same dates as the current filter, one year earlier, by the calendar 'Fiscal Calendar': overwrites existing filters on the same columns",
+      "Filter Date[Year], Date[Year Month], Date[Date] (some of them, depending on the filters coming in) = the same dates as the current filter, one year earlier, by the calendar 'Fiscal Calendar': overwrites existing filters on Date[Year], Date[Year Month], Date[Date]",
     ]);
+  });
+
+  it('clears associated columns but never filters them (checked in Power BI Desktop: a week number filter is gone inside DATESYTD)', () => {
+    const withWeek: RelationshipModel = {
+      ...WITH_CALENDAR,
+      calendars: [{ name: 'Weeks', table: 'Date', groups: [{ unit: 'Year', primary: 'Year', associated: [] }, { unit: 'Date', primary: 'Date', associated: ['Month Number'] }] }],
+    };
+    const { calculate } = explain("M = CALCULATE([Total Sales], DATESYTD('Weeks'))", withWeek);
+    const op = calculate.operations[0];
+    expect(op.kind === 'add-filter' && op.entry.target).toEqual({ kind: 'columns', columns: [{ table: 'Date', column: 'Year' }, { table: 'Date', column: 'Date' }] });
+    expect(op.kind === 'add-filter' && op.entry.replaces).toContainEqual({ table: 'Date', column: 'Month Number' });
+    // Which main columns hold the dates depends on the filters coming in: the claim checker doesn't claim them.
+    expect(saysFiltered(calculate.innerContext!, { table: 'Date', column: 'Year' }, [], withWeek)).toBeNull();
+    expect(saysFiltered(calculate.innerContext!, { table: 'Date', column: 'Month Number' }, [{ kind: 'values', column: { table: 'Date', column: 'Month Number' }, values: [3] }], withWeek)).toBe(false);
   });
 
   it('keeps the filters on the rest of the Date table: no automatic REMOVEFILTERS(Date), unlike a date column', () => {
@@ -166,7 +188,7 @@ describe('calendar-based time intelligence', () => {
   });
 
   it('clears time-related columns too, except in DATEADD and SAMEPERIODLASTYEAR', () => {
-    expect(calendarFilter("M = CALCULATE([Total Sales], PARALLELPERIOD('Fiscal Calendar', -1, YEAR))")[0]).toContain('Date[Is Weekend]');
+    expect(calendarFilter("M = CALCULATE([Total Sales], PARALLELPERIOD('Fiscal Calendar', -1, YEAR))")[0]).toContain('overwrites existing filters on Date[Year], Date[Year Month], Date[Date], Date[Is Weekend]');
     expect(calendarFilter("M = CALCULATE([Total Sales], DATEADD('Fiscal Calendar', -1, YEAR))")[0]).not.toContain('Date[Is Weekend]');
   });
 

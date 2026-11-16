@@ -47,7 +47,13 @@ export function technicalOperation(op: Operation): string {
         ? `Automatic REMOVEFILTERS(${removalText(op.removal).replace(/^table /, '')}): ${op.because}`
         : `${op.functionName}: removes filters on ${removalText(op.removal)}`;
     case 'add-filter':
-      return `Filter ${entryText(op.entry)}: ${op.entry.mode === 'intersect' ? 'KEEPFILTERS, intersected with the existing filters' : 'overwrites existing filters on the same columns'}`;
+      return `Filter ${entryText(op.entry)}: ${
+        op.entry.mode === 'intersect'
+          ? 'KEEPFILTERS, intersected with the existing filters'
+          : op.entry.replaces
+            ? `overwrites existing filters on ${op.entry.replaces.map(columnText).join(', ')}`
+            : 'overwrites existing filters on the same columns'
+      }`;
     case 'relationship': {
       const [a, b] = op.change.columns.map(columnText);
       if (op.change.kind === 'use') return `USERELATIONSHIP: ${a} – ${b} becomes the active relationship`;

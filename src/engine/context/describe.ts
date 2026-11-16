@@ -51,6 +51,7 @@ export function removalText(removal: Removal): string {
 }
 
 export function entryText(entry: FilterEntry): string {
+  if (entry.someOfTarget) return `${targetText(entry.target)} (some of them, depending on the filters coming in) ${entry.condition}`;
   return `${targetText(entry.target)} ${entry.condition}`;
 }
 

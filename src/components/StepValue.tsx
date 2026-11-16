@@ -93,9 +93,16 @@ export function StepValue({ entry, query, state, connected, rowFor, onPickRow, a
                       <input type="radio" name={`rows-${iteratorNodeId}`} checked={isPicked} onChange={pick} aria-label={`Use row ${r + 1} for the steps inside`} />
                     </td>
                   )}
-                  {indexes.map((i) => (
-                    <td key={i}>{formatQueryValue(row[i])}</td>
-                  ))}
+                  {indexes.map((i) => {
+                    const text = formatQueryValue(row[i]);
+                    return (
+                      <td key={i}>
+                        <span className="cell-text" title={text}>
+                          {text}
+                        </span>
+                      </td>
+                    );
+                  })}
                   {valueIndex >= 0 && <td className="num">{formatQueryValue(row[valueIndex])}</td>}
                 </tr>
               );

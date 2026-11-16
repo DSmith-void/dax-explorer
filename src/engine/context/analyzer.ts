@@ -195,7 +195,7 @@ export function analyzeContext(
     // Overwrite: the incoming filters F on these columns no longer apply, and earlier added filters on them are replaced.
     let removals = fc.removals;
     const newRemovals: Removal[] =
-      target.kind === 'table' ? [{ kind: 'table', table: target.table, except: [] }] : target.columns.map((column) => ({ kind: 'column', column }));
+      target.kind === 'table' ? [{ kind: 'table', table: target.table, except: [] }] : (entry.replaces ?? target.columns).map((column) => ({ kind: 'column', column }));
     let replacesIncoming = false;
     for (const removal of newRemovals) {
       if (!removalAlreadyImplied(removals, removal)) {
@@ -1434,14 +1434,20 @@ export function analyzeContext(
             : `the app can't tell which dates ${name} uses: ${written} may be a calendar (calendar-based time intelligence); connect to the report to read it`,
         };
       }
-      const { cleared } = calendarColumns(calendar, name);
-      if (cleared.length === 0) {
+      // It clears every tagged column, and puts its dates back on some of the main ones (one per level of time):
+      // which ones depends on the filters coming in (checked in Power BI Desktop: with a week filter coming in,
+      // DATESYTD filters the year and week columns; the extra tagged columns, such as a week number, never stay
+      // filtered).
+      const { result, cleared } = calendarColumns(calendar, name);
+      if (result.length === 0) {
         return { kind: 'not-modeled', description: `the calendar '${calendar.name}' has no columns the app could read` };
       }
       return {
         kind: 'filter',
         entry: {
-          target: { kind: 'columns', columns: cleared },
+          target: { kind: 'columns', columns: result },
+          replaces: cleared,
+          someOfTarget: result.length > 1,
           condition: `= ${dateRuleText(name, args)}, by the calendar '${calendar.name}'`,
           origin,
           mode,

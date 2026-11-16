@@ -7,6 +7,7 @@
  * itself says "not checked", or where a filter is on a whole table (whose effect on ISFILTERED isn't a rule
  * the engine states), no claim is made rather than a guessed one.
  */
+import type { BindResult } from '../binder/binder';
 import type { ColumnName, EvalContext, InsightKind, ContextAnalysis } from '../context/model';
 import { columnDax, reportFilterColumns, reportFilterStatus, type ReportFilter } from '../context/reportFilters';
 import { expandedTables, type RelationshipModel } from '../context/relationships';
@@ -37,13 +38,20 @@ function allNodes(node: AstNode): AstNode[] {
   return [node, ...childrenOf(node).flatMap((c) => allNodes(c.node))];
 }
 
-/** The model columns written in the expression (Table[Column]), plus those of the report filters. */
-export function candidateColumns(root: Expr | null, reportFilters: readonly ReportFilter[]): ColumnName[] {
+/**
+ * The model columns written in the expression (Table[Column]), plus those of the report filters. With a binding,
+ * a measure written with its table name (Table[Measure], which DAX allows) is left out.
+ */
+export function candidateColumns(root: Expr | null, reportFilters: readonly ReportFilter[], binding?: BindResult): ColumnName[] {
   const columns: ColumnName[] = [];
   const add = (c: ColumnName) => {
     if (c.table !== '' && !columns.some((x) => sameColumn(x, c))) columns.push(c);
   };
-  if (root) for (const n of allNodes(root)) if (n.kind === 'ColumnRef') add({ table: n.table, column: n.column });
+  if (root) {
+    for (const n of allNodes(root)) {
+      if (n.kind === 'ColumnRef' && binding?.references.get(n.id)?.type !== 'measure') add({ table: n.table, column: n.column });
+    }
+  }
   for (const f of reportFilters) reportFilterColumns(f).forEach(add);
   return columns;
 }
@@ -60,7 +68,10 @@ export function saysFiltered(context: EvalContext, column: ColumnName, reportFil
   if (entries.some((e) => e.target.kind === 'table' && same(e.target.table, column.table))) return null;
   const reaches = entries.some((e) => e.target.kind === 'table' && (!model || expandedTables(model, e.target.table).some((t) => same(t, column.table))));
   if (entries.some((e) => e.target.kind === 'unknown')) return null;
-  if (entries.some((e) => e.target.kind === 'columns' && e.target.columns.some((c) => sameColumn(c, column)))) return true;
+  const inTarget = entries.filter((e) => e.target.kind === 'columns' && e.target.columns.some((c) => sameColumn(c, column)));
+  if (inTarget.some((e) => !e.someOfTarget)) return true;
+  // A calendar function's dates land on some of its columns, depending on the filters coming in: not claimed.
+  if (inTarget.length > 0) return null;
   let result = false;
   for (const f of reportFilters) {
     if (!reportFilterColumns(f).some((c) => sameColumn(c, column))) continue;

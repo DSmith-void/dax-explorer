@@ -40,6 +40,16 @@ export interface FilterEntry {
    * calendar: the calendar's name, and its date column (null when the calendar has no Date unit).
    */
   dates?: { functionName: string; column: ColumnName | null; calendar?: string };
+  /**
+   * The columns whose earlier filters it replaces, when they are more than its target: a calendar function clears
+   * every column the calendar tags, but puts its dates back only on the main ones.
+   */
+  replaces?: ColumnName[];
+  /**
+   * The filter lands on some of the target's columns, not all: which ones depends on the filters coming in (a
+   * calendar function keeps their level of detail: with a week filter coming in, year to date is by week).
+   */
+  someOfTarget?: boolean;
 }
 
 /** USERELATIONSHIP or CROSSFILTER inside CALCULATE: which relationship is used, or which way it filters. */

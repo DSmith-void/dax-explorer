@@ -41,7 +41,7 @@ export function runMeasure(definition: string, reportFilters: ReportFilter[], ro
   const analysis = analyzeContext(root, binding, definition, undefined, relationships);
   const timeline = buildTimeline(root, binding, analysis, definition);
   const options: StepQueryOptions = { root, binding, source: definition, reportFilters, rows, frameKey: 'root' };
-  const columns = candidateColumns(root, reportFilters);
+  const columns = candidateColumns(root, reportFilters, binding);
   return {
     timeline,
     analysis,
