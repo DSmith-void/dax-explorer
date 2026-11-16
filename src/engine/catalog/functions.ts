@@ -514,6 +514,30 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('filter table', 'table')]],
   },
 
+  // --- The rows behind a measure, and full-text search (checked in Power BI Desktop) ---
+  {
+    // Without a detail rows expression: the measure's own table's rows the filters allow (Gadgets: 300, as
+    // COUNTROWS(Sales)). A column is an error.
+    name: 'DETAILROWS',
+    category: 'table',
+    returns: 'table',
+    summary: "The rows behind a measure: its detail rows expression's table if it has one, otherwise the rows of the measure's own table that the filters allow.",
+    overloads: [[p('measure', 'name')]],
+  },
+  ...(['TEXTCONTAINS', 'TEXTSIMILARITY'] as const).map(
+    (name): FunctionSpec => ({
+      name,
+      category: 'text',
+      returns: 'scalar',
+      summary:
+        name === 'TEXTCONTAINS'
+          ? "Full-text search: whether a column's text contains the search text (how words are matched isn't checked yet)."
+          : "Full-text search: how similar a column's text is to the search text, as a number (documentation; not checked yet).",
+      // Checked: the first input must be a column, and DirectQuery models can't use it.
+      overloads: [[p('column', 'column'), p('search text', 'scalar'), p('options', 'scalar', { optional: true })]],
+    }),
+  ),
+
   // --- Calculation groups (checked in Power BI Desktop: outside a calculation item, each is an error, as there
   //     is no measure being rewritten) ---
   {

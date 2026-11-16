@@ -32,11 +32,10 @@ tracking down a wrong number.
 DAX Explorer **never guesses**. What a measure does is decided by explicit, tested rules; anything the
 app can't work out is marked "not checked" instead of being made up.
 
-**Function coverage:** 378 of the 412 functions on [dax.guide](https://dax.guide/functions/), plus the
-INFO functions. Each one's inputs were checked against Power BI Desktop itself. The others are listed, with
-what is planned for each, in [`src/engine/catalog/coverage.ts`](src/engine/catalog/coverage.ts). Of those,
-30 only work in visual calculations or inside Power BI's own queries; the other 4 need data the app doesn't
-read yet (detail rows, full-text search, models in the Power BI service).
+**Function coverage:** 381 of the 412 functions on [dax.guide](https://dax.guide/functions/), plus the
+INFO functions. Each one's inputs were checked against Power BI Desktop itself. The other 31 are listed, with
+the reason, in [`src/engine/catalog/coverage.ts`](src/engine/catalog/coverage.ts): each only works in visual
+calculations, inside Power BI's own queries, or in models linked to the Power BI service.
 
 ## Getting started
 

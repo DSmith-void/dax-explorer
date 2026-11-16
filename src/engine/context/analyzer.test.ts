@@ -843,3 +843,13 @@ describe('calculation item code (checked in Power BI Desktop: outside an item, t
     expect(analysis.insights.filter((i) => i.kind === 'unknown-function')).toEqual([]);
   });
 });
+
+describe('DETAILROWS (checked in Power BI Desktop on Initech)', () => {
+  it('lists the rows behind a measure; a column is an error', () => {
+    const { step } = run(`COUNTROWS(DETAILROWS([Total Sales]))`);
+    expect(step('DETAILROWS([Total Sales])').notes[0]).toContain("rows of the measure's own table that the filters here allow");
+    expect(step('[Total Sales]').summary).toBe('Not calculated: only the name of [Total Sales] is used.');
+    const errors = run(`COUNTROWS(DETAILROWS(Sales[Amount]))`).analysis.insights.filter((i) => i.kind === 'dax-error');
+    expect(errors[0].summary).toContain('needs a measure');
+  });
+});

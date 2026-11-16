@@ -100,6 +100,8 @@ const AWKWARD: LibraryMeasure[] = [
   ['sc-as-filter', `CALCULATE([Total Sales], SUMMARIZECOLUMNS('Product'[Category], TREATAS({"Widgets"}, 'Product'[Category])))`],
   ['sc-rollup', `COUNTROWS(SUMMARIZECOLUMNS(ROLLUPADDISSUBTOTAL('Product'[Category], "IsTotal"), "S", [Total Sales]))`],
   ['sc-ignore', `COUNTROWS(SUMMARIZECOLUMNS('Product'[Category], "B", IGNORE(BLANK())))`],
+  ['detailrows', `COUNTROWS(DETAILROWS([Total Sales]))`],
+  ['detailrows-column', `COUNTROWS(DETAILROWS(Sales[Amount]))`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

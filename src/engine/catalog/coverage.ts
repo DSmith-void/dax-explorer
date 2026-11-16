@@ -48,17 +48,15 @@ export const REFERENCE_FUNCTIONS: readonly string[] = `
   .filter(Boolean);
 
 export type CoverageStatus =
-  /** Later: a new concept that needs its own design (window functions, SUMMARIZECOLUMNS, calculation groups). */
-  | 'later'
-  /** Not for measures: only valid in visual calculations, or used internally by Power BI's own queries. */
-  | 'excluded';
+  /** Not for measures: only valid in visual calculations, used internally by Power BI's own queries, or only in models linked to the Power BI service. */
+  'excluded';
 
 const status = (kind: CoverageStatus, reason: string, names: string) =>
   names.split(/\s+/).filter(Boolean).map((name) => [name, { status: kind, reason }] as const);
 
 export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reason: string }> = new Map([
   ...status('excluded', "used by Power BI's own visual queries: it refused every way of writing it we tried in a measure", 'ROLLUPISSUBTOTAL'),
-  ...status('later', 'needs a feature the app does not read yet (detail rows, full-text search, models in the Service)', 'DETAILROWS TEXTCONTAINS TEXTSIMILARITY EXTERNALMEASURE'),
+  ...status('excluded', "only in models linked to a published Power BI semantic model: Power BI Desktop didn't recognize it in a local model", 'EXTERNALMEASURE'),
   ...status('excluded', 'only works in visual calculations, not in measures', 'FIRST LAST LOOKUP LOOKUPWITHTOTALS MOVINGAVERAGE NEXT PREVIOUS RANGE RUNNINGSUM COLLAPSE COLLAPSEALL EXPAND EXPANDALL ISATLEVEL'),
   ...status(
     'excluded',

@@ -1016,6 +1016,118 @@
   "expect": false
  },
  {
+  "id": "detailrows-column|gadgets-2025|1:DETAILROWS|error",
+  "expect": "error"
+ },
+ {
+  "id": "detailrows-column|gadgets-2025|1:DETAILROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|gadgets-2025|1:DETAILROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|gadgets-2025|1:DETAILROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|gadgets-2025|2:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|gadgets-2025|2:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|gadgets-2025|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|gadgets|1:DETAILROWS|error",
+  "expect": "error"
+ },
+ {
+  "id": "detailrows-column|gadgets|1:DETAILROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|gadgets|1:DETAILROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|gadgets|2:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|gadgets|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|no-filters|1:DETAILROWS|error",
+  "expect": "error"
+ },
+ {
+  "id": "detailrows-column|no-filters|1:DETAILROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|no-filters|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|year-2025|1:DETAILROWS|error",
+  "expect": "error"
+ },
+ {
+  "id": "detailrows-column|year-2025|1:DETAILROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|year-2025|1:DETAILROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows-column|year-2025|2:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows-column|year-2025|2:COUNTROWS|filtered:Sales[Amount]",
+  "expect": false
+ },
+ {
+  "id": "detailrows|gadgets-2025|1:DETAILROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|gadgets-2025|1:DETAILROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|gadgets-2025|2:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|gadgets-2025|2:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|gadgets|1:DETAILROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|gadgets|2:COUNTROWS|filtered:Product[Category]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|year-2025|1:DETAILROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
+  "id": "detailrows|year-2025|2:COUNTROWS|filtered:Date[Year]",
+  "expect": true
+ },
+ {
   "id": "dt-datatable|gadgets-2025|1:DATATABLE|filtered:Date[Year]",
   "expect": true
  },

@@ -634,6 +634,16 @@ export function analyzeContext(
         message: `ALLCROSSFILTERED removes the filters of a whole table, so its input must be a table name, such as 'Product'. To remove the filter on one column, use REMOVEFILTERS(${snippet(first, 40)}).`,
       };
     }
+    if (name === 'DETAILROWS' && first) {
+      // Checked in Power BI Desktop: DETAILROWS(Sales[Amount]) is an error ("not a valid measure reference").
+      const type = binding.references.get(first.id)?.type;
+      if (!(first.kind === 'BracketRef' || first.kind === 'ColumnRef') || type === 'column') {
+        return {
+          summary: `DETAILROWS needs a measure, not ${snippet(first, 30)} (an error here).`,
+          message: `DETAILROWS lists the rows behind a measure, so its input must be a measure, such as [Total Sales]. ${snippet(first, 40)} isn't one, so DAX shows an error.`,
+        };
+      }
+    }
     if ((name === 'NAMEOF' || name === 'TABLEOF') && first) {
       // Checked in Power BI Desktop: NAMEOF(SUM(…)) and TABLEOF(VALUES(…)) are errors; NAMEOF needs a column
       // written with its table.
@@ -772,6 +782,13 @@ export function analyzeContext(
           : [
               `Gives all values of ${node.args.map((a) => snippet(a, 30)).join(', ')}, ignoring filters, like ALL, but without the blank row (the extra row DAX adds when another table has rows with no match here).`,
             ];
+      case 'DETAILROWS':
+        return [
+          `Without a detail rows expression on ${first ? snippet(first, 30) : 'the measure'}, it gives the rows of the measure's own table that the filters here allow. With one, it gives that expression's table instead (the app doesn't read those expressions yet).`,
+        ];
+      case 'TEXTCONTAINS':
+      case 'TEXTSIMILARITY':
+        return [`${spec.summary} It can't be used on a DirectQuery model (data read straight from its source).`];
       case 'FILTERS':
         return [
           `Lists the values that the filters on ${first ? snippet(first, 30) : 'the column'} itself allow. Filters on other columns don't count, even of the same table (unlike VALUES); with no filter on it, all its values.`,
