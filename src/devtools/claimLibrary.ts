@@ -54,6 +54,15 @@ const AWKWARD: LibraryMeasure[] = [
   ['series-model-column', `MAXX(GENERATESERIES(1, 3), 'Date'[Year])`],
   ['datatable-worked-out', `MAXX(DATATABLE("A", INTEGER, {{1 + 1}}), [A])`],
   ['series-step-zero', `COUNTROWS(GENERATESERIES(1, 2, 0))`],
+  ['allnoblankrow-filter', `CALCULATE([Total Sales], ALLNOBLANKROW('Product'[Category]))`],
+  ['allnoblankrow-sales', `CALCULATE([Total Sales], ALLNOBLANKROW(Sales))`],
+  ['allcrossfiltered-sales', `CALCULATE([Total Sales], ALLCROSSFILTERED(Sales))`],
+  ['allcrossfiltered-product', `CALCULATE([Total Sales], ALLCROSSFILTERED('Product'))`],
+  ['allcrossfiltered-alone', `COUNTROWS(ALLCROSSFILTERED(Sales))`],
+  ['filters-filter', `CALCULATE([Total Sales], ALL('Product'), FILTERS('Product'[Category]))`],
+  ['filters-loop', `SUMX(FILTERS('Product'[Category]), [Total Sales])`],
+  ['filters-transition', `SUMX(VALUES('Product'[Category]), CALCULATE(COUNTROWS(FILTERS('Product'[Category]))))`],
+  ['filters-table', `COUNTROWS(FILTERS('Product'))`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

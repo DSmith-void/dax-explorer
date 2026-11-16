@@ -154,6 +154,23 @@ const SPECS: FunctionSpec[] = [
     overloads: [[p('table or column', 'tableOrColumn', { optional: true }), p('column', 'column', { optional: true, repeating: true })]],
   },
   {
+    // Checked in Power BI Desktop: on its own it gives what ALL gives, without the blank row. Inside CALCULATE it
+    // doesn't remove the filter: it replaces it with a filter on every value (ISFILTERED stays TRUE).
+    name: 'ALLNOBLANKROW',
+    category: 'filter modification',
+    returns: 'table',
+    summary: 'All rows or values, ignoring filters, like ALL, but without the extra blank row. Inside CALCULATE it replaces the filter with one on every value, rather than removing it.',
+    overloads: [[p('table or column', 'tableOrColumn'), p('column', 'column', { optional: true, repeating: true })]],
+  },
+  {
+    // Checked in Power BI Desktop: only as a CALCULATE filter (otherwise an error), and only with a table.
+    name: 'ALLCROSSFILTERED',
+    category: 'filter modification',
+    returns: 'table',
+    summary: 'Inside CALCULATE: removes every filter on a table, including filters that reach it through two-way relationships.',
+    overloads: [[p('table', 'table')]],
+  },
+  {
     name: 'KEEPFILTERS',
     category: 'filter modification',
     returns: 'table',
@@ -184,6 +201,15 @@ const SPECS: FunctionSpec[] = [
     returns: 'scalar',
     summary: 'If the filters leave exactly one value in the column, returns it; otherwise returns the fallback (BLANK if none is given).',
     overloads: [[p('column', 'column'), p('alternate result', 'scalar', { optional: true })]],
+  },
+  {
+    // Checked in Power BI Desktop: under a filter on Product[Product] only, FILTERS(Category) gave all 4
+    // categories where VALUES gave 1. It takes a column only.
+    name: 'FILTERS',
+    category: 'scope and filter inspection',
+    returns: 'table',
+    summary: "Lists the values that the filters on the column itself allow (filters on other columns don't count); with no filter on it, all its values.",
+    overloads: [[p('column', 'column')]],
   },
   columnInspection('HASONEVALUE', 'TRUE when the filters leave exactly one value in the column.'),
   columnInspection('HASONEFILTER', 'TRUE when the column itself is filtered to exactly one value.'),

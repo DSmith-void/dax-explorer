@@ -316,7 +316,10 @@ export function analyzeContext(
           case 'VALUES':
           case 'DISTINCT':
           case 'ALL':
-          case 'ALLSELECTED': {
+          case 'ALLSELECTED':
+          // Checked in Power BI Desktop: both keep their link to the model (as CALCULATE filters they filter).
+          case 'ALLNOBLANKROW':
+          case 'FILTERS': {
             const columns = args.map(columnOf);
             if (args.length > 0 && columns.every((c): c is ColumnName => c !== null)) {
               return { kind: 'columns', columns, description };
@@ -530,7 +533,7 @@ export function analyzeContext(
       if (count) visit(count, ctx, 'scalar');
       return;
     }
-    const error = madeTableError(node, spec.name);
+    const error = madeTableError(node, spec.name) ?? filterFunctionError(node, spec.name, role);
     if (error) {
       insights.push({ kind: 'dax-error', nodeId: node.id, summary: error.summary, message: error.message });
       record({ nodeId: node.id, context: ctx, operations: [], summary: error.summary, notes: [error.message] });
@@ -547,6 +550,33 @@ export function analyzeContext(
    * written out (1+1, DATE(…) and measures are errors; numbers, text, TRUE, FALSE and BLANK() work), with each
    * row in its own {…}; GENERATESERIES's step must be above zero. Only what is certain from the code is flagged.
    */
+  /**
+   * Checked in Power BI Desktop: ALLCROSSFILTERED only works as a CALCULATE filter, and with a table (a column is
+   * an error); FILTERS takes a column (a table is an error).
+   */
+  function filterFunctionError(node: FunctionCall, name: string, role: ArgRole | null): { summary: string; message: string } | null {
+    const first = node.args[0];
+    if (name === 'ALLCROSSFILTERED' && role !== 'filter') {
+      return {
+        summary: 'ALLCROSSFILTERED only works as a filter inside CALCULATE (an error here).',
+        message: 'ALLCROSSFILTERED removes filters, so it can only be one of the filters of CALCULATE or CALCULATETABLE. Used as a table, DAX shows an error. To get all the rows of a table, use ALL.',
+      };
+    }
+    if (name === 'ALLCROSSFILTERED' && first && first.kind !== 'TableRef') {
+      return {
+        summary: `ALLCROSSFILTERED takes a table, not ${snippet(first, 30)} (an error here).`,
+        message: `ALLCROSSFILTERED removes the filters of a whole table, so its input must be a table name, such as 'Product'. To remove the filter on one column, use REMOVEFILTERS(${snippet(first, 40)}).`,
+      };
+    }
+    if (name === 'FILTERS' && first?.kind === 'TableRef') {
+      return {
+        summary: 'FILTERS takes a column, not a table (an error here).',
+        message: `FILTERS lists the values the filters on one column allow, so its input must be a column, such as '${first.name}'[Column].`,
+      };
+    }
+    return null;
+  }
+
   function madeTableError(node: FunctionCall, name: string): { summary: string; message: string } | null {
     if (name === 'DATATABLE') {
       const rows = node.args[node.args.length - 1];
@@ -641,6 +671,18 @@ export function analyzeContext(
         return role === 'filter'
           ? []
           : ['Used as a table here: gives all values, ignoring filters. (It does not change the filters for anything else.)'];
+      case 'ALLNOBLANKROW':
+        return role === 'filter'
+          ? [
+              `Unlike ALL, this doesn't remove the filter on ${node.args.map((a) => snippet(a, 30)).join(', ')}: it replaces it with a filter that lets every value through, so ISFILTERED stays TRUE. The numbers are the same as with ALL.`,
+            ]
+          : [
+              `Gives all values of ${node.args.map((a) => snippet(a, 30)).join(', ')}, ignoring filters, like ALL, but without the blank row (the extra row DAX adds when another table has rows with no match here).`,
+            ];
+      case 'FILTERS':
+        return [
+          `Lists the values that the filters on ${first ? snippet(first, 30) : 'the column'} itself allow. Filters on other columns don't count, even of the same table (unlike VALUES); with no filter on it, all its values.`,
+        ];
       case 'REMOVEFILTERS':
       case 'KEEPFILTERS':
       case 'USERELATIONSHIP':
@@ -849,7 +891,7 @@ export function analyzeContext(
   // --------------------------------------------------------------- CALCULATE
 
   type FilterArgument =
-    | { kind: 'remove'; removals: Removal[]; functionName: string }
+    | { kind: 'remove'; removals: Removal[]; functionName: string; /** A part it can't work out (not checked). */ caveat?: string }
     | { kind: 'relationship'; change: RelationshipChange }
     | { kind: 'filter'; entry: FilterEntry }
     | { kind: 'not-modeled'; description: string }
@@ -912,6 +954,7 @@ export function analyzeContext(
     }
     for (const { arg, c } of classified) {
       if (c.kind !== 'remove') continue;
+      if (c.caveat) fc = { ...fc, caveats: [...fc.caveats, c.caveat] };
       for (const removal of c.removals) {
         const result = removeFilters(fc, removal);
         fc = result.fc;
@@ -982,9 +1025,11 @@ export function analyzeContext(
           c.entry.mode === 'intersect'
             ? `Adds ${entryText(c.entry)} on top of the existing filters (only inside this ${spec.name}).`
             : `Sets ${entryText(c.entry)} (only inside this ${spec.name}).`;
+        // ALLNOBLANKROW ignores the filters: its own note (how it differs from ALL) stays.
+        const ignoresFilters = arg.kind === 'FunctionCall' && specOf(arg)?.name === 'ALLNOBLANKROW';
         step.notes = [
           ...(c.entry.mode === 'intersect' ? ['Only rows that pass both this filter and the ones already there are included.'] : []),
-          `Its condition is checked using the filters from before the ${spec.name} (shown above).`,
+          ...(ignoresFilters ? step.notes : [`Its condition is checked using the filters from before the ${spec.name} (shown above).`]),
         ];
       }
     }
@@ -1206,6 +1251,28 @@ export function analyzeContext(
               return { kind: 'remove', removals: [{ kind: 'table', table: table.name, except }], functionName: 'ALLEXCEPT' };
             }
             return { kind: 'not-modeled', description: `the app can't work out ${snippet(arg)} yet` };
+          }
+          case 'ALLCROSSFILTERED': {
+            // Checked in Power BI Desktop: with one-way relationships it removes what ALL(table) removes; with
+            // CROSSFILTER(…, BOTH) it also removed a filter on Date that reached Product through Sales.
+            const table = arg.args[0];
+            if (table?.kind !== 'TableRef') return { kind: 'none' };
+            const twoWay = !model || model.relationships.some((r) => r.bothDirections || (r.fromMany && r.toMany)) || (root !== null && allNodesOf(root).some((n) => n.kind === 'FunctionCall' && specOf(n)?.name === 'CROSSFILTER'));
+            return {
+              kind: 'remove',
+              removals: [{ kind: 'table', table: table.name, except: [] }],
+              functionName: 'ALLCROSSFILTERED',
+              caveat: twoWay
+                ? `ALLCROSSFILTERED(${table.name}) also removes filters that reach ${table.name} through two-way relationships; which ones isn't checked`
+                : undefined,
+            };
+          }
+          case 'ALLNOBLANKROW': {
+            // Checked in Power BI Desktop: not a removal: it replaces the filter with one on every value
+            // (ISFILTERED stays TRUE; the total is the same as with ALL).
+            const result = tableFilter(arg, origin, mode);
+            if (result.kind === 'filter') result.entry.condition = 'every value, ignoring filters (without the blank row)';
+            return result;
           }
           case 'ALLSELECTED': {
             if (arg.args.length === 0) return { kind: 'remove', removals: [{ kind: 'visual', columns: null, table: null }], functionName: 'ALLSELECTED' };

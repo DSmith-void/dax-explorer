@@ -624,3 +624,43 @@ describe('tables made from values (checked in Power BI Desktop on Initech)', () 
     expect(errors(`GENERATESERIES(1, 2, 0.5)`)).toEqual([]);
   });
 });
+
+describe('ALLNOBLANKROW, ALLCROSSFILTERED and FILTERS (checked in Power BI Desktop on Initech)', () => {
+  const errors = (source: string, options?: BindOptions) => run(source, options).analysis.insights.filter((i) => i.kind === 'dax-error').map((i) => i.summary);
+
+  it('ALLNOBLANKROW inside CALCULATE replaces the filter rather than removing it (ISFILTERED stays TRUE)', () => {
+    const source = `CALCULATE([Total Sales], ALLNOBLANKROW('Product'[Category]))`;
+    const { step } = run(source);
+    const inner = step(source).innerContext!;
+    expect(inner.filter.entries.map((e) => e.target)).toEqual([{ kind: 'columns', columns: [{ table: 'Product', column: 'Category' }] }]);
+    expect(step(`ALLNOBLANKROW('Product'[Category])`).notes.join(' ')).toContain("doesn't remove the filter");
+  });
+
+  it('ALLNOBLANKROW on its own gives all values, without the blank row', () => {
+    const { step } = run(`COUNTROWS(ALLNOBLANKROW('Product'[Category]))`);
+    expect(step(`ALLNOBLANKROW('Product'[Category])`).notes[0]).toContain('without the blank row');
+  });
+
+  it('ALLCROSSFILTERED removes the table’s filters; with a CROSSFILTER in the code, the rest is "not checked"', () => {
+    const plain = `CALCULATE([Total Sales], ALLCROSSFILTERED('Product'))`;
+    const one = run(plain).step(plain).innerContext!.filter;
+    expect(one.removals).toEqual([{ kind: 'table', table: 'Product', except: [] }]);
+    expect(one.caveats[0]).toContain('two-way relationships'); // no model here: they can't be ruled out
+    const twoWay = `CALCULATE(CALCULATE([Total Sales], ALLCROSSFILTERED('Product')), CROSSFILTER(Sales[Product Key], 'Product'[Product Key], BOTH))`;
+    expect(run(twoWay).step(`CALCULATE([Total Sales], ALLCROSSFILTERED('Product'))`).innerContext!.filter.caveats[0]).toContain('two-way relationships');
+  });
+
+  it('ALLCROSSFILTERED is an error outside CALCULATE, or with a column', () => {
+    expect(errors(`COUNTROWS(ALLCROSSFILTERED(Sales))`)[0]).toContain('only works as a filter inside CALCULATE');
+    expect(errors(`CALCULATE([Total Sales], ALLCROSSFILTERED('Product'[Category]))`)[0]).toContain('takes a table');
+    expect(errors(`CALCULATE([Total Sales], ALLCROSSFILTERED('Product'))`)).toEqual([]);
+  });
+
+  it('FILTERS keeps its link as a CALCULATE filter, says what it lists, and takes a column only', () => {
+    const source = `CALCULATE([Total Sales], FILTERS('Product'[Category]))`;
+    const { step } = run(source);
+    expect(step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual([{ kind: 'columns', columns: [{ table: 'Product', column: 'Category' }] }]);
+    expect(run(`COUNTROWS(FILTERS('Product'[Category]))`).step(`FILTERS('Product'[Category])`).notes[0]).toContain('unlike VALUES');
+    expect(errors(`COUNTROWS(FILTERS('Product'))`)[0]).toContain('takes a column');
+  });
+});

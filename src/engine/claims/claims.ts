@@ -9,7 +9,7 @@
  */
 import type { ColumnName, EvalContext, InsightKind, ContextAnalysis } from '../context/model';
 import { columnDax, reportFilterColumns, reportFilterStatus, type ReportFilter } from '../context/reportFilters';
-import type { RelationshipModel } from '../context/relationships';
+import { expandedTables, type RelationshipModel } from '../context/relationships';
 import { buildStepQuery, type StepQuery, type StepQueryOptions } from '../context/stepQuery';
 import type { TimelineEntry } from '../context/timeline';
 import { childrenOf, findNode, type AstNode, type Expr } from '../parser/ast';
@@ -54,7 +54,11 @@ export function candidateColumns(root: Expr | null, reportFilters: readonly Repo
  */
 export function saysFiltered(context: EvalContext, column: ColumnName, reportFilters: readonly ReportFilter[], model: RelationshipModel | null): boolean | null {
   const entries = context.filter.entries;
+  // A filter on a whole table also covers the tables it reaches (its expanded table): checked in Power BI Desktop,
+  // ALLNOBLANKROW(Sales) as a filter left ISFILTERED('Product'[Category]) TRUE. Without the model, any table filter may.
+  // So "not filtered" is uncertain there; "filtered" stays certain.
   if (entries.some((e) => e.target.kind === 'table' && same(e.target.table, column.table))) return null;
+  const reaches = entries.some((e) => e.target.kind === 'table' && (!model || expandedTables(model, e.target.table).some((t) => same(t, column.table))));
   if (entries.some((e) => e.target.kind === 'unknown')) return null;
   if (entries.some((e) => e.target.kind === 'columns' && e.target.columns.some((c) => sameColumn(c, column)))) return true;
   let result = false;
@@ -64,7 +68,7 @@ export function saysFiltered(context: EvalContext, column: ColumnName, reportFil
     if (status === 'maybe-removed') return null;
     if (status === 'applies') result = true;
   }
-  return result;
+  return !result && reaches ? null : result;
 }
 
 /** The claims for one step; `analysis` gives the errors the explanation states. */

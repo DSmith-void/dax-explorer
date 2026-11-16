@@ -65,7 +65,6 @@ export const NOT_IN_CATALOG: ReadonlyMap<string, { status: CoverageStatus; reaso
     'builds or combines tables; the app needs the shape of the table it returns',
     'SUBSTITUTEWITHINDEX TOPNSKIP SAMPLE LINEST LINESTX',
   ),
-  ...status('wave-2', 'changes or reads filters in its own way', 'ALLNOBLANKROW ALLCROSSFILTERED FILTERS'),
   ...status('wave-2', 'compares a row with a starting point (START AT); takes ASC/DESC keywords', 'ISAFTER ISONORAFTER'),
   ...status('wave-2', 'its input is a name, not a value: nothing is calculated', 'NAMEOF TABLEOF'),
   ...status('later', 'window functions: a new concept (rows before or after the current one)', 'INDEX OFFSET WINDOW RANK ROWNUMBER ORDERBY PARTITIONBY MATCHBY'),
