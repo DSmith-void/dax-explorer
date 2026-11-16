@@ -391,3 +391,29 @@ describe('createLineMap', () => {
     expect(positionAt(source.length)).toEqual({ line: 4, column: 3 });
   });
 });
+
+describe('dates written as dt"…" (checked in Power BI Desktop)', () => {
+  it('reads dt"…" in any case, with an optional time, as one date token', () => {
+    expect(pairs('dt"2025-01-01" + DT"2025-01-01T13:30:00"')).toEqual([
+      ['DateTime', 'dt"2025-01-01"'],
+      ['Operator', '+'],
+      ['DateTime', 'DT"2025-01-01T13:30:00"'],
+    ]);
+    expect(diagnosticCodes('Dt"2025-01-01 13:30:00"')).toEqual([]);
+  });
+
+  it('dt with a space before the quote is a name followed by text (Power BI: a syntax error), and dt alone is a name', () => {
+    expect(pairs('dt "2025-01-01"')).toEqual([
+      ['Identifier', 'dt'],
+      ['String', '"2025-01-01"'],
+    ]);
+    expect(pairs('dt + 1')[0]).toEqual(['Identifier', 'dt']);
+  });
+
+  it('flags anything that is not year-month-day', () => {
+    for (const bad of ['dt"2025-13-01"', 'dt"2025/01/01"', 'dt"January 1, 2025"', 'dt"2025-02-30"']) {
+      expect(diagnosticCodes(bad)).toEqual(['invalid-date']);
+    }
+    expect(diagnosticCodes('dt"2024-02-29"')).toEqual([]);
+  });
+});

@@ -664,3 +664,11 @@ describe('ALLNOBLANKROW, ALLCROSSFILTERED and FILTERS (checked in Power BI Deskt
     expect(errors(`COUNTROWS(FILTERS('Product'))`)[0]).toContain('takes a column');
   });
 });
+
+describe('dates written as dt"…" (checked in Power BI Desktop)', () => {
+  it('filter like any date, and count as written-out values in DATATABLE', () => {
+    const source = `CALCULATE([Total Sales], 'Date'[Date] >= dt"2025-01-01")`;
+    expect(run(source).step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual([{ kind: 'columns', columns: [{ table: 'Date', column: 'Date' }] }]);
+    expect(run(`DATATABLE("D", DATETIME, {{dt"2025-01-01"}})`).analysis.insights.filter((i) => i.kind === 'dax-error')).toEqual([]);
+  });
+});

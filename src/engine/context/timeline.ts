@@ -231,6 +231,7 @@ export function buildTimeline(
         return;
       case 'Omitted':
       case 'Error':
+      case 'DateLiteral':
       case 'NumberLiteral':
       case 'StringLiteral':
       case 'BooleanLiteral':

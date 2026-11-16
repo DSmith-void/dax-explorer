@@ -25,6 +25,12 @@ export interface StringLiteral extends NodeBase {
   value: string;
 }
 
+/** dt"2025-01-01": a date (and time), written as text after dt. value is the text between the quotes. */
+export interface DateLiteral extends NodeBase {
+  kind: 'DateLiteral';
+  value: string;
+}
+
 /** Bare TRUE / FALSE. (TRUE() with parentheses is a FunctionCall.) */
 export interface BooleanLiteral extends NodeBase {
   kind: 'BooleanLiteral';
@@ -143,6 +149,7 @@ export interface ErrorNode extends NodeBase {
 export type Expr =
   | NumberLiteral
   | StringLiteral
+  | DateLiteral
   | BooleanLiteral
   | FunctionCall
   | ColumnRef
@@ -214,6 +221,8 @@ export function toDebugString(node: AstNode): string {
       return String(node.value);
     case 'StringLiteral':
       return JSON.stringify(node.value);
+    case 'DateLiteral':
+      return `dt${JSON.stringify(node.value)}`;
     case 'BooleanLiteral':
       return node.value ? 'TRUE' : 'FALSE';
     case 'FunctionCall':

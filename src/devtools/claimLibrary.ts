@@ -63,6 +63,8 @@ const AWKWARD: LibraryMeasure[] = [
   ['filters-loop', `SUMX(FILTERS('Product'[Category]), [Total Sales])`],
   ['filters-transition', `SUMX(VALUES('Product'[Category]), CALCULATE(COUNTROWS(FILTERS('Product'[Category]))))`],
   ['filters-table', `COUNTROWS(FILTERS('Product'))`],
+  ['dt-date-filter', `CALCULATE([Total Sales], 'Date'[Date] >= dt"2025-01-01")`],
+  ['dt-datatable', `MAXX(DATATABLE("D", DATETIME, {{dt"2025-01-01"}}), [D])`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

@@ -591,6 +591,7 @@ export function analyzeContext(
         v.kind === 'NumberLiteral' ||
         v.kind === 'StringLiteral' ||
         v.kind === 'BooleanLiteral' ||
+        v.kind === 'DateLiteral' ||
         (v.kind === 'UnaryOp' && v.operator === '-' && v.operand.kind === 'NumberLiteral') ||
         (v.kind === 'FunctionCall' && v.args.length === 0 && ['TRUE', 'FALSE', 'BLANK'].includes(v.name.toUpperCase()));
       const bad = rows.items.flatMap((row) => (row.kind === 'TableConstructor' ? row.items : [])).find((v) => !constant(v));

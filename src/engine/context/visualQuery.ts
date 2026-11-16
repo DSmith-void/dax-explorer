@@ -143,6 +143,9 @@ function literalOf(node: AstNode): FilterValue | undefined {
       return node.value;
     case 'NumberLiteral':
       return node.value;
+    case 'DateLiteral':
+      // A date on its own (with a time, it isn't a single day).
+      return /^\d{4}-\d{2}-\d{2}$/.test(node.value) ? { date: node.value } : undefined;
     case 'BooleanLiteral':
       return node.value;
     case 'UnaryOp':

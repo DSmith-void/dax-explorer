@@ -295,3 +295,10 @@ describe('span invariants', () => {
     for (const node of nodes) expect(findNode(root, node.id)).toBe(node);
   });
 });
+
+describe('dates written as dt"…"', () => {
+  it('parses as a date value, usable in comparisons and DATATABLE rows', () => {
+    expect(tree(`CALCULATE([Total Sales], 'Date'[Date] >= dt"2025-01-01")`)).toBe(`(CALCULATE [Total Sales] (>= 'Date'[Date] dt"2025-01-01"))`);
+    expect(tree('dt"2025-01-01" + 1')).toBe('(+ dt"2025-01-01" 1)');
+  });
+});

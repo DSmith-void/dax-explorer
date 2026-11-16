@@ -156,6 +156,10 @@ export function parse(allTokens: readonly Token[]): ParseResult {
         advance();
         return { kind: 'StringLiteral', id: id(), span: token.span, value: token.value };
 
+      case 'DateTime':
+        advance();
+        return { kind: 'DateLiteral', id: id(), span: token.span, value: token.value };
+
       case 'BracketedName':
         advance();
         return { kind: 'BracketRef', id: id(), span: token.span, name: token.value };

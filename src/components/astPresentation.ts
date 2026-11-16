@@ -96,6 +96,8 @@ export function presentNode(node: AstNode, source: string, binding?: BindResult 
       return { label: sourceText(node, source), kind: 'number', category: 'literal' };
     case 'StringLiteral':
       return { label: sourceText(node, source), kind: 'text', category: 'literal' };
+    case 'DateLiteral':
+      return { label: sourceText(node, source), kind: 'date', category: 'literal' };
     case 'BooleanLiteral':
       return { label: node.value ? 'TRUE' : 'FALSE', kind: 'boolean', category: 'literal' };
     case 'FunctionCall': {

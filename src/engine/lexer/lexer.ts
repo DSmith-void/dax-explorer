@@ -199,6 +199,29 @@ export function tokenize(source: string, startOffset = 0): LexResult {
       continue;
     }
 
+    // --- Date: dt"2025-01-01" or dt"2025-01-01T13:30:00", dt in any case, touching the quote. Checked in Power BI
+    //     Desktop: dt "…" (with a space) is a syntax error, and anything but year-month-day (2025/01/01, month
+    //     13, words) is an error; dt on its own is still a name (VAR dt = 1 works).
+    if ((ch === 'd' || ch === 'D') && (next === 't' || next === 'T') && source[pos + 2] === '"') {
+      pos += 2;
+      const result = readDelimited('"', false);
+      pos = result.end;
+      if (!result.terminated) {
+        pushError('unterminated-string', 'Date is not closed: expected a closing ".', start, pos);
+        continue;
+      }
+      if (!isValidDateText(result.value)) {
+        diagnostics.push({
+          severity: 'error',
+          code: 'invalid-date',
+          message: `dt"${result.value}" isn't a date DAX can read: write it as year-month-day, such as dt"2025-01-31" (a time may follow: dt"2025-01-31 13:30:00").`,
+          span: { start, end: pos },
+        });
+      }
+      tokens.push({ kind: 'DateTime', text: slice(start, pos), span: { start, end: pos }, value: result.value });
+      continue;
+    }
+
     // --- Identifier or keyword: Sales, PERCENTILE.INC, VAR ---
     if (isIdentifierStart(ch)) {
       while (isIdentifierPart(source[pos])) pos++;
@@ -256,4 +279,16 @@ export function tokenize(source: string, startOffset = 0): LexResult {
 
   tokens.push({ kind: 'EndOfInput', text: '', span: { start: length, end: length } });
   return { tokens, diagnostics };
+}
+
+/**
+ * Whether dt"…" starts with a real year-month-day date. Only what is certain is rejected: what follows the date
+ * (a time) isn't checked.
+ */
+function isValidDateText(text: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/.exec(text);
+  if (!match) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }

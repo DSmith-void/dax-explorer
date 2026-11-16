@@ -26,7 +26,9 @@ interface TokenBase {
 export type Token =
   | (TokenBase & { kind: 'Number'; value: number })
   /** "text" with "" escapes; value is the unescaped content. */
-  | (TokenBase & { kind: 'String'; value: string })
+    /** dt"2025-01-01" (a date, written as text after dt); value is the text between the quotes. */
+  | (TokenBase & { kind: 'DateTime'; value: string })
+| (TokenBase & { kind: 'String'; value: string })
   /** 'Table Name' with '' escapes; value is the unescaped name. */
   | (TokenBase & { kind: 'QuotedTableName'; value: string })
   /** [Name] with ]] escapes; value is the unescaped name. */
