@@ -79,7 +79,9 @@ interface ReferenceOccurrence {
 }
 
 /** Functions that add columns by a written name ("S"), which [S] can then refer to. */
-const ADDS_COLUMNS = new Set(['ADDCOLUMNS', 'SELECTCOLUMNS', 'SUMMARIZE', 'GROUPBY']);
+const ADDS_COLUMNS = new Set(['ADDCOLUMNS', 'SELECTCOLUMNS', 'SUMMARIZE', 'GROUPBY', 'ROW', 'DATATABLE']);
+/** Functions whose table has a column with a fixed name (checked in Power BI Desktop: [Value] and [Date]). */
+const IMPLIED_COLUMNS: Record<string, string> = { GENERATESERIES: 'Value', CALENDAR: 'Date', CALENDARAUTO: 'Date' };
 
 export function bind(root: Expr | null, options: BindOptions): BindResult {
   const result: BindResult = {
@@ -138,6 +140,7 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
         if (params?.[index]?.name === 'name' && arg.kind === 'StringLiteral') addedColumns.set(arg.value.toLowerCase(), spec.name);
       });
     }
+    if (spec && IMPLIED_COLUMNS[spec.name]) addedColumns.set(IMPLIED_COLUMNS[spec.name].toLowerCase(), spec.name);
     node.args.forEach((arg, index) => {
       const param = params?.[index];
       if (param?.role === 'keyword' && arg.kind === 'TableRef' && !arg.quoted && param.keywords?.includes(arg.name.toUpperCase())) {

@@ -83,7 +83,12 @@ export type TableShape =
    * Columns with no link to the model's columns (no lineage), such as UNION with a {…} list: as a CALCULATE
    * filter it filters nothing (checked in Power BI Desktop).
    */
-  | { kind: 'unlinked'; description: string }
+  | {
+      kind: 'unlinked';
+      description: string;
+      /** Its column names, when the code says them (GENERATESERIES: Value; ROW: the names written). */
+      names?: string[];
+    }
   | { kind: 'unknown'; description: string };
 
 export interface RowContext {

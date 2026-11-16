@@ -118,6 +118,7 @@ export function analyzeContext(
   const rowHasColumn = (row: RowContext, column: ColumnName) => {
     if (row.table.kind === 'table') return inTable(column, row.table.table);
     if (row.table.kind === 'columns') return row.table.columns.some((c) => (column.table === '' ? same(c.column, column.column) : sameColumn(c, column)));
+    if (row.table.kind === 'unlinked') return column.table === '' && (row.table.names?.some((n) => same(n, column.column)) ?? false);
     return false;
   };
 
@@ -223,6 +224,9 @@ export function analyzeContext(
     let fc = ctx.filter;
     const added: FilterEntry[] = [];
     for (const row of readableRows(ctx)) {
+      // A row with no link to the model's columns filters nothing (checked in Power BI Desktop:
+      // SUMX(GENERATESERIES(1, 2), [Total Sales]) gave twice the total).
+      if (row.table.kind === 'unlinked') continue;
       const target = targetOfShape(row.table);
       const entry: FilterEntry = {
         target,
@@ -283,6 +287,20 @@ export function analyzeContext(
             if (args[0]?.kind === 'TableConstructor') return { kind: 'unlinked', description };
             const first = args[0] ? shapeOf(args[0]) : null;
             return first?.kind === 'columns' || first?.kind === 'unlinked' ? { ...first, description } : { kind: 'unknown', description };
+          }
+          // Checked in Power BI Desktop: tables made from values have no link to the model's columns; as a
+          // CALCULATE filter each filtered nothing (the grand total, ISFILTERED FALSE). CALENDARAUTO couldn't be
+          // run on Initech (it needs a stored date column); it makes its table like CALENDAR (documentation).
+          case 'GENERATESERIES':
+            return { kind: 'unlinked', description, names: ['Value'] };
+          case 'CALENDAR':
+          case 'CALENDARAUTO':
+            return { kind: 'unlinked', description, names: ['Date'] };
+          case 'ROW':
+          case 'DATATABLE': {
+            const params = binding.calls.get(expr.id)?.params;
+            const names = args.flatMap((a, i) => (params?.[i]?.name === 'name' && a.kind === 'StringLiteral' ? [a.value] : []));
+            return { kind: 'unlinked', description, names };
           }
           case 'CURRENTGROUP': {
             const group = currentGroups[currentGroups.length - 1];
@@ -512,9 +530,58 @@ export function analyzeContext(
       if (count) visit(count, ctx, 'scalar');
       return;
     }
+    const error = madeTableError(node, spec.name);
+    if (error) {
+      insights.push({ kind: 'dax-error', nodeId: node.id, summary: error.summary, message: error.message });
+      record({ nodeId: node.id, context: ctx, operations: [], summary: error.summary, notes: [error.message] });
+      node.args.forEach((arg, i) => visit(arg, ctx, call.params![i].role));
+      return;
+    }
     const notes = genericNotes(node, spec, role);
     record({ nodeId: node.id, context: ctx, operations: [], summary: notes[0], notes });
     node.args.forEach((arg, i) => visit(arg, ctx, call.params![i].role));
+  }
+
+  /**
+   * Errors Power BI shows for tables made from values (checked in Power BI Desktop): DATATABLE's values must be
+   * written out (1+1, DATE(…) and measures are errors; numbers, text, TRUE, FALSE and BLANK() work), with each
+   * row in its own {…}; GENERATESERIES's step must be above zero. Only what is certain from the code is flagged.
+   */
+  function madeTableError(node: FunctionCall, name: string): { summary: string; message: string } | null {
+    if (name === 'DATATABLE') {
+      const rows = node.args[node.args.length - 1];
+      if (rows?.kind !== 'TableConstructor') return null;
+      if (rows.items.some((item) => item.kind !== 'TableConstructor')) {
+        return {
+          summary: "DATATABLE's rows must each be in their own {…} (an error here).",
+          message: 'DATATABLE takes its rows as a list of rows, each in its own braces: {{1, "a"}, {2, "b"}}. Values written straight in the outer braces are an error.',
+        };
+      }
+      const constant = (v: Expr) =>
+        v.kind === 'NumberLiteral' ||
+        v.kind === 'StringLiteral' ||
+        v.kind === 'BooleanLiteral' ||
+        (v.kind === 'UnaryOp' && v.operator === '-' && v.operand.kind === 'NumberLiteral') ||
+        (v.kind === 'FunctionCall' && v.args.length === 0 && ['TRUE', 'FALSE', 'BLANK'].includes(v.name.toUpperCase()));
+      const bad = rows.items.flatMap((row) => (row.kind === 'TableConstructor' ? row.items : [])).find((v) => !constant(v));
+      if (bad) {
+        return {
+          summary: `DATATABLE's values must be written out; ${snippet(bad, 30)} is worked out (an error here).`,
+          message: `DATATABLE only takes values written out in the code: numbers, text, TRUE, FALSE or BLANK(). ${snippet(bad, 40)} has to be worked out, so DAX shows an error. To build a table from values that are worked out, use a {…} list (with ROW for one row), or SELECTCOLUMNS.`,
+        };
+      }
+    }
+    if (name === 'GENERATESERIES') {
+      const step = node.args[2];
+      const value = step?.kind === 'NumberLiteral' ? step.value : step?.kind === 'UnaryOp' && step.operator === '-' && step.operand.kind === 'NumberLiteral' ? -step.operand.value : null;
+      if (value !== null && value <= 0) {
+        return {
+          summary: "GENERATESERIES's step must be above zero (an error here).",
+          message: 'GENERATESERIES counts up from the start to the end in steps; a step of zero or less is an error.',
+        };
+      }
+    }
+    return null;
   }
 
   /**
@@ -1362,6 +1429,18 @@ export function analyzeContext(
     }
     const transition = contextTransition(ctx, nodeId);
     const innermost = rows[rows.length - 1];
+    if (rows.every((r) => r.table.kind === 'unlinked')) {
+      // Checked in Power BI Desktop: SUMX(GENERATESERIES(1, 2), [Total Sales]) gave twice the total.
+      const summary = `${label}, with the filters shown: the row of ${innermost.functionName} filters nothing.`;
+      return {
+        operations: [{ kind: 'context-transition', rows, added: transition.added }] as Operation[],
+        innerContext: { filter: transition.fc, rows: ctx.rows, rowsAsFilters: ctx.rows.length, unknownReason: null },
+        summary,
+        notes: [
+          `The current row of ${innermost.functionName} would become a filter (context transition), but the rows of ${innermost.table.description} have no link to the model's columns, so it filters nothing: every row gives the same value.`,
+        ],
+      };
+    }
     const summary = `${label} for the current row of ${innermost.functionName}.`;
     if (reportInsight) {
       insights.push({
@@ -1429,6 +1508,14 @@ export function analyzeContext(
           ? `Use an aggregation such as MAX(${label}) or SUM(${label}): SUMMARIZE filters the table to the group's rows, so it works per group.`
           : `Use CALCULATE(MAX(${label})): CALCULATE turns the current row into a filter, so MAX sees that row's data. (MAX on its own would see every row.)`;
       const message = `${innermost.functionName} goes through ${innermost.table.description}, so its current row has only ${has}. ${label} isn't one of them, so there is no single value to read, and DAX shows an error. ${fix}`;
+      if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
+      return { summary, notes: [message] };
+    }
+    if (innermost.table.kind === 'unlinked' && innermost.table.names) {
+      // Checked in Power BI Desktop: MAXX(GENERATESERIES(1, 3), 'Date'[Year]) is an error.
+      const has = innermost.table.names.map((n) => `[${n}]`).join(', ');
+      const summary = `${label} isn't in the current row of ${innermost.functionName}, which has only ${has} (an error).`;
+      const message = `${innermost.functionName} goes through ${innermost.table.description}, a table made in the code: its rows have only ${has}, with no link to the model's tables. ${label} isn't one of them, so there is no single value to read, and DAX shows an error.`;
       if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
       return { summary, notes: [message] };
     }

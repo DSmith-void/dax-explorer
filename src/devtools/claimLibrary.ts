@@ -44,6 +44,16 @@ const AWKWARD: LibraryMeasure[] = [
   ['except-list-first', `CALCULATE([Total Sales], EXCEPT({"Widgets", "Gadgets"}, VALUES('Product'[Category])))`],
   ['naturaljoin-filter', `CALCULATE([Total Sales], NATURALINNERJOIN(VALUES('Product'[Category]), ALL('Product'[Category], 'Product'[Product])))`],
   ['generate-loop', `SUMX(GENERATE(VALUES('Product'[Category]), TOPN(1, VALUES('Date'[Year]))), [Total Sales])`],
+  ['datatable-filter', `CALCULATE([Total Sales], DATATABLE("Category", STRING, {{"Widgets"}}))`],
+  ['row-filter', `CALCULATE([Total Sales], ROW("Category", "Widgets"))`],
+  ['series-filter', `CALCULATE([Total Sales], GENERATESERIES(2025, 2025))`],
+  ['calendar-filter', `CALCULATE([Total Sales], CALENDAR(DATE(2025, 1, 1), DATE(2025, 12, 31)))`],
+  ['series-treatas', `CALCULATE([Total Sales], TREATAS(GENERATESERIES(2025, 2025), 'Date'[Year]))`],
+  ['series-loop', `SUMX(GENERATESERIES(1, 2), [Total Sales])`],
+  ['row-current-filters', `MAXX(ROW("S", [Total Sales]), [S])`],
+  ['series-model-column', `MAXX(GENERATESERIES(1, 3), 'Date'[Year])`],
+  ['datatable-worked-out', `MAXX(DATATABLE("A", INTEGER, {{1 + 1}}), [A])`],
+  ['series-step-zero', `COUNTROWS(GENERATESERIES(1, 2, 0))`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

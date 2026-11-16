@@ -280,6 +280,38 @@ const SPECS: FunctionSpec[] = [
     }),
   ),
 
+  // --- Tables made from values (checked in Power BI Desktop: no link to the model's columns, so as a CALCULATE
+  //     filter, or as the row of a loop turned into a filter, each filters nothing) ---
+  dataTable(),
+  {
+    name: 'ROW',
+    category: 'table',
+    returns: 'table',
+    summary: 'A table with one row: each column is named in the code and worked out with the filters here.',
+    overloads: [[p('name', 'scalar', { repeating: true }), p('expression', 'scalar', { repeating: true })]],
+  },
+  {
+    name: 'GENERATESERIES',
+    category: 'table',
+    returns: 'table',
+    summary: 'A one-column table of numbers (or dates) from a start to an end, in steps (1 by default); its column is [Value].',
+    overloads: [[p('start', 'scalar'), p('end', 'scalar'), p('step', 'scalar', { optional: true })]],
+  },
+  {
+    name: 'CALENDAR',
+    category: 'table',
+    returns: 'table',
+    summary: 'A one-column table of every date from a start date to an end date; its column is [Date].',
+    overloads: [[p('start date', 'scalar'), p('end date', 'scalar')]],
+  },
+  {
+    name: 'CALENDARAUTO',
+    category: 'table',
+    returns: 'table',
+    summary: "A one-column table of dates covering whole years around the dates stored in the model's date columns; its column is [Date].",
+    overloads: [[p('last month of the year', 'scalar', { optional: true })]],
+  },
+
   // --- Grouping ---
   summarize(),
   groupBy(),
@@ -590,6 +622,29 @@ function summarize(): FunctionSpec {
  */
 function groupBy(): FunctionSpec {
   return grouping('GROUPBY', 'Groups the rows of a table by some columns; extra columns add up each group’s rows with SUMX(CURRENTGROUP(), …) and the like.');
+}
+
+/**
+ * DATATABLE(name, type, …, {{values}, …}): name/type pairs, then the rows. Checked in Power BI Desktop: the
+ * values must be written out (even 1+1 is an error).
+ */
+function dataTable(): FunctionSpec {
+  const name = p('name', 'scalar');
+  const type = p('type', 'keyword', { keywords: ['INTEGER', 'DOUBLE', 'STRING', 'BOOLEAN', 'CURRENCY', 'DATETIME'] });
+  const data = p('rows', 'table');
+  return {
+    name: 'DATATABLE',
+    category: 'table',
+    returns: 'table',
+    summary: 'A table typed out in the code: column names and types, then the rows of values.',
+    overloads: [[name, type, data, p('more names, types and rows', 'scalar', { optional: true, repeating: true })]],
+    paramsFor: (args) => {
+      if (args.length < 3 || (args.length - 1) % 2 !== 0) return null;
+      const params: ParamSpec[] = [];
+      for (let i = 0; i < args.length - 1; i += 2) params.push(name, type);
+      return [...params, data];
+    },
+  };
 }
 
 /** SUMMARIZE and GROUPBY: group-by columns until the first text name, then name/expression pairs. */

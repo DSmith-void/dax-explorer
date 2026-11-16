@@ -87,8 +87,10 @@ export function claimsForStep(
   const stated = analysis.insights.find((i) => i.nodeId === entry.nodeId && ERROR_KINDS.includes(i.kind));
   if (stated && entry.kind !== 'filter-input') {
     const q = buildStepQuery(entry, options);
-    if (q.kind === 'scalar' || q.kind === 'needs-row') {
-      claims.push({ id: `${prefix}|error`, step: entry.title, says: `this is an error in DAX (${stated.summary})`, expect: 'error', query: queryOf(q) });
+    // A table is asked through its row count: COUNTROWS fails when the table does.
+    const query = q.kind === 'table' ? q.countDax : queryOf(q);
+    if (q.kind === 'scalar' || q.kind === 'needs-row' || q.kind === 'table') {
+      claims.push({ id: `${prefix}|error`, step: entry.title, says: `this is an error in DAX (${stated.summary})`, expect: 'error', query });
     }
   }
 

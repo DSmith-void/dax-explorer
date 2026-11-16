@@ -577,3 +577,50 @@ describe('functions that combine tables (checked in Power BI Desktop on Initech)
     expect(inner.rows.map((r) => r.functionName)).toEqual(['GENERATE']);
   });
 });
+
+describe('tables made from values (checked in Power BI Desktop on Initech)', () => {
+  it('as a CALCULATE filter, each filters nothing', () => {
+    for (const filter of [`DATATABLE("Category", STRING, {{"Widgets"}})`, `ROW("Category", "Widgets")`, `GENERATESERIES(2025, 2025)`, `CALENDAR(DATE(2025, 1, 1), DATE(2025, 12, 31))`, `CALENDARAUTO()`]) {
+      const source = `CALCULATE([Total Sales], ${filter})`;
+      const { step } = run(source);
+      expect(step(source).innerContext!.filter.entries).toEqual([]);
+      expect(step(filter).summary).toContain('filters nothing here');
+    }
+  });
+
+  it('in a loop, the row filters nothing when it becomes a filter (twice the total for two rows)', () => {
+    const { step } = run(`SUMX(GENERATESERIES(1, 2), [Total Sales])`);
+    const measure = step('[Total Sales]');
+    expect(measure.innerContext!.filter.entries).toEqual([]);
+    expect(measure.summary).toContain('filters nothing');
+  });
+
+  it('knows their columns: [Value], [Date], and the names written in ROW and DATATABLE', () => {
+    expect(run(`SUMX(GENERATESERIES(1, 3), [Value])`).step('[Value]').summary).toBe('Reads [Value] from the row that SUMX is currently on.');
+    expect(run(`MAXX(CALENDAR(DATE(2025, 1, 1), DATE(2025, 1, 3)), [Date])`).step('[Date]').summary).toBe('Reads [Date] from the row that MAXX is currently on.');
+    expect(run(`MAXX(ROW("S", [Total Sales]), [S])`).step('[S]').summary).toBe('Reads [S] from the row that MAXX is currently on.');
+    expect(run(`MAXX(DATATABLE("A", INTEGER, {{1}, {2}}), [A])`).step('[A]').summary).toBe('Reads [A] from the row that MAXX is currently on.');
+  });
+
+  it("a model column isn't in their rows (an error)", () => {
+    const { step, analysis } = run(`MAXX(GENERATESERIES(1, 3), 'Date'[Year])`);
+    expect(step(`'Date'[Year]`).summary).toBe("'Date'[Year] isn't in the current row of MAXX, which has only [Value] (an error).");
+    expect(analysis.insights.map((i) => i.kind)).toContain('column-without-row-context');
+  });
+
+  it('DATATABLE values must be written out, each row in its own {…}', () => {
+    const errors = (source: string) => run(source).analysis.insights.filter((i) => i.kind === 'dax-error').map((i) => i.summary);
+    expect(errors(`DATATABLE("A", INTEGER, {{1}, {-2}, {BLANK()}})`)).toEqual([]);
+    expect(errors(`DATATABLE("A", BOOLEAN, "B", STRING, {{TRUE(), "x"}})`)).toEqual([]);
+    expect(errors(`DATATABLE("A", INTEGER, {{1 + 1}})`)[0]).toContain('must be written out; 1 + 1 is worked out');
+    expect(errors(`DATATABLE("A", INTEGER, {{[Total Sales]}})`)).toHaveLength(1);
+    expect(errors(`DATATABLE("A", INTEGER, {1, 2})`)[0]).toContain('in their own {…}');
+  });
+
+  it('GENERATESERIES step must be above zero', () => {
+    const errors = (source: string) => run(source).analysis.insights.filter((i) => i.kind === 'dax-error');
+    expect(errors(`GENERATESERIES(1, 2, 0)`)).toHaveLength(1);
+    expect(errors(`GENERATESERIES(1, 2, -1)`)).toHaveLength(1);
+    expect(errors(`GENERATESERIES(1, 2, 0.5)`)).toEqual([]);
+  });
+});

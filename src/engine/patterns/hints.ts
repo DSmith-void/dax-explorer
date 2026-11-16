@@ -509,9 +509,10 @@ export function findHints(input: HintInput): Hint[] {
       title: 'This filter filters nothing',
       code: arg ? oneLine(text(arg)) : undefined,
       why:
-        `${insight.message} This happens when a UNION mixes different columns or a {…} list, or when EXCEPT or ` +
-        `INTERSECT starts with a {…} list: the result has values, but no link to a column of the model. Start with ` +
-        `a model column (VALUES('Table'[Column]) or a filter on it), or use TREATAS to link a list to a column.`,
+        `${insight.message} This happens with a table made in the code (DATATABLE, ROW, GENERATESERIES, CALENDAR, a {…} ` +
+        `list), when a UNION mixes different columns or such a list, or when EXCEPT or INTERSECT starts with one: the ` +
+        `result has values, but no link to a column of the model. Start with a model column (VALUES('Table'[Column]) or ` +
+        `a filter on it), or use TREATAS to link the values to a column: TREATAS(GENERATESERIES(2025, 2025), 'Date'[Year]).`,
     });
   }
 
