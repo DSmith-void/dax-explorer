@@ -87,6 +87,9 @@ const AWKWARD: LibraryMeasure[] = [
   ['rank-categories', `RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`],
   ['rownumber-categories', `ROWNUMBER(ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`],
   ['rank-in-loop', `MAXX(VALUES('Product'[Category]), RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC)))`],
+  ['offset-two-after', `CALCULATE([Total Sales], OFFSET(2, ALL('Date'[Year])))`],
+  ['index-last-year', `CALCULATE([Total Sales], INDEX(-1, ALL('Date'[Year]), ORDERBY('Date'[Year], ASC)))`],
+  ['rownumber-years', `ROWNUMBER(ALL('Date'[Year]), ORDERBY('Date'[Year], DESC))`],
   ['generateall-loop', `COUNTROWS(GENERATEALL(VALUES('Product'[Category]), CALCULATETABLE(VALUES('Date'[Year]))))`],
 ].map(([id, expression]) => ({ id, definition: `Check ${id} = ${expression}` }));
 

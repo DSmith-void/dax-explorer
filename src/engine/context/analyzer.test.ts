@@ -783,3 +783,15 @@ describe('window functions (checked in Power BI Desktop on Initech)', () => {
     expect(run(offset).step(offset).notes.join(' ')).toContain("within each value of 'Date'[Year] separately");
   });
 });
+
+describe('RANK and ROWNUMBER ties (checked in Power BI Desktop: all tied gave 1,1,1,1 and 1,2,3,4)', () => {
+  it('says how ties are numbered', () => {
+    const dense = `RANK(DENSE, ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`;
+    expect(run(dense).step(dense).notes.join(' ')).toContain('(1, 1, 2)');
+    const skip = `RANK(SKIP, ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`;
+    expect(run(skip).step(skip).notes.join(' ')).toContain('(1, 1, 3)');
+    const number = `ROWNUMBER(ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`;
+    expect(run(number).step(number).notes.join(' ')).toContain('every row gets its own number');
+    expect(run(number).step(number).notes[0]).toContain("more than one row of ALL('Product'[Category])");
+  });
+});

@@ -882,9 +882,19 @@ export function analyzeContext(
           ? `The current row is the row ${loop.functionName} is on.`
           : `The current row comes from the filters here: the row of ${table} they leave. ${
               scalar
-                ? 'When they leave more than one (on a total, for example), it gives BLANK.'
-                : 'When they leave more than one (on a total, for example), it does this for each of them and returns all the rows it finds together.'
+                ? `When they leave more than one row of ${table} (on a total, for example), it gives BLANK: it can only return one number.`
+                : `When they leave more than one row of ${table} (on a total, for example), it does this for each of them and returns all the rows it finds together.`
             }`,
+      // Checked in Power BI Desktop: with every row tied, RANK(SKIP) gave 1 to all four categories, and ROWNUMBER
+      // gave 1 to 4 in the order of the table's other column (alphabetically).
+      ...(spec.name === 'RANK'
+        ? [
+            node.args[0]?.kind === 'TableRef' && node.args[0].name.toUpperCase() === 'DENSE'
+              ? 'Tied rows share a rank, and the next rank follows on (1, 1, 2).'
+              : 'Tied rows share a rank, and the next rank skips ahead (1, 1, 3).',
+          ]
+        : []),
+      ...(spec.name === 'ROWNUMBER' ? ["Ties are broken by the table's other columns, so every row gets its own number."] : []),
       ...(partitionBy ? [`It counts within each value of ${partitionBy.args.map((a) => snippet(a, 30)).join(', ')} separately.`] : []),
       ...(orderBy ? [`ORDERBY's expressions are worked out for each row of ${table}, to sort them (ASC unless DESC).`] : []),
       ...(written ? [] : [`No table is written, so it uses ${table}: the rows the visual's filters allow, so the result depends on how the visual is built.`]),

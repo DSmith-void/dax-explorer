@@ -71,6 +71,59 @@ export function saysFiltered(context: EvalContext, column: ColumnName, reportFil
   return !result && reaches ? null : result;
 }
 
+/**
+ * Window functions, where the explanation says the current row comes from the filters, and the table is
+ * ALL(one column) sorted by that column (or by anything, for RANK and ROWNUMBER). The expected answer is worked
+ * out separately, in plain DAX, from what the explanation says:
+ *  - RANK and ROWNUMBER give BLANK exactly when the filters leave more than one value of the column;
+ *  - OFFSET(n) works from each value left and returns the rows it finds together: one for each value that has a
+ *    row n away;
+ *  - INDEX(n) picks one row by position, whatever the current row is.
+ */
+function windowClaims(entry: TimelineEntry, node: AstNode, options: StepQueryOptions, analysis: ContextAnalysis, prefix: string): Claim[] {
+  if (node.kind !== 'FunctionCall') return [];
+  const name = node.name.toUpperCase();
+  if (!['RANK', 'ROWNUMBER', 'OFFSET', 'INDEX'].includes(name)) return [];
+  const notes = analysis.steps.get(node.id)?.notes ?? [];
+  const fromFilters = notes.some((n) => n.startsWith('The current row comes from the filters') || n.startsWith('It picks by position'));
+  if (!fromFilters) return [];
+  const text = (n: AstNode) => options.source.slice(n.span.start, n.span.end);
+  const isCall = (a: Expr, fn: string) => a.kind === 'FunctionCall' && a.name.toUpperCase() === fn;
+  // The table: ALL(one Table[Column]); nothing else written but ORDERBY.
+  const relation = node.args.find((a) => isCall(a, 'ALL'));
+  const column = relation?.kind === 'FunctionCall' && relation.args.length === 1 && relation.args[0].kind === 'ColumnRef' ? relation.args[0] : null;
+  if (!column) return [];
+  const orderBy = node.args.find((a) => isCall(a, 'ORDERBY'));
+  const others = node.args.filter((a) => a !== relation && a !== orderBy && a !== node.args[0]);
+  const c = text(column);
+  const ask = (id: string, says: string, condition: string): Claim | null => {
+    const q = buildStepQuery({ ...entry, kind: 'function', nodeId: node.id }, { ...options, replace: { nodeId: node.id, dax: `IF(${condition}, 1, 0)` } });
+    if (q.kind !== 'scalar' && q.kind !== 'needs-row') return null;
+    return { id: `${prefix}|${id}`, step: entry.title, says, expect: true, query: q.kind === 'scalar' ? q.dax : null };
+  };
+  if (name === 'RANK' || name === 'ROWNUMBER') {
+    // RANK's first input may be SKIP/DENSE; nothing else but the table and ORDERBY.
+    if (others.some((a) => !(a.kind === 'TableRef' && ['SKIP', 'DENSE'].includes(a.name.toUpperCase())))) return [];
+    const claim = ask('window:blank-on-several', `${name} is BLANK exactly when the filters leave more than one value of ${c}`, `ISBLANK(${text(node)}) = (COUNTROWS(VALUES(${c})) > 1)`);
+    return claim ? [claim] : [];
+  }
+  // OFFSET and INDEX: a whole-number position, sorted by the column itself (or by the table's own column).
+  const position = node.args[0];
+  const n = position?.kind === 'NumberLiteral' ? position.value : position?.kind === 'UnaryOp' && position.operator === '-' && position.operand.kind === 'NumberLiteral' ? -position.operand.value : null;
+  if (n === null || !Number.isInteger(n) || others.length > 0) return [];
+  if (orderBy && !(orderBy.kind === 'FunctionCall' && orderBy.args.length >= 1 && text(orderBy.args[0]) === c && orderBy.args.slice(1).every((a) => a.kind === 'TableRef' && a.name.toUpperCase() === 'ASC'))) return [];
+  const count = `COUNTROWS(${text(node)}) + 0`;
+  const claim =
+    name === 'OFFSET'
+      ? ask(
+          'window:rows-from-each',
+          `OFFSET works from each value of ${c} the filters leave and returns the rows ${n} away together`,
+          `${count} = COUNTROWS(FILTER(VALUES(${c}), VAR p = COUNTROWS(FILTER(ALL(${c}), ${c} <= EARLIER(${c}))) + (${n}) RETURN p >= 1 && p <= COUNTROWS(ALL(${c})))) + 0`,
+        )
+      : ask('window:one-row', `INDEX picks one row by position, whatever the filters leave`, `${count} = IF(COUNTROWS(VALUES(${c})) > 0 && ABS(${n}) <= COUNTROWS(ALL(${c})) && ${n} <> 0, 1, 0)`);
+  return claim ? [claim] : [];
+}
+
 /** The claims for one step; `analysis` gives the errors the explanation states. */
 export function claimsForStep(
   entry: TimelineEntry,
@@ -97,6 +150,9 @@ export function claimsForStep(
       claims.push({ id: `${prefix}|error`, step: entry.title, says: `this is an error in DAX (${stated.summary})`, expect: 'error', query });
     }
   }
+
+  // 1b. What a window function's explanation says about its current rows (see windowClaims).
+  claims.push(...windowClaims(entry, node, options, analysis, prefix));
 
   // 2. Which columns are filtered: asked where the step's calculation happens (inside CALCULATE: its first input).
   if (['start', 'enter', 'return', 'result', 'filter-input', 'unknown', 'iterate-done'].includes(entry.kind)) return claims;
