@@ -11,10 +11,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createHelperClient } from '../app/helperClient';
-import type { FilterValue } from '../engine/context/reportFilters';
-import { buildStepQuery, rowColumns, rowKey, type RowChoice } from '../engine/context/stepQuery';
 import { CLAIM_LIBRARY, CLAIM_SCENARIOS } from './claimLibrary';
-import { runMeasure } from './claimRun';
+import { askMeasure } from './claimAsk';
 
 declare const process: { env: Record<string, string | undefined> };
 const live = process.env.CLAIMS_LIVE === '1';
@@ -35,44 +33,11 @@ describe.skipIf(!live)('claim checker (live, Initech only)', () => {
     let asked = 0;
     for (const measure of CLAIM_LIBRARY) {
       for (const scenario of CLAIM_SCENARIOS) {
-        const rows = new Map<string, RowChoice>();
-        const run = runMeasure(measure.definition, scenario.filters, rows);
-        // Pick the first row of each loop, in order, as the app does.
-        for (const entry of run.timeline) {
-          if (entry.kind !== 'iterate' || entry.nodeId === null) continue;
-          const q = buildStepQuery(entry, run.options);
-          if (q.kind !== 'rows') continue;
-          try {
-            const result = await client.evaluate('table', q.dax, 1);
-            if (result.rows.length === 0) continue;
-            const { indexes } = rowColumns(result.columns);
-            rows.set(rowKey('root', entry.nodeId), { columns: indexes.map((i) => result.columns[i]), values: indexes.map((i) => result.rows[0][i] as FilterValue) });
-          } catch {
-            // No row to pick: the steps inside stay unasked.
-          }
-        }
-        for (const claim of run.claims()) {
-          const id = `${measure.id}|${scenario.id}|${claim.id}`;
-          if (!claim.query) {
-            unaskable.push(`${id}: needs a picked row`);
-            continue;
-          }
-          asked++;
-          let answer: boolean | string;
-          try {
-            const value = (await client.evaluate('scalar', claim.query)).rows[0]?.[0];
-            // ISFILTERED is asked as 1/0 (see claims.ts); other answers are reported as they are.
-            answer = typeof value === 'boolean' ? value : value === 1 ? true : value === 0 ? false : `the value ${JSON.stringify(value)}`;
-          } catch (e) {
-            answer = claim.expect === 'error' ? 'error' : `an error: ${(e as Error).message.slice(0, 200)}`;
-          }
-          if (answer === claim.expect) confirmed.push({ id, expect: claim.expect });
-          else {
-            disagreements.push(
-              `- **${measure.id}** under *${scenario.id}*, step "${claim.step}": the app says ${claim.says}; Power BI says ${typeof answer === 'boolean' ? String(answer).toUpperCase() : answer}`,
-            );
-          }
-        }
+        const result = await askMeasure(client, measure.id, measure.definition, scenario);
+        asked += result.asked;
+        confirmed.push(...result.confirmed);
+        disagreements.push(...result.disagreements);
+        unaskable.push(...result.unaskable);
       }
     }
     const report = [

@@ -103,6 +103,19 @@ CLAIMS_LIVE=1 CLAIMS_HELPER=http://127.0.0.1:5093 DAXEXPLORER_HELPER_TOKEN=<toke
 It writes `src/devtools/claims.report.md` and the claims Power BI confirmed (`claims.confirmed.json`); the
 normal tests then fail if a confirmed claim changes.
 
+**Claim checker on your own model.** The same check can run on the measures of any report the helper is
+connected to, naming that report (it refuses any other). It picks a few report filters from the columns
+those measures use, and also reports how much of each measure the app can explain ("not checked" steps, and
+functions it doesn't know). Read-only: every query is an `EVALUATE`.
+
+```sh
+CLAIMS_MODEL="<report name>" CLAIMS_HELPER=http://127.0.0.1:5093 DAXEXPLORER_HELPER_TOKEN=<token> npx vitest run src/devtools/modelCheck
+```
+
+The report holds your measures' names and code, so it is written to your temp folder
+(`dax-explorer-claims/<report name>.md`), outside the repository; `CLAIMS_OUT` sets another path. Don't
+commit it.
+
 Project layout:
 
 - `src/engine/`: the DAX engine (lexer, parser, function catalog, binder, the context analysis, the

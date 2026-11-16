@@ -9,7 +9,7 @@ import { Icon } from '../components/Icons';
 import { MeasurePicker } from '../components/MeasurePicker';
 import { ReportFiltersContext } from '../components/reportFiltersContext';
 import { RelationshipContext } from '../components/relationshipContext';
-import { relationshipFromInfo, type RelationshipModel } from '../engine/context/relationships';
+import type { RelationshipModel } from '../engine/context/relationships';
 import { INITECH_MODEL } from '../samples/initechModel';
 import { ReportFiltersPanel } from '../components/ReportFiltersPanel';
 import { TimelineBar } from '../components/StepControls';
@@ -34,7 +34,7 @@ import { listProblems, problemCount } from './problems';
 import { clamp, LEFT_MAX, LEFT_MIN, useLayout } from './layout';
 import { CollapseButton, PaneStrip, Splitter } from '../components/Splitter';
 import { createHelperClient, takeHelperToken, tokenFromHash, type ConnectionInfo, type ModelMetadata } from './helperClient';
-import { measureDefinitionText, toModelSnapshot } from './modelConversion';
+import { measureDefinitionText, toModelSnapshot, toRelationshipModel } from './modelConversion';
 import { usePersistentState } from './usePersistentState';
 import { useStepValues } from './useStepValues';
 import { useDesktopVisuals } from './useDesktopVisuals';
@@ -117,25 +117,7 @@ export function App() {
   // for the built-in examples (someone's own DAX may use the same table names in a different model).
   const isBuiltInExample = result !== null && SAMPLE_MEASURES.some((s) => s.expression === result.text);
   const relationships = useMemo((): RelationshipModel | null => {
-    if (connectedModel) {
-      return {
-        source: 'report',
-        // Power BI's automatic date tables (one hidden table per date column) are left out of the drawing.
-        tables: connectedModel.model.tables.filter((t) => !/^(LocalDateTable|DateTableTemplate)_/.test(t.name)).map((t) => t.name),
-        relationships: connectedModel.model.relationships.map(relationshipFromInfo),
-        dateColumns: connectedModel.model.columns.filter((c) => /^date/i.test(c.dataType)).map((c) => ({ table: c.table, column: c.name })),
-        dateTables: connectedModel.model.tables.filter((t) => t.dataCategory?.toLowerCase() === 'time').map((t) => t.name),
-        sortBy: connectedModel.model.columns.flatMap((c) =>
-          c.sortByColumn ? [{ column: { table: c.table, column: c.name }, by: { table: c.table, column: c.sortByColumn } }] : [],
-        ),
-        calendars: (connectedModel.model.calendars ?? []).map((c) => ({
-          name: c.name,
-          table: c.table,
-          groups: c.groups.map((g) => ({ unit: g.unit, primary: g.primaryColumn, associated: g.associatedColumns })),
-        })),
-        calculationGroups: (connectedModel.model.calculationGroups ?? []).map((g) => ({ table: g.table, items: g.items.map((i) => i.name) })),
-      };
-    }
+    if (connectedModel) return toRelationshipModel(connectedModel.model);
     return isBuiltInExample ? INITECH_MODEL : null;
   }, [connectedModel, isBuiltInExample]);
   const bindOptions = useMemo(
