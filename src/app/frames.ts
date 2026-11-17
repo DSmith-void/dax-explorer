@@ -11,6 +11,7 @@ import type { CallerFrame } from '../engine/context/stepQuery';
 import { buildTimeline, type TimelineEntry } from '../engine/context/timeline';
 import { childrenOf, findNode, type AstNode } from '../engine/parser/ast';
 import { analyze, type AnalysisResult } from './analysis';
+import { inlineCall } from '../engine/userFunctions';
 import { measureDefinitionText } from './modelConversion';
 
 export interface Frame {
@@ -26,6 +27,8 @@ export interface Frame {
   caller: { frame: Frame; callNodeId: number } | null;
   /** 0 for the measure being explained, 1 for a measure it calls, and so on. */
   level: number;
+  /** A measure, or a function of the model stepped into (its code as if written at the call). */
+  kind: 'measure' | 'function';
 }
 
 /** A step of the flat timeline: `index` is its place in the flat timeline, `localIndex` in its own measure's. */
@@ -40,6 +43,8 @@ export type FrameOptions = BindOptions & { relationships?: RelationshipModel | n
 export interface MeasureDefinition {
   name: string;
   expression: string;
+  /** A function of the model: `expression` is its code as if written at the call (see inlineCall). */
+  kind?: 'measure' | 'function';
 }
 
 /** How deep measures can be stepped into (a safety net; real models rarely go past a few levels). */
@@ -47,25 +52,29 @@ export const MAX_LEVEL = 8;
 
 export const frameName = (result: AnalysisResult) => (result.header ? `[${result.header.name}]` : 'this expression');
 
-/** The filters a measure's code starts with when called from `callNodeId`: the caller's, after context transition. */
-function callerContext(frame: Frame, callNodeId: number): EvalContext | null {
+/**
+ * The filters a measure's code starts with when called from `callNodeId`: the caller's, after context transition.
+ * A function's code starts with the caller's filters and rows as they are: calling it adds no context transition.
+ */
+function callerContext(frame: Frame, callNodeId: number, kind: Frame['kind']): EvalContext | null {
   const step = frame.analysis?.steps.get(callNodeId);
   if (!step) return null;
+  if (kind === 'function') return step.context;
   // Inside a measure, the caller's rows can't be read any more: context transition turned them into filters.
   return { ...(step.innerContext ?? step.context), rows: [] };
 }
 
-export function buildFrame(result: AnalysisResult, bindOptions: FrameOptions, caller: Frame['caller'] = null): Frame {
+export function buildFrame(result: AnalysisResult, bindOptions: FrameOptions, caller: Frame['caller'] = null, kind: Frame['kind'] = 'measure'): Frame {
   const root = result.parse?.root ?? null;
   const binding = root ? bind(root, bindOptions) : null;
-  const name = frameName(result);
-  const start = caller ? callerContext(caller.frame, caller.callNodeId) : null;
+  const name = kind === 'function' && result.header ? `${result.header.name}(…)` : frameName(result);
+  const start = caller ? callerContext(caller.frame, caller.callNodeId, kind) : null;
   const analysis = root && binding ? analyzeContext(root, binding, result.text, start ?? undefined, bindOptions.relationships ?? null) : null;
   const timeline =
     root && binding && analysis
-      ? buildTimeline(root, binding, analysis, result.text, caller && start ? { measure: name, caller: caller.frame.name, context: start } : undefined)
+      ? buildTimeline(root, binding, analysis, result.text, caller && start ? { measure: name, caller: caller.frame.name, context: start, kind } : undefined)
       : [];
-  return { key: caller ? `${caller.frame.key}/${caller.callNodeId}` : '', name, result, binding, analysis, timeline, caller, level: caller ? caller.frame.level + 1 : 0 };
+  return { key: caller ? `${caller.frame.key}/${caller.callNodeId}` : '', name, result, binding, analysis, timeline, caller, level: caller ? caller.frame.level + 1 : 0, kind };
 }
 
 /** The measure called at a step (its name as written), or null when the step isn't a measure call. */
@@ -75,6 +84,24 @@ export function calledMeasureName(frame: Frame, entry: TimelineEntry): string | 
   if (node?.kind === 'BracketRef') return node.name;
   if (node?.kind === 'ColumnRef') return node.column;
   return null;
+}
+
+/** A call to a function of the model at this step, as something to step into (its code as if written here). */
+function calledFunction(frame: Frame, entry: TimelineEntry): StepInto | null {
+  if (entry.kind !== 'function' || entry.nodeId === null) return null;
+  const node = findNode(frame.result.parse?.root ?? null, entry.nodeId);
+  const fn = node?.kind === 'FunctionCall' ? frame.binding?.calls.get(node.id)?.spec?.userDefined : undefined;
+  if (!node || node.kind !== 'FunctionCall' || !fn) return null;
+  const text = (n: AstNode) => frame.result.text.slice(n.span.start, n.span.end);
+  const expression = inlineCall(fn, node.args.map(text));
+  if (expression === null) return { kind: 'unavailable', name: fn.name, reason: `The inputs of ${fn.name} couldn't be read, so its steps can't be shown.` };
+  for (let f: Frame | null = frame; f; f = f.caller?.frame ?? null) {
+    if (f.kind === 'function' && f.result.header?.name.toLowerCase() === fn.name.toLowerCase()) {
+      return { kind: 'unavailable', name: fn.name, reason: `${fn.name} is already being calculated further out, so stepping into it would go round in a circle.` };
+    }
+  }
+  if (frame.level + 1 >= MAX_LEVEL) return { kind: 'unavailable', name: fn.name, reason: `Steps can be stepped into up to ${MAX_LEVEL} levels deep.` };
+  return { kind: 'available', key: `${frame.key}/${entry.nodeId}`, definition: { name: fn.name, expression, kind: 'function' } };
 }
 
 export type StepInto =
@@ -87,6 +114,8 @@ export type StepInto =
  * model (through the binding), or else from `lookup` (the built-in examples' measures).
  */
 export function stepIntoTarget(frame: Frame, entry: TimelineEntry, lookup: (name: string) => MeasureDefinition | undefined): StepInto | null {
+  const fn = calledFunction(frame, entry);
+  if (fn) return fn;
   const name = calledMeasureName(frame, entry);
   if (name === null || entry.nodeId === null) return null;
   const fromModel = frame.binding?.references.get(entry.nodeId)?.definition;
@@ -122,10 +151,12 @@ export function flattenTimeline(
       if (!expanded.has(`${frame.key}/${entry.nodeId}`)) continue;
       const target = stepIntoTarget(frame, entry, lookup);
       if (target?.kind !== 'available' || entry.nodeId === null) continue;
-      const child = buildFrame(analyze(measureDefinitionText(target.definition.name, target.definition.expression), 'measure-definition'), bindOptions, {
-        frame,
-        callNodeId: entry.nodeId,
-      });
+      const child = buildFrame(
+        analyze(measureDefinitionText(target.definition.name, target.definition.expression), 'measure-definition'),
+        bindOptions,
+        { frame, callNodeId: entry.nodeId },
+        target.definition.kind ?? 'measure',
+      );
       visit(child, entry.depth + depthOffset + 1);
     }
   };
@@ -140,7 +171,7 @@ export function callersOf(frame: Frame): CallerFrame[] {
     const { frame: c, callNodeId } = f.caller;
     const root = c.result.parse?.root;
     if (!root || !c.binding) break;
-    callers.push({ key: c.key, root, binding: c.binding, source: c.result.text, callNodeId });
+    callers.push({ key: c.key, root, binding: c.binding, source: c.result.text, callNodeId, calls: f.kind });
   }
   return callers;
 }

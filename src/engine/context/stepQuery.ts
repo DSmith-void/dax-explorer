@@ -52,6 +52,11 @@ export interface CallerFrame {
   source: string;
   /** The node in the caller that calls the inner measure. */
   callNodeId: number;
+  /**
+   * What the call is: a measure (exactly CALCULATE of its code), or a function of the model (its code as if written
+   * there: no CALCULATE, checked in Power BI Desktop). Measure when not given.
+   */
+  calls?: 'measure' | 'function';
 }
 
 export interface StepQueryOptions {
@@ -165,7 +170,7 @@ export function buildStepQuery(entry: TimelineEntry, options: StepQueryOptions):
   const inContext = (node: AstNode, dax: string, table: boolean): string => {
     let expr = wrap(own, node.id, dax, table);
     for (const caller of callers) {
-      expr = wrap(caller, caller.callNodeId, `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr}\n)`, table);
+      expr = wrap(caller, caller.callNodeId, caller.calls === 'function' ? expr : `${table ? 'CALCULATETABLE' : 'CALCULATE'}(\n${expr}\n)`, table);
     }
     // F: as filters, or (for ALLSELECTED and ISINSCOPE) as the visual's own query, added by valueOf.
     if (options.reportFilters.length > 0 && !visualMode) {

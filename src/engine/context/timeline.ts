@@ -106,6 +106,8 @@ export interface TimelineCaller {
   caller: string;
   /** The filters the caller passes in (what the measure's code starts with). */
   context: EvalContext;
+  /** A function of the model, stepped into (no context transition at the call). Measure when not given. */
+  kind?: 'measure' | 'function';
 }
 
 export function buildTimeline(
@@ -146,7 +148,10 @@ export function buildTimeline(
       kind: 'enter',
       nodeId: null,
       title: `Enter ${caller.measure}`,
-      summary: `Inside ${caller.measure}, called by ${caller.caller}. It starts with ${caller.caller}'s filters at that point, including any current row turned into a filter.`,
+      summary:
+        caller.kind === 'function'
+          ? `Inside ${caller.measure}, called by ${caller.caller}: its code runs as if written there, with the same filters and the current row of any loop (it isn't turned into a filter). Its value inputs are worked out first, as variables.`
+          : `Inside ${caller.measure}, called by ${caller.caller}. It starts with ${caller.caller}'s filters at that point, including any current row turned into a filter.`,
       context: caller.context,
       depth: 0,
     });

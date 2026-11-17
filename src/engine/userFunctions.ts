@@ -127,6 +127,48 @@ export function readUserFunction(name: string, expression: string, description: 
   return { name, expression, description, params: params as UserFunctionParam[], bodyStart: arrow + 2 };
 }
 
+/**
+ * The function's code as if written at the call (how Power BI runs it: checked in Power BI Desktop, it adds no
+ * context transition, and a loop's current row reaches its code): a VAR for each value input (the code written at
+ * the call) and each left-out input (its default), then the function's own code, with each expression input and
+ * reference pasted where it is used. `args` are the inputs' code as written at the call. Null when the inputs
+ * can't be read, or when there are more inputs than the function takes.
+ */
+export function inlineCall(fn: UserFunction, args: readonly string[]): string | null {
+  if (!fn.params || args.length > fn.params.length) return null;
+  const vars: string[] = [];
+  const pasted = new Map<string, string>();
+  fn.params.forEach((param, i) => {
+    const arg = args[i];
+    if (arg === undefined) {
+      if (param.defaultText === null) return;
+      vars.push(`VAR ${param.name} = ${param.defaultText}`);
+    } else if (param.mode === 'val') {
+      vars.push(`VAR ${param.name} = ${arg}`);
+    } else {
+      // A reference stays a reference (a column in VALUES(c) can't be in brackets); other code is bracketed.
+      const isReference = /^('[^']*(?:''[^']*)*'|[\p{L}_][\p{L}\p{N}_.]*)?(\[[^\]]*(?:\]\][^\]]*)*\])?$/u.test(arg.trim());
+      pasted.set(param.name.toLowerCase(), isReference ? arg.trim() : `(${arg.trim()})`);
+    }
+  });
+  let body = fn.expression.slice(fn.bodyStart);
+  if (pasted.size > 0) {
+    const { tokens } = tokenize(fn.expression, fn.bodyStart);
+    let out = '';
+    let at = fn.bodyStart;
+    tokens.forEach((token, i) => {
+      const replacement = token.kind === 'Identifier' ? pasted.get(token.text.toLowerCase()) : undefined;
+      // Not a function call with the same name.
+      if (!replacement || tokens[i + 1]?.text === '(') return;
+      out += fn.expression.slice(at, token.span.start) + replacement;
+      at = token.span.end;
+    });
+    body = out + fn.expression.slice(at);
+  }
+  body = body.trim();
+  return vars.length > 0 ? `${vars.join('\n')}\nRETURN\n${body}` : body;
+}
+
 /** The role the app gives an input: VAL inputs are worked out in the caller's context; the rest inside. */
 export function userInputRole(param: UserFunctionParam): ArgRole {
   if (param.mode === 'expr') return 'inside';

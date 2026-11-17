@@ -8,7 +8,7 @@ import { tokenize } from './lexer/lexer';
 import { createModelIndex } from './model';
 import { findNode, type AstNode } from './parser/ast';
 import { parse } from './parser/parser';
-import { readUserFunction, userFunctionSpec } from './userFunctions';
+import { inlineCall, readUserFunction, userFunctionSpec } from './userFunctions';
 
 // Made-up functions, shaped like the ones Power BI lists (INFO.USERDEFINEDFUNCTIONS).
 const FUNCTIONS = [
@@ -72,6 +72,24 @@ describe('reading a function of the model', () => {
     expect(spec.overloads[0].map((p) => [p.role, p.optional ?? false])).toEqual([['scalar', false], ['scalar', true], ['scalar', true]]);
     expect(spec.returns).toBe('scalar');
     expect(userFunctionSpec(readUserFunction('TopProducts', FUNCTIONS[4].expression))!.returns).toBe('table');
+  });
+});
+
+describe('a function written in place (how stepping into it works)', () => {
+  const fn = (i: number) => readUserFunction(FUNCTIONS[i].name, FUNCTIONS[i].expression);
+
+  it('value inputs and left-out defaults become variables; the code follows', () => {
+    expect(inlineCall(fn(0), ['[Total Sales]'])).toBe('VAR value = [Total Sales]\nVAR digits = 2\nVAR suffix = " units, net"\nRETURN\nROUND(value, digits) & suffix');
+    expect(inlineCall(fn(3), ['SUM(Sales[Amount])'])).toBe('VAR x = SUM(Sales[Amount])\nRETURN\nx * 2');
+  });
+
+  it('expression inputs are pasted where they are used: bracketed, except a plain reference', () => {
+    expect(inlineCall(fn(1), ['[Total Sales] * 2'])).toBe("CALCULATE(([Total Sales] * 2), ALL('Product'))");
+    expect(inlineCall(fn(2), ["'Product'[Category]"])).toBe("COUNTROWS(VALUES('Product'[Category]))");
+  });
+
+  it('refuses more inputs than the function takes', () => {
+    expect(inlineCall(fn(3), ['1', '2'])).toBeNull();
   });
 });
 

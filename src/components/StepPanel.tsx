@@ -368,7 +368,7 @@ export function StoryList({ entries, index, onStep, values, connected, open, onT
 /** "Step into [Measure]" on a step that calls a measure, or why it can't be stepped into. */
 function StepIntoControl({ target, isExpanded, onExpand }: { target: StepInto; isExpanded: (key: string) => boolean; onExpand: (key: string, expanded: boolean) => void }) {
   if (target.kind === 'unavailable') return <p className="value-note">Step into: {target.reason}</p>;
-  const name = `[${target.definition.name}]`;
+  const name = target.definition.kind === 'function' ? `${target.definition.name}(…)` : `[${target.definition.name}]`;
   if (isExpanded(target.key)) {
     return (
       <p className="step-into">
