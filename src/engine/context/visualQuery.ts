@@ -335,7 +335,7 @@ function plainValue(node: AstNode): string | null {
   }
   const value = literalOf(node);
   if (value === undefined) return null;
-  if (value !== null && typeof value === 'object') return value.date;
+  if (value !== null && typeof value === 'object') return 'date' in value ? value.date : value.number;
   return value === null ? '(Blank)' : typeof value === 'string' ? `"${value}"` : String(value);
 }
 

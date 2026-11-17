@@ -90,6 +90,22 @@ describe('buildStepQuery', () => {
     );
   });
 
+  it('a time with a fraction of a second is matched within a millisecond; a whole second exactly', () => {
+    const picked = (date: string) => steps('S = SUMX(Sales, Sales[Quantity])', [], () => ({ columns: ['Sales[Order Key]', 'Sales[Date]'], values: [7, { date }] })).query;
+    expect(dax(picked('2024-03-07T08:30:05.2666669')('Read Sales[Quantity]'))).toContain(
+      "'Sales'[Order Key] == 7 && ABS('Sales'[Date] - (DATE(2024, 3, 7) + TIME(8, 30, 5) + 0.2666669 / 86400)) * 86400000 < 1",
+    );
+    expect(dax(picked('2024-03-07T08:30:05')('Read Sales[Quantity]'))).toContain("'Sales'[Date] == DATE(2024, 3, 7) + TIME(8, 30, 5)");
+  });
+
+  it('infinity is matched as 1 / 0, and "not a number" as the value that equals nothing (not as a blank)', () => {
+    // Checked in Power BI Desktop: LINESTX on constant values gives an infinite FStatistic, which ISBLANK says isn't blank.
+    const picked = (value: { number: 'Infinity' | 'NaN' }) =>
+      steps('S = SUMX(Sales, Sales[Quantity])', [], () => ({ columns: ['Sales[Order Key]', 'Sales[Amount]'], values: [7, value] })).query;
+    expect(dax(picked({ number: 'Infinity' })('Read Sales[Quantity]'))).toContain("'Sales'[Amount] == 1 / 0");
+    expect(dax(picked({ number: 'NaN' })('Read Sales[Quantity]'))).toContain("NOT ISBLANK('Sales'[Amount]) && NOT ('Sales'[Amount] = 'Sales'[Amount])");
+  });
+
   it('a BLANK in the picked row is matched with ISBLANK', () => {
     const { query } = steps('S = SUMX(Sales, Sales[Quantity])', [], () => ({ columns: ['Sales[Order Key]', 'Sales[Date]'], values: [7, null] }));
     expect(dax(query('Read Sales[Quantity]'))).toContain("'Sales'[Order Key] == 7 && ISBLANK('Sales'[Date])");

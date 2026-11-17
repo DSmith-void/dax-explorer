@@ -24,6 +24,9 @@ describe('DAX for report filters', () => {
     expect(daxLiteral(null)).toBe('BLANK()');
     expect(daxLiteral({ date: '2024-03-07' })).toBe('DATE(2024, 3, 7)');
     expect(daxLiteral({ date: '2024-03-07T08:30:00' })).toBe('DATE(2024, 3, 7) + TIME(8, 30, 0)');
+    expect(daxLiteral({ date: '2024-03-07T08:30:05.25' })).toBe('DATE(2024, 3, 7) + TIME(8, 30, 5) + 0.25 / 86400');
+    expect(daxLiteral({ number: 'Infinity' })).toBe('1 / 0');
+    expect(daxLiteral({ number: '-Infinity' })).toBe('-1 / 0');
     expect(() => daxLiteral({ date: '7/3/2024' })).toThrow('Not a date');
     expect(() => daxLiteral(Number.NaN)).toThrow('Not a usable number');
   });

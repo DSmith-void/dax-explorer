@@ -24,18 +24,36 @@ export interface Asked {
   /** One line each, in Markdown. */
   disagreements: string[];
   unaskable: string[];
+  /** Claims left unasked because a query was too slow (see `slowMs`). */
+  tooSlow: number;
+  /** Time spent asking, in milliseconds. */
+  ms: number;
 }
 
-export async function askMeasure(client: ClaimClient, measureId: string, definition: string, scenario: Scenario, model?: RunModel): Promise<Asked> {
+/**
+ * `slowMs`: once one query takes at least this long, the measure's remaining claims under this setup are left
+ * unasked (counted in `tooSlow`), so a measure that is heavy on the model's data doesn't hold up the run.
+ */
+export async function askMeasure(client: ClaimClient, measureId: string, definition: string, scenario: Scenario, model?: RunModel, slowMs = Infinity): Promise<Asked> {
+  const started = Date.now();
+  let slow = false;
+  const timed = async <T>(query: Promise<T>): Promise<T> => {
+    const start = Date.now();
+    try {
+      return await query;
+    } finally {
+      if (Date.now() - start >= slowMs) slow = true;
+    }
+  };
   const rows = new Map<string, RowChoice>();
   const run = runMeasure(definition, scenario.filters, rows, model);
   // Pick the first row of each loop, in order, as the app does.
   for (const entry of run.timeline) {
     if (entry.kind !== 'iterate' || entry.nodeId === null) continue;
     const q = buildStepQuery(entry, run.options);
-    if (q.kind !== 'rows') continue;
+    if (q.kind !== 'rows' || slow) continue;
     try {
-      const result = await client.evaluate('table', q.dax, 1);
+      const result = await timed(client.evaluate('table', q.dax, 1));
       if (result.rows.length === 0) continue;
       const { indexes } = rowColumns(result.columns);
       rows.set(rowKey('root', entry.nodeId), { columns: indexes.map((i) => result.columns[i]), values: indexes.map((i) => result.rows[0][i] as FilterValue) });
@@ -43,17 +61,21 @@ export async function askMeasure(client: ClaimClient, measureId: string, definit
       // No row to pick: the steps inside stay unasked.
     }
   }
-  const result: Asked = { run, asked: 0, confirmed: [], disagreements: [], unaskable: [] };
+  const result: Asked = { run, asked: 0, confirmed: [], disagreements: [], unaskable: [], tooSlow: 0, ms: 0 };
   for (const claim of run.claims()) {
     const id = `${measureId}|${scenario.id}|${claim.id}`;
     if (!claim.query) {
       result.unaskable.push(`${id}: needs a picked row`);
       continue;
     }
+    if (slow) {
+      result.tooSlow++;
+      continue;
+    }
     result.asked++;
     let answer: boolean | string;
     try {
-      const value = (await client.evaluate('scalar', claim.query)).rows[0]?.[0];
+      const value = (await timed(client.evaluate('scalar', claim.query))).rows[0]?.[0];
       // ISFILTERED is asked as 1/0 (see claims.ts); other answers are reported as they are.
       answer = typeof value === 'boolean' ? value : value === 1 ? true : value === 0 ? false : `the value ${JSON.stringify(value)}`;
     } catch (e) {
@@ -66,5 +88,6 @@ export async function askMeasure(client: ClaimClient, measureId: string, definit
       );
     }
   }
+  result.ms = Date.now() - started;
   return result;
 }

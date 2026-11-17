@@ -14,7 +14,7 @@ import type { BindResult } from '../binder/binder';
 import { childrenOf, findNode, type AstNode, type Expr, type FunctionCall } from '../parser/ast';
 import { lookupFunction, WINDOW_FUNCTIONS, windowRelation, type ParamSpec } from '../catalog/functions';
 import type { ColumnName } from './model';
-import { columnDax, daxLiteral, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
+import { columnDax, daxLiteral, hasFractionOfSecond, isSpecialNumber, reportFilterDax, type FilterValue, type ReportFilter } from './reportFilters';
 import { TOTALS } from './totals';
 import type { TimelineEntry } from './timeline';
 
@@ -418,7 +418,13 @@ function rowConditions(choice: RowChoice): string {
       const ref = columnNameDax(column);
       if (!ref) throw new Unsupported(`The column ${column} can't be used to find the picked row.`);
       const value = choice.values[i];
-      return value === null ? `ISBLANK(${ref})` : `${ref} == ${daxLiteral(value)}`;
+      if (value === null) return `ISBLANK(${ref})`;
+      // "Not a number" equals nothing, itself included (checked in Power BI Desktop).
+      if (isSpecialNumber(value) && value.number === 'NaN') return `NOT ISBLANK(${ref}) && NOT (${ref} = ${ref})`;
+      // A time with a fraction of a second (checked in Power BI Desktop: sensor readings at .267 s weren't found by
+      // ==): within a millisecond either side.
+      if (hasFractionOfSecond(value)) return `ABS(${ref} - (${daxLiteral(value)})) * 86400000 < 1`;
+      return `${ref} == ${daxLiteral(value)}`;
     })
     .join(' && ');
 }

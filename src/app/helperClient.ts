@@ -103,8 +103,11 @@ export interface CalendarInfo {
   groups: { unit: string; primaryColumn: string | null; associatedColumns: string[] }[];
 }
 
-/** A value from a query. Dates arrive as { date: "yyyy-MM-ddTHH:mm:ss" }. */
-export type QueryValue = string | number | boolean | null | { date: string };
+/**
+ * A value from a query. Dates arrive as { date: "yyyy-MM-ddTHH:mm:ss" } (with a fraction of a second when there is
+ * one); infinity and "not a number", which JSON can't write, as { number: "Infinity" | "-Infinity" | "NaN" }.
+ */
+export type QueryValue = string | number | boolean | null | { date: string } | { number: 'Infinity' | '-Infinity' | 'NaN' };
 
 export interface QueryResult {
   columns: string[];

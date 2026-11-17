@@ -10,7 +10,13 @@ import type { ColumnName, Removal } from './model';
 import { expandedCovers, type RelationshipModel } from './relationships';
 
 /** A value a column can be filtered to. `null` is BLANK; dates are ISO strings ("2024-01-31" or "2024-01-31T08:00:00"). */
-export type FilterValue = string | number | boolean | null | { date: string };
+/** Infinity and "not a number" (0/0), which JSON can't write as numbers. */
+export type SpecialNumber = { number: 'Infinity' | '-Infinity' | 'NaN' };
+
+export type FilterValue = string | number | boolean | null | { date: string } | SpecialNumber;
+
+export const isSpecialNumber = (value: unknown): value is SpecialNumber =>
+  typeof value === 'object' && value !== null && 'number' in value;
 
 export type ReportFilter =
   /** The column is limited to these values (one value: "= value"). */
@@ -56,11 +62,23 @@ export function daxLiteral(value: FilterValue): string {
     return String(value);
   }
   if (typeof value === 'string') return `"${value.replace(/"/g, '""')}"`;
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.date);
+  if (isSpecialNumber(value)) return value.number === 'Infinity' ? '1 / 0' : value.number === '-Infinity' ? '-1 / 0' : '0 / 0';
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?)?$/.exec(value.date);
   if (!match) throw new Error(`Not a date: ${value.date}`);
-  const [, y, mo, d, h, mi, s] = match;
+  const [, y, mo, d, h, mi, s, fraction] = match;
   const date = `DATE(${Number(y)}, ${Number(mo)}, ${Number(d)})`;
-  return h === undefined ? date : `${date} + TIME(${Number(h)}, ${Number(mi)}, ${Number(s ?? 0)})`;
+  if (h === undefined) return date;
+  const time = `${date} + TIME(${Number(h)}, ${Number(mi)}, ${Number(s ?? 0)})`;
+  // TIME takes whole seconds; the fraction of a second is added as a fraction of a day.
+  return fraction ? `${time} + ${Number(fraction)} / 86400` : time;
+}
+
+/**
+ * True when a date value has a fraction of a second. Power BI stores dates as a fraction of a day, so such a
+ * value written back as text may not equal the stored one exactly: rows are then found within a millisecond.
+ */
+export function hasFractionOfSecond(value: FilterValue): boolean {
+  return value !== null && typeof value === 'object' && 'date' in value && /\.\d*[1-9]/.test(value.date);
 }
 
 /** The filter as a DAX table expression, ready to be a CALCULATE filter argument. */
@@ -75,6 +93,7 @@ export function valueText(value: FilterValue): string {
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value === 'number') return String(value);
   if (typeof value === 'string') return `"${value}"`;
+  if (isSpecialNumber(value)) return value.number;
   return value.date.replace('T', ' ');
 }
 

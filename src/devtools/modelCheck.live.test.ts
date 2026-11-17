@@ -5,7 +5,10 @@
  *
  * Runs only when asked, naming the report the helper is connected to (it refuses any other):
  *   CLAIMS_MODEL="Report name" CLAIMS_HELPER=http://127.0.0.1:5093 DAXEXPLORER_HELPER_TOKEN=… npx vitest run src/devtools/modelCheck
- * Optional: CLAIMS_OUT (the report's path), CLAIMS_MAX_MEASURES (default 300), CLAIMS_FILTER_COLUMNS (default 4).
+ * Optional: CLAIMS_OUT (the report's path), CLAIMS_MAX_MEASURES (default 300), CLAIMS_FILTER_COLUMNS (default 4),
+ * CLAIMS_FIRST (the first measure to check, from 1: with CLAIMS_MAX_MEASURES, a batch; each batch gets its own
+ * report), CLAIMS_SLOW_SECONDS (default 20: after a query that slow, a measure's other claims under that filter
+ * setup are left unasked, as "too slow").
  *
  * The report holds the model's measure names and code, so it is written outside the repository by default (the
  * system's temp folder): never commit it.
@@ -29,7 +32,11 @@ declare const process: { env: Record<string, string | undefined> };
 async function nodeFiles() {
   const [fs, os] = ['node:fs', 'node:os'];
   return {
-    ...((await import(/* @vite-ignore */ fs)) as { mkdirSync: (path: string, options: { recursive: boolean }) => void; writeFileSync: (path: string, text: string) => void }),
+    ...((await import(/* @vite-ignore */ fs)) as {
+      mkdirSync: (path: string, options: { recursive: boolean }) => void;
+      writeFileSync: (path: string, text: string) => void;
+      appendFileSync: (path: string, text: string) => void;
+    }),
     ...((await import(/* @vite-ignore */ os)) as { tmpdir: () => string }),
   };
 }
@@ -47,23 +54,43 @@ describe.skipIf(!reportName)('claim checker (live, on the connected model)', () 
     const metadata = await client.model();
     const model: RunModel = { index: createModelIndex(toModelSnapshot(metadata)), relationships: toRelationshipModel(metadata) };
     const max = Number(process.env.CLAIMS_MAX_MEASURES ?? 300);
-    const measures = metadata.measures.slice(0, max).map((m) => ({ id: `${m.table}[${m.name}]`, definition: measureDefinitionText(m.name, m.expression) }));
-    const scenarios = await pickScenarios(client, metadata, measures.map((m) => m.definition), Number(process.env.CLAIMS_FILTER_COLUMNS ?? 4));
+    const first = Math.max(1, Number(process.env.CLAIMS_FIRST ?? 1));
+    const slowMs = Number(process.env.CLAIMS_SLOW_SECONDS ?? 20) * 1000;
+    const all = metadata.measures.map((m) => ({ id: `${m.table}[${m.name}]`, definition: measureDefinitionText(m.name, m.expression) }));
+    const measures = all.slice(first - 1, first - 1 + max);
+    const batch = first > 1 || measures.length < all.length ? ` (measures ${first} to ${first - 1 + measures.length} of ${all.length})` : '';
+    // The filter setups come from all the measures, so every batch uses the same ones.
+    const scenarios = await pickScenarios(client, metadata, all.map((m) => m.definition), Number(process.env.CLAIMS_FILTER_COLUMNS ?? 4));
+
+    const { mkdirSync, writeFileSync, appendFileSync, tmpdir } = await nodeFiles();
+    const part = batch ? `.${first}-${first - 1 + measures.length}` : '';
+    const out = process.env.CLAIMS_OUT ?? `${tmpdir()}/dax-explorer-claims/${reportName!.replace(/[^\w.-]+/g, '_')}${part}.md`;
+    mkdirSync(out.replace(/[\\/][^\\/]*$/, ''), { recursive: true });
+    // Written as it goes, so a stopped run still shows which measure and filter setup it was on.
+    const progress = out.replace(/\.md$/, '') + '.progress.txt';
+    writeFileSync(progress, '');
+    const log = (line: string) => appendFileSync(progress, `${new Date().toISOString().slice(11, 19)} ${line}\n`);
 
     const disagreements: string[] = [];
     let asked = 0;
     let confirmed = 0;
     let unaskable = 0;
-    const perMeasure: { id: string; steps: number; unchecked: number; claims: number; disagreements: number }[] = [];
+    let tooSlow = 0;
+    const perMeasure: { id: string; steps: number; unchecked: number; claims: number; disagreements: number; tooSlow: number; seconds: number }[] = [];
     const reasons = new Map<string, number>();
     const unknownFunctions = new Map<string, number>();
-    for (const measure of measures) {
-      let first: MeasureRun | null = null;
+    for (const [i, measure] of measures.entries()) {
+      let firstRun: MeasureRun | null = null;
       let claims = 0;
       let wrong = 0;
+      let slow = 0;
+      let ms = 0;
       for (const scenario of scenarios) {
-        const result = await askMeasure(client, measure.id, measure.definition, scenario, model);
-        first ??= result.run;
+        log(`measure ${first + i}: ${measure.id}, under ${scenario.id}`);
+        const result = await askMeasure(client, measure.id, measure.definition, scenario, model, slowMs);
+        slow += result.tooSlow;
+        ms += result.ms;
+        firstRun ??= result.run;
         asked += result.asked;
         confirmed += result.confirmed.length;
         unaskable += result.unaskable.length;
@@ -72,13 +99,15 @@ describe.skipIf(!reportName)('claim checker (live, on the connected model)', () 
         disagreements.push(...result.disagreements);
       }
       // How much of the measure the app can explain (from its first run: the steps don't depend on the filters).
-      const steps = first ? [...first.analysis.steps.values()] : [];
+      const steps = firstRun ? [...firstRun.analysis.steps.values()] : [];
       const unchecked = steps.filter((s) => s.context.unknownReason || s.context.filter.caveats.length > 0).length;
-      for (const insight of first?.analysis.insights ?? []) {
+      for (const insight of firstRun?.analysis.insights ?? []) {
         if (insight.kind === 'not-modeled') reasons.set(insight.message, (reasons.get(insight.message) ?? 0) + 1);
       }
-      for (const name of first?.options.binding?.unknownFunctions ?? []) unknownFunctions.set(name.toUpperCase(), (unknownFunctions.get(name.toUpperCase()) ?? 0) + 1);
-      perMeasure.push({ id: measure.id, steps: steps.length, unchecked, claims, disagreements: wrong });
+      for (const name of firstRun?.options.binding?.unknownFunctions ?? []) unknownFunctions.set(name.toUpperCase(), (unknownFunctions.get(name.toUpperCase()) ?? 0) + 1);
+      tooSlow += slow;
+      log(`  done in ${Math.round(ms / 1000)} s${slow > 0 ? `, ${slow} claims too slow` : ''}`);
+      perMeasure.push({ id: measure.id, steps: steps.length, unchecked, claims, disagreements: wrong, tooSlow: slow, seconds: Math.round(ms / 1000) });
     }
 
     const fullyChecked = perMeasure.filter((m) => m.unchecked === 0).length;
@@ -86,8 +115,9 @@ describe.skipIf(!reportName)('claim checker (live, on the connected model)', () 
     const report = [
       `# Claim check: ${reportName}`,
       '',
-      `${measures.length} measures, ${scenarios.length} filter setups (${scenarios.map((s) => s.id).join('; ')}).`,
-      `${asked} claims asked: ${confirmed} confirmed, ${disagreements.length} disagreements, ${unaskable} not asked (they need a picked row).`,
+      `${all.length} measures, ${scenarios.length} filter setups (${scenarios.map((s) => s.id).join('; ')}).`,
+      `${measures.length} measures checked${batch}.`,
+      `${asked} claims asked: ${confirmed} confirmed, ${disagreements.length} disagreements, ${unaskable} not asked (they need a picked row), ${tooSlow} not asked (too slow on this model's data).`,
       `${fullyChecked} of ${measures.length} measures are explained with no "not checked" step.`,
       '',
       '## Disagreements',
@@ -100,16 +130,13 @@ describe.skipIf(!reportName)('claim checker (live, on the connected model)', () 
       ...(unknownFunctions.size > 0 ? sorted(unknownFunctions).map(([name, n]) => `- ${name}: ${n} measure${n === 1 ? '' : 's'}`) : ['None.']),
       '',
       '## Measures',
-      '| Measure | Steps | Not checked | Claims | Disagreements |',
-      '|---|---|---|---|---|',
-      ...perMeasure.map((m) => `| ${m.id.replace(/\|/g, '\\|')} | ${m.steps} | ${m.unchecked} | ${m.claims} | ${m.disagreements} |`),
+      '| Measure | Steps | Not checked | Claims | Disagreements | Too slow | Seconds |',
+      '|---|---|---|---|---|---|---|',
+      ...perMeasure.map((m) => `| ${m.id.replace(/\|/g, '\\|')} | ${m.steps} | ${m.unchecked} | ${m.claims} | ${m.disagreements} | ${m.tooSlow} | ${m.seconds} |`),
       '',
     ].join('\n');
-    const { mkdirSync, writeFileSync, tmpdir } = await nodeFiles();
-    const out = process.env.CLAIMS_OUT ?? `${tmpdir()}/dax-explorer-claims/${reportName!.replace(/[^\w.-]+/g, '_')}.md`;
-    mkdirSync(out.replace(/[\\/][^\\/]*$/, ''), { recursive: true });
     writeFileSync(out, report);
-    console.log([...report.split('\n').slice(2, 5), `Report: ${out}`].join('\n'));
+    console.log([...report.split('\n').slice(2, 6), `Report: ${out}`].join('\n'));
   }, 3_600_000);
 });
 

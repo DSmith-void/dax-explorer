@@ -43,16 +43,24 @@ public static class QueryBuilder
         };
     }
 
-    /// <summary>A value as JSON-friendly data: dates become { date: "yyyy-MM-ddTHH:mm:ss" } so the app can tell them from text.</summary>
+    /// <summary>
+    /// A value as JSON-friendly data: dates become { date: "yyyy-MM-ddTHH:mm:ss" } so the app can tell them from text,
+    /// with the fraction of a second when there is one (sensor readings often have milliseconds).
+    /// </summary>
     public static object? ToJsonValue(object? value) => value switch
     {
         null or DBNull => null,
-        DateTime d => new Dictionary<string, string> { ["date"] = d.ToString("yyyy-MM-dd'T'HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) },
-        double x when double.IsNaN(x) || double.IsInfinity(x) => null,
-        float x when float.IsNaN(x) || float.IsInfinity(x) => null,
+        DateTime d => new Dictionary<string, string> { ["date"] = d.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF", System.Globalization.CultureInfo.InvariantCulture) },
+        // JSON has no infinity or "not a number": marked like dates, so the app can show them and find rows by them
+        // (a regression on constant values gives an infinite F statistic, which isn't blank in Power BI).
+        double x when double.IsNaN(x) || double.IsInfinity(x) => SpecialNumber(x),
+        float x when float.IsNaN(x) || float.IsInfinity(x) => SpecialNumber(x),
         bool or string or long or int or short or byte or double or float or decimal => value,
         _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture),
     };
+
+    private static Dictionary<string, string> SpecialNumber(double x) =>
+        new() { ["number"] = double.IsNaN(x) ? "NaN" : x > 0 ? "Infinity" : "-Infinity" };
 }
 
 internal sealed class AdomdQueryRunner : IQueryRunner

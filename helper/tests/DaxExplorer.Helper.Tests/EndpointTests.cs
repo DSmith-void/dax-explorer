@@ -466,11 +466,15 @@ public sealed class EndpointTests : IAsyncLifetime
     public void Query_values_become_plain_JSON_values_and_dates_are_marked()
     {
         Assert.Null(QueryBuilder.ToJsonValue(DBNull.Value));
-        Assert.Null(QueryBuilder.ToJsonValue(double.NaN));
+        Assert.Equal("NaN", Assert.IsType<Dictionary<string, string>>(QueryBuilder.ToJsonValue(double.NaN))["number"]);
+        Assert.Equal("Infinity", Assert.IsType<Dictionary<string, string>>(QueryBuilder.ToJsonValue(double.PositiveInfinity))["number"]);
+        Assert.Equal("-Infinity", Assert.IsType<Dictionary<string, string>>(QueryBuilder.ToJsonValue(float.NegativeInfinity))["number"]);
         Assert.Equal(12.5m, QueryBuilder.ToJsonValue(12.5m));
         Assert.Equal("Widgets", QueryBuilder.ToJsonValue("Widgets"));
         var date = Assert.IsType<Dictionary<string, string>>(QueryBuilder.ToJsonValue(new DateTime(2024, 3, 7, 8, 30, 0)));
         Assert.Equal("2024-03-07T08:30:00", date["date"]);
+        var precise = Assert.IsType<Dictionary<string, string>>(QueryBuilder.ToJsonValue(new DateTime(2024, 3, 7, 8, 30, 5, 250)));
+        Assert.Equal("2024-03-07T08:30:05.25", precise["date"]);
     }
 
     [Fact]

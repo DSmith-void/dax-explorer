@@ -114,7 +114,10 @@ CLAIMS_MODEL="<report name>" CLAIMS_HELPER=http://127.0.0.1:5093 DAXEXPLORER_HEL
 
 The report holds your measures' names and code, so it is written to your temp folder
 (`dax-explorer-claims/<report name>.md`), outside the repository; `CLAIMS_OUT` sets another path. Don't
-commit it.
+commit it. For a large model, `CLAIMS_FIRST` and `CLAIMS_MAX_MEASURES` check a batch of measures (each batch
+gets its own report); a progress file next to the report shows which measure it is on. A measure whose query
+takes 20 seconds or more (`CLAIMS_SLOW_SECONDS`) isn't asked more under that filter setup, and is reported as
+"too slow". Put the report on an empty page first: visuals that refresh slow every query down.
 
 Project layout:
 
