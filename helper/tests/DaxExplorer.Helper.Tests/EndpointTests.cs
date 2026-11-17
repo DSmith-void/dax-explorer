@@ -102,6 +102,8 @@ public sealed class EndpointTests : IAsyncLifetime
         public List<SessionCommand> Commands { get; } = [];
         public bool Fail { get; set; }
         public IReadOnlyList<SessionCommand> Read(int port) => Fail ? throw new InvalidOperationException("engine gone") : Commands;
+        public List<RunningCommand> RunningNow { get; } = [];
+        public IReadOnlyList<RunningCommand> Running(int port) => Fail ? throw new InvalidOperationException("engine gone") : RunningNow;
     }
 
     private readonly FakeSessions _sessions = new();
@@ -608,6 +610,31 @@ public sealed class EndpointTests : IAsyncLifetime
 
         _sessions.Fail = true;
         var failed = await _client.SendAsync(Request(HttpMethod.Get, "/api/visuals/recent"));
+        Assert.Equal(HttpStatusCode.BadGateway, failed.StatusCode);
+        Assert.DoesNotContain("engine gone", await failed.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Busy_counts_only_desktops_own_dax_queries_running_a_while()
+    {
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.SendAsync(Request(HttpMethod.Get, "/api/desktop/busy"))).StatusCode);
+
+        await _client.SendAsync(Request(HttpMethod.Post, "/api/connect", body: new { port = 61403 }));
+        _sessions.RunningNow.AddRange(
+        [
+            new("Power BI Desktop0da6", 125_000, VisualQuery),
+            new("Power BI Desktop0da6", 4_000, "EVALUATE ROW(\"x\", 1)"),
+            new("Power BI Desktop0da6", 500, VisualQuery), // just started
+            new("Power BI Desktop0da6", 900_000, "<Subscribe xmlns=\"…\"/>"), // idle XMLA, never ends
+            new("Power BI Desktop0da6", 9_000, "SELECT * FROM $SYSTEM.DISCOVER_SESSIONS"),
+            new("DaxExplorer", 60_000, "EVALUATE ROW(\"v\", [Total Sales])"), // not Desktop's
+        ]);
+        var body = await Json(await _client.SendAsync(Request(HttpMethod.Get, "/api/desktop/busy")));
+        Assert.Equal(2, body.GetProperty("running").GetInt32());
+        Assert.Equal(125_000, body.GetProperty("longestMs").GetInt64());
+
+        _sessions.Fail = true;
+        var failed = await _client.SendAsync(Request(HttpMethod.Get, "/api/desktop/busy"));
         Assert.Equal(HttpStatusCode.BadGateway, failed.StatusCode);
         Assert.DoesNotContain("engine gone", await failed.Content.ReadAsStringAsync());
     }

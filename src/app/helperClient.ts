@@ -192,6 +192,12 @@ export interface ExternalToolStatus {
   startsThisProgram: boolean;
 }
 
+/** Power BI Desktop's own queries running for a while (more than 3 seconds): how many, and the longest. */
+export interface DesktopBusy {
+  running: number;
+  longestMs: number;
+}
+
 export interface HelperClient {
   check(): Promise<HelperAvailability>;
   instances(): Promise<DesktopInstanceInfo[]>;
@@ -219,6 +225,8 @@ export interface HelperClient {
   captured(after: number): Promise<CaptureStatus>;
   /** The visual queries Power BI Desktop ran most recently (from the engine's session list; usually the last visual). */
   recentVisuals(): Promise<{ at: string | null; text: string }[]>;
+  /** How many of Power BI Desktop's own queries have been running a while (heavy visuals), and the longest. */
+  desktopBusy(): Promise<DesktopBusy>;
   /** Whether DAX Explorer is on Power BI Desktop's External Tools ribbon (and starts this copy of it). */
   externalTool(): Promise<ExternalToolStatus>;
   /** Adds or removes it; Windows asks for administrator rights first. */
@@ -282,6 +290,9 @@ export function createHelperClient(token: string | null, fetchImpl: typeof fetch
     },
     async recentVisuals() {
       return (await json<{ queries: { at: string | null; text: string }[] }>('/api/visuals/recent')).queries;
+    },
+    async desktopBusy() {
+      return json<DesktopBusy>('/api/desktop/busy');
     },
     async stopCapture() {
       await json('/api/capture/stop', { method: 'POST' });

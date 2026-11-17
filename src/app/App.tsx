@@ -29,6 +29,7 @@ import { findHints, hintBadge } from '../engine/patterns/hints';
 import { SAMPLE_MEASURES, sampleDefinition, type SampleMeasure } from '../samples/sampleMeasures';
 import { analyze, type AnalysisResult } from './analysis';
 import { buildFrame, flattenTimeline, framePath, stepIntoTarget, type Frame } from './frames';
+import { busyText, useDesktopBusy } from './desktopBusy';
 import { useNewerTab } from './newerTab';
 import { listProblems, problemCount } from './problems';
 import { clamp, LEFT_MAX, LEFT_MIN, useLayout } from './layout';
@@ -96,6 +97,8 @@ export function App() {
 
   // The connected model (from Power BI Desktop), if any: makes measure/column types certain.
   const [connectedModel, setConnectedModel] = useState<{ model: ModelMetadata; connection: ConnectionInfo } | null>(null);
+  // Power BI Desktop busy with its own heavy visuals: every value here waits for them.
+  const desktopBusy = useDesktopBusy(helperClient, connectedModel !== null);
   const modelIndex = useMemo(
     () => (connectedModel ? createModelIndex(toModelSnapshot(connectedModel.model)) : undefined),
     [connectedModel],
@@ -399,6 +402,11 @@ export function App() {
           </button>
         </div>
       </header>
+      {desktopBusy && (
+        <p className="busy-notice" role="status">
+          <Icon name="clock" /> {busyText(desktopBusy)}
+        </p>
+      )}
 
       <TimelineBar
         entries={timeline}

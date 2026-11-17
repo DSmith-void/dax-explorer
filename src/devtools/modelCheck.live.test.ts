@@ -79,7 +79,20 @@ describe.skipIf(!reportName)('claim checker (live, on the connected model)', () 
     const perMeasure: { id: string; steps: number; unchecked: number; claims: number; disagreements: number; tooSlow: number; seconds: number }[] = [];
     const reasons = new Map<string, number>();
     const unknownFunctions = new Map<string, number>();
+    // Power BI Desktop's own heavy visuals make every query wait (and look slow): wait for them, or stop and say so.
+    const waitWhileDesktopBusy = async () => {
+      for (let waited = 0; ; waited += 5) {
+        const busy = await client.desktopBusy().catch(() => ({ running: 0, longestMs: 0 }));
+        if (busy.running === 0) return;
+        if (waited >= 120) {
+          throw new Error(`Power BI Desktop has been busy with ${busy.running} of the report's own visuals for over two minutes. Switch the report to an empty page, then run the check again.`);
+        }
+        if (waited === 0) log(`waiting: Power BI Desktop is calculating ${busy.running} of the report's own visuals`);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    };
     for (const [i, measure] of measures.entries()) {
+      await waitWhileDesktopBusy();
       let firstRun: MeasureRun | null = null;
       let claims = 0;
       let wrong = 0;

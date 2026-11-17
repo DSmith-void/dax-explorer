@@ -3661,3 +3661,20 @@ button.crumb:hover {
   flex-shrink: 1;
   min-width: 4rem;
 }
+
+/* --- Power BI Desktop busy with its own heavy visuals (see desktopBusy.ts) --- */
+.busy-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px var(--gap);
+  font-size: 0.8125rem;
+  color: var(--color-notice-text);
+  background: var(--color-notice-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.busy-notice svg {
+  flex: none;
+}

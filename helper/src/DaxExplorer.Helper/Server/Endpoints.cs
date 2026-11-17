@@ -232,6 +232,28 @@ public static class Endpoints
             }
         });
 
+        // Whether Desktop is busy with its own (slow) queries, which slows DAX Explorer's too (a read; nothing is kept).
+        api.MapGet("/desktop/busy", (ConnectionState state, ISessionCommands sessions, ILogger<ConnectionState> log) =>
+        {
+            var (connection, _) = state.Current;
+            if (connection is null)
+            {
+                return Results.Conflict(new { error = "Connect to a report first." });
+            }
+            try
+            {
+                return Results.Ok(DesktopActivity.Summarize(sessions.Running(connection.Port)));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                log.LogWarning("Could not read the running queries: {Error}", ex.GetType().Name);
+                return Results.Problem(
+                    title: "Could not read what Power BI Desktop is running.",
+                    detail: "Make sure the report is still open.",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+        });
+
         api.MapPost("/capture/stop", (CaptureState capture) =>
         {
             capture.Stop();

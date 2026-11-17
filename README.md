@@ -119,7 +119,8 @@ The report holds your measures' names and code, so it is written to your temp fo
 commit it. For a large model, `CLAIMS_FIRST` and `CLAIMS_MAX_MEASURES` check a batch of measures (each batch
 gets its own report); a progress file next to the report shows which measure it is on. A measure whose query
 takes 20 seconds or more (`CLAIMS_SLOW_SECONDS`) isn't asked more under that filter setup, and is reported as
-"too slow". Put the report on an empty page first: visuals that refresh slow every query down.
+"too slow". Put the report on an empty page first: a page with heavy visuals slows every query down. The check
+waits while Power BI Desktop is still calculating the report's own visuals, and stops after two minutes of that.
 
 Project layout:
 
