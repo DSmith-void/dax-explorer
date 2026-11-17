@@ -2,6 +2,7 @@
  * The shape of a catalog entry: what a DAX function expects in each argument position.
  * Shared by the curated entries (functions.ts) and the plain-function list (plainFunctions.ts).
  */
+import type { UserFunction } from '../userFunctions';
 
 /** What an argument position accepts. */
 export type ArgRole =
@@ -20,7 +21,12 @@ export type ArgRole =
   /** A reference that is not calculated: only its name or its table is used (NAMEOF, TABLEOF). */
   | 'name'
   /** A keyword such as ASC/DESC or BOTH; see `keywords`. */
-  | 'keyword';
+  | 'keyword'
+  /**
+   * Passed as code to a user-defined function (an EXPR input or a reference) and worked out inside it, with the
+   * function's own filters there: not with the filters at the call.
+   */
+  | 'inside';
 
 export interface ParamSpec {
   name: string;
@@ -73,6 +79,8 @@ export interface FunctionSpec {
    * Used instead of `overloads` when the inputs are known; `overloads` still give the input counts.
    */
   paramsFor?: (args: readonly { kind: string }[]) => ParamSpec[] | null;
+  /** For a function defined in the connected model (DAX's FUNCTION), not a built-in one. */
+  userDefined?: UserFunction;
 }
 
 export const p = (name: string, role: ArgRole, extra: Partial<ParamSpec> = {}): ParamSpec => ({ name, role, ...extra });

@@ -456,6 +456,14 @@ export function analyzeContext(
       visitChildren(node, ctx);
       return;
     }
+    if (role === 'inside') {
+      // Passed as code to a function of the model, which works it out where it uses it (checked in Power BI
+      // Desktop: CALCULATE(x, ALL('Product')) inside the function changed an EXPR input, not a VAL one).
+      visit(node, { ...ctx, unknownReason: 'this is passed as code to a function of the model, which works it out inside, with its own filters there' }, null);
+      const summary = `Passed as code: the function works out ${snippet(node, 40)} where it uses it, with its own filters there.`;
+      record({ nodeId: node.id, context: { ...ctx, unknownReason: 'worked out inside the function it is passed to' }, operations: [], summary, notes: [summary] });
+      return;
+    }
     if (role === 'name') {
       // NAMEOF and TABLEOF only use the reference itself (checked in Power BI Desktop: an expression is an error).
       const summary = `Not calculated: only the name of ${snippet(node, 40)} is used.`;
@@ -543,6 +551,12 @@ export function analyzeContext(
       for (const arg of node.args) visit(arg, unknown, null);
       return;
     }
+    if (spec.userDefined) {
+      const notes = userFunctionNotes(node, spec, ctx);
+      record({ nodeId: node.id, context: ctx, operations: [], summary: notes[0], notes });
+      node.args.forEach((arg, i) => visit(arg, ctx, call.params![i].role));
+      return;
+    }
     if (spec.name === 'CALCULATE' || spec.name === 'CALCULATETABLE' || spec.name === 'RELATEDTABLE' || TOTALS.has(spec.name)) {
       visitCalculate(node, ctx, spec);
       return;
@@ -609,6 +623,45 @@ export function analyzeContext(
     const notes = genericNotes(node, spec, role);
     record({ nodeId: node.id, context: ctx, operations: [], summary: notes[0], notes });
     node.args.forEach((arg, i) => visit(arg, ctx, call.params![i].role));
+  }
+
+  /**
+   * A call to a function of the model (checked in Power BI Desktop, with functions defined in a query): value
+   * inputs are worked out first, here; expression inputs and references inside the function; left-out inputs take
+   * their default. Calling a function adds no context transition: its code behaves as if written here, so the
+   * current row of a loop reaches it, and a measure or CALCULATE inside it turns that row into a filter, while
+   * plain code such as SUM(…) doesn't.
+   */
+  function userFunctionNotes(node: FunctionCall, spec: FunctionSpec, ctx: EvalContext): string[] {
+    const fn = spec.userDefined!;
+    const params = fn.params ?? [];
+    const names = (list: { name: string }[]) => list.map((p) => p.name).join(', ').replace(/, ([^,]*)$/, ' and $1');
+    const given = params.slice(0, node.args.length);
+    const values = given.filter((p) => p.mode === 'val');
+    const code = given.filter((p) => p.mode === 'expr');
+    const defaults = params.slice(node.args.length).filter((p) => p.defaultText !== null);
+    const description = fn.description?.split(/\r?\n\s*@/)[0].replace(/\s+/g, ' ').trim();
+    const notes = [`Runs ${spec.name}, a function defined in this model${description ? `: ${description}` : ''}.`];
+    if (values.length > 0) {
+      notes.push(
+        `${names(values)} ${values.length === 1 ? 'is' : 'are'} worked out first, here, with the filters at this point, and passed in as ${values.length === 1 ? 'a value' : 'values'} (VAL).`,
+      );
+    }
+    if (code.length > 0) {
+      notes.push(
+        `${names(code)} ${code.length === 1 ? 'is' : 'are'} passed as code (EXPR or a reference): the function works ${code.length === 1 ? 'it' : 'them'} out where it uses ${code.length === 1 ? 'it' : 'them'}, with its own filters there, which may not be the filters here.`,
+      );
+    }
+    if (defaults.length > 0) {
+      notes.push(`Left out, so ${defaults.length === 1 ? 'it uses its default' : 'they use their defaults'}: ${defaults.map((p) => `${p.name} = ${p.defaultText}`).join(', ')}.`);
+    }
+    if (ctx.rows.length > 0) {
+      const loop = ctx.rows[ctx.rows.length - 1].functionName;
+      notes.push(
+        `This is inside ${loop}, which goes row by row. Unlike a measure, calling a function doesn't turn the current row into a filter: its code runs as if written here. A measure or CALCULATE inside it does; plain code such as SUM(…) gets the same result for every row.`,
+      );
+    }
+    return notes;
   }
 
   /**

@@ -168,4 +168,20 @@ public class ModelBuilderTests
         Assert.Equal(["Current", "PY"], group.Items.Select(i => i.Name));
         Assert.Equal("SELECTEDMEASURE()", group.Items[0].Expression);
     }
+
+    [Fact]
+    public void Reads_user_defined_functions()
+    {
+        // The shape INFO.USERDEFINEDFUNCTIONS returns (checked in Power BI Desktop).
+        var functions = ModelBuilder.BuildFunctions(
+        [
+            R(("ID", 5L), ("Name", "Math.Twice"), ("Description", "Doubles a number"), ("Expression", "(x : SCALAR NUMERIC VAL) => x * 2"), ("IsHidden", false)),
+            R(("ID", 6L), ("Name", "Helper"), ("Description", null), ("Expression", "() => 1"), ("IsHidden", true)),
+        ]);
+
+        Assert.Equal(["Math.Twice", "Helper"], functions.Select(f => f.Name));
+        Assert.Equal("(x : SCALAR NUMERIC VAL) => x * 2", functions[0].Expression);
+        Assert.Null(functions[1].Description);
+        Assert.True(functions[1].IsHidden);
+    }
 }

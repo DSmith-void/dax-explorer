@@ -24,7 +24,21 @@ public static class ModelReader
             Query(connection, "EVALUATE INFO.VIEW.MEASURES()"),
             Query(connection, "EVALUATE INFO.VIEW.RELATIONSHIPS()"),
             ReadCalendars(connection, tables, columns),
-            ReadCalculationGroups(connection, tables));
+            ReadCalculationGroups(connection, tables),
+            ReadFunctions(connection));
+    }
+
+    /// <summary>User-defined functions; none when the engine refuses INFO.USERDEFINEDFUNCTIONS (older versions).</summary>
+    private static List<FunctionInfo> ReadFunctions(AdomdConnection connection)
+    {
+        try
+        {
+            return ModelBuilder.BuildFunctions(Query(connection, "EVALUATE INFO.USERDEFINEDFUNCTIONS()"));
+        }
+        catch (AdomdException)
+        {
+            return [];
+        }
     }
 
     /// <summary>Calculation groups and their items; none when the engine refuses the INFO functions.</summary>

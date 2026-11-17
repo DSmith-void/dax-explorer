@@ -119,7 +119,8 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
       return;
     }
 
-    const spec = lookupFunction(node.name);
+    // Built-in functions first, then the connected model's own (user-defined) functions.
+    const spec = lookupFunction(node.name) ?? options.model?.userFunction(node.name);
     const params = spec ? parametersForCall(spec, node.args.length, node.args) : null;
     result.calls.set(node.id, { nodeId: node.id, spec, params });
 
@@ -151,9 +152,9 @@ export function bind(root: Expr | null, options: BindOptions): BindResult {
         result.keywordNodeIds.add(arg.id);
         return;
       }
-      const requiresColumn = param?.role === 'column' || param?.role === 'tableOrColumn';
+      const requiresColumn = param?.role === 'column' || param?.role === 'tableOrColumn' || spec?.userDefined?.params?.[index]?.reference === 'column';
       // In a tableOrColumn position a bracketed reference cannot be a table, so it must be a column.
-      visit(arg, requiresColumn && spec ? { functionName: spec.name, parameterName: param.name } : null);
+      visit(arg, requiresColumn && spec && param ? { functionName: spec.name, parameterName: param.name } : null);
     });
   }
   visit(root, null);

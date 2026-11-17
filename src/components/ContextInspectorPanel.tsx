@@ -19,6 +19,7 @@ const ROLE_TEXT: Record<ArgRole, string> = {
   rowExpression: 'calculated for each row',
   keyword: 'an option word',
   name: 'only its name is used (not calculated)',
+  inside: 'passed as code: worked out inside the function',
 };
 
 interface ContextInspectorPanelProps {

@@ -89,6 +89,17 @@ export interface ModelMetadata {
   calendars?: CalendarInfo[];
   /** Calculation groups, with their items in order. Older helpers don't send them. */
   calculationGroups?: CalculationGroupInfo[];
+  /** The model's own functions (DAX's FUNCTION). Older helpers don't send them. */
+  functions?: FunctionInfo[];
+}
+
+export interface FunctionInfo {
+  /** May have dots: "Math.Ratio". */
+  name: string;
+  /** Starts with the inputs: "(ratio : SCALAR NUMERIC VAL) => …". */
+  expression: string;
+  description: string | null;
+  isHidden: boolean;
 }
 
 export interface CalculationGroupInfo {

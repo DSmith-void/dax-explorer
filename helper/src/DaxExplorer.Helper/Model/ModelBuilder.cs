@@ -120,6 +120,12 @@ public static class ModelBuilder
         return result;
     }
 
+    /// <summary>User-defined functions from INFO.USERDEFINEDFUNCTIONS (Name, Expression, Description, IsHidden).</summary>
+    public static List<FunctionInfo> BuildFunctions(IEnumerable<Row> functions) =>
+        functions
+            .Select(r => new FunctionInfo(r.RequiredText("Name"), r.Text("Expression") ?? string.Empty, r.Text("Description"), r.Flag("IsHidden")))
+            .ToList();
+
     private static int Number(object? value) => value switch
     {
         null or DBNull => 0,
@@ -134,7 +140,8 @@ public static class ModelBuilder
         IEnumerable<Row> measures,
         IEnumerable<Row> relationships,
         IReadOnlyList<CalendarInfo>? calendars = null,
-        IReadOnlyList<CalculationGroupInfo>? calculationGroups = null) =>
+        IReadOnlyList<CalculationGroupInfo>? calculationGroups = null,
+        IReadOnlyList<FunctionInfo>? functions = null) =>
         new(
             databaseName,
             tables.Select(r => new TableInfo(r.RequiredText("Name"), r.Flag("IsHidden"), r.Text("Expression"), r.Text("DataCategory"))).ToList(),
@@ -171,5 +178,6 @@ public static class ModelBuilder
                     r.Text("CrossFilteringBehavior") ?? "OneDirection"))
                 .ToList(),
             calendars ?? [],
-            calculationGroups ?? []);
+            calculationGroups ?? [],
+            functions ?? []);
 }

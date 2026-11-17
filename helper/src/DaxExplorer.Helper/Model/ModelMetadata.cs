@@ -8,7 +8,14 @@ public sealed record ModelMetadata(
     IReadOnlyList<MeasureInfo> Measures,
     IReadOnlyList<RelationshipInfo> Relationships,
     IReadOnlyList<CalendarInfo>? Calendars = null,
-    IReadOnlyList<CalculationGroupInfo>? CalculationGroups = null);
+    IReadOnlyList<CalculationGroupInfo>? CalculationGroups = null,
+    IReadOnlyList<FunctionInfo>? Functions = null);
+
+/// <summary>
+/// A user-defined function of the model: its name (it may have dots, e.g. "Math.Ratio") and its code, which starts
+/// with its inputs: "(value : SCALAR NUMERIC VAL, digits : SCALAR INT64 VAL = 2) => …".
+/// </summary>
+public sealed record FunctionInfo(string Name, string Expression, string? Description, bool IsHidden);
 
 /// <summary>
 /// A calculation group: a table whose items rewrite the measure in a visual when a filter picks one of them
