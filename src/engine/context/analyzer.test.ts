@@ -226,7 +226,7 @@ describe('going row by row, and rows becoming filters', () => {
   it('points out a column used where there is no current row', () => {
     const { analysis } = run('Sales[Amount] * 2');
     expect(analysis.insights.map((i) => i.kind)).toEqual(['column-without-row-context']);
-    expect(analysis.insights[0].message).toMatch(/^Sales\[Amount\] is used on its own here, but nothing is going row by row/);
+    expect(analysis.insights[0].message).toBe('Nothing is going row by row here, so DAX can\'t pick one value from the whole column. Wrap it in something like SUM(Sales[Amount]) or SELECTEDVALUE(Sales[Amount]).');
   });
 
   it('treats a column handed to SUM as the column itself, not a value', () => {
@@ -253,14 +253,14 @@ describe('variables', () => {
   it('a variable used inside CALCULATE is not recalculated', () => {
     const { analysis } = run('VAR v = [Total Sales] RETURN CALCULATE(v, ALL(Product))');
     expect(analysis.insights.map((i) => i.message)).toEqual([
-      'The filters here are different from where v was calculated (line 1), but v is not recalculated: it keeps the value it got there. This is a common surprise when a variable is used inside CALCULATE.',
+      'It got that value at line 1, with the filters there. A common surprise when a variable is used inside CALCULATE.',
     ]);
   });
 
   it('a variable calculated before a row-by-row function has the same value for every row', () => {
     const { analysis } = run('VAR v = [Total Sales] RETURN SUMX(Customer, v)');
     expect(analysis.insights.map((i) => i.message)).toEqual([
-      'v was calculated once (line 1), before SUMX started going row by row, so it has the same value for every row.',
+      'It got that value at line 1, before SUMX started going row by row.',
     ]);
   });
 
@@ -354,14 +354,14 @@ describe('LOOKUPVALUE (checked in Power BI Desktop: it ignores every filter in e
     const { step } = run(source);
     const s = step(`LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro")`);
     expect(s.summary).toBe(`Looks up 'Product'[Category] where 'Product'[Product] = "Widget Pro", ignoring the filters.`);
-    expect(s.notes[1]).toContain('No matching row gives BLANK');
+    expect(s.notes[1]).toContain('No match gives BLANK');
     expect(s.notes[1]).toContain('otherwise an error');
   });
 
   it('reads an even number of inputs as ending with the alternate result, even a measure', () => {
     const source = `LOOKUPVALUE('Product'[Category], 'Product'[Product], "Widget Pro", [Fallback])`;
     const { step, analysis } = run(source);
-    expect(step(source).notes[1]).toContain('No matching row gives [Fallback]');
+    expect(step(source).notes[1]).toContain('No match gives [Fallback]');
     expect(analysis.insights.filter((i) => i.kind === 'unknown-function')).toEqual([]);
     const binding = bind(parse(tokenize(source).tokens).root, CONVENTION);
     expect(binding.diagnostics).toEqual([]);
@@ -740,7 +740,7 @@ describe('window functions (checked in Power BI Desktop on Initech)', () => {
     const source = `CALCULATE([Total Sales], ${offset})`;
     const { step } = run(source);
     expect(step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual(year);
-    expect(run(offset).step(offset).summary).toBe(`OFFSET: the row just before the current one of ALL('Date'[Year]), sorted by 'Date'[Year].`);
+    expect(run(offset).step(offset).summary).toBe(`OFFSET: the row just before the current one of ALL('Date'[Year]), sorted by 'Date'[Year] (smallest first).`);
     expect(step(offset).notes.join(' ')).toContain('If they leave several (on a total), it does this for each and returns them all.');
   });
 

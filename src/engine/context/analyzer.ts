@@ -514,21 +514,22 @@ export function analyzeContext(
   function visitVariableRef(nodeId: number, name: string, declarationId: number, ctx: EvalContext) {
     const info = variables.get(declarationId);
     const where = info ? ` (line ${info.line})` : '';
-    const notes = [`${name} was calculated once${where}; that value is used here.`];
+    let notes = [`${name} was calculated once${where}; that value is used here.`];
     let summary = info ? `${name} from line ${info.line}; not recalculated.` : `${name}: not recalculated here.`;
     if (info) {
       const filtersDiffer = filterSignature(info.context) !== filterSignature(ctx);
       const newRows = ctx.rows.filter((row) => !info.context.rows.includes(row));
+      // The message follows the summary (here and in the Hints tab), so it doesn't repeat it.
       if (filtersDiffer) {
         summary = `${name} keeps its earlier value here, even though the filters are different.`;
-        const message = `The filters here are different from where ${name} was calculated${where}, but ${name} is not recalculated: it keeps the value it got there. This is a common surprise when a variable is used inside CALCULATE.`;
-        notes.push(message);
+        const message = `It got that value at line ${info.line}, with the filters there. A common surprise when a variable is used inside CALCULATE.`;
+        notes = [message];
         insights.push({ kind: 'variable-fixed', nodeId, summary, message });
       } else if (newRows.length > 0) {
         const functions = newRows.map((r) => r.functionName).join(' and ');
         summary = `${name} has the same value for every row of ${functions}.`;
-        const message = `${name} was calculated once${where}, before ${functions} started going row by row, so it has the same value for every row.`;
-        notes.push(message);
+        const message = `It got that value at line ${info.line}, before ${functions} started going row by row.`;
+        notes = [message];
         insights.push({ kind: 'variable-fixed', nodeId, summary, message });
       }
     }
@@ -579,7 +580,7 @@ export function analyzeContext(
     if (spec.name === 'CURRENTGROUP' && currentGroups.length === 0) {
       // Checked in Power BI Desktop: CURRENTGROUP() outside GROUPBY is an error.
       const summary = 'CURRENTGROUP() only works inside GROUPBY (an error here).';
-      const message = 'CURRENTGROUP() stands for the rows of the current group of GROUPBY, as the table of SUMX, AVERAGEX and the like. Outside GROUPBY there is no group, so DAX shows an error.';
+      const message = 'It stands for the rows of the current group of GROUPBY, as the table of SUMX, AVERAGEX and the like.';
       insights.push({ kind: 'dax-error', nodeId: node.id, summary, message });
       record({ nodeId: node.id, context: ctx, operations: [], summary, notes: [message] });
       return;
@@ -681,13 +682,13 @@ export function analyzeContext(
     if (name === 'ALLCROSSFILTERED' && role !== 'filter') {
       return {
         summary: 'ALLCROSSFILTERED only works as a filter inside CALCULATE (an error here).',
-        message: 'ALLCROSSFILTERED removes filters, so it can only be one of the filters of CALCULATE or CALCULATETABLE. Used as a table, DAX shows an error. To get all the rows of a table, use ALL.',
+        message: 'It removes filters; it doesn’t give a table. To get all the rows of a table, use ALL.',
       };
     }
     if (name === 'ALLCROSSFILTERED' && first && first.kind !== 'TableRef') {
       return {
         summary: `ALLCROSSFILTERED takes a table, not ${snippet(first, 30)} (an error here).`,
-        message: `ALLCROSSFILTERED removes the filters of a whole table, so its input must be a table name, such as 'Product'. To remove the filter on one column, use REMOVEFILTERS(${snippet(first, 40)}).`,
+        message: `It removes the filters of a whole table, such as 'Product'. To remove the filter on one column, use REMOVEFILTERS(${snippet(first, 40)}).`,
       };
     }
     if (name === 'DETAILROWS' && first) {
@@ -696,7 +697,7 @@ export function analyzeContext(
       if (!(first.kind === 'BracketRef' || first.kind === 'ColumnRef') || type === 'column') {
         return {
           summary: `DETAILROWS needs a measure, not ${snippet(first, 30)} (an error here).`,
-          message: `DETAILROWS lists the rows behind a measure, so its input must be a measure, such as [Total Sales]. ${snippet(first, 40)} isn't one, so DAX shows an error.`,
+          message: 'It lists the rows behind a measure, such as [Total Sales].',
         };
       }
     }
@@ -712,7 +713,7 @@ export function analyzeContext(
         const what = first.kind === 'BracketRef' ? `a column written without its table (${snippet(first, 30)})` : snippet(first, 30);
         return {
           summary: `${name} needs a reference, not ${what} (an error here).`,
-          message: `${name} only takes the name of a measure, a column written with its table ('Table'[Column])${name === 'NAMEOF' ? ', a table' : ''} or a calendar. Nothing inside it is calculated, so ${what} can't be used.`,
+          message: `It takes the name of a measure, a column written with its table ('Table'[Column])${name === 'NAMEOF' ? ', a table' : ''} or a calendar; nothing inside it is calculated.`,
         };
       }
     }
@@ -722,14 +723,14 @@ export function analyzeContext(
       if (new Set(tables).size > 1) {
         return {
           summary: "LINEST's columns must all be from one table (an error here).",
-          message: 'LINEST fits a line through the values of columns of one table, row by row. With columns from different tables there are no rows to pair them, so DAX shows an error. To use a value from a related table, use LINESTX over the table, with RELATED for the other column.',
+          message: 'With columns from different tables there are no rows to pair them. To use a value from a related table, use LINESTX over the table, with RELATED for the other column.',
         };
       }
     }
     if (name === 'FILTERS' && first?.kind === 'TableRef') {
       return {
         summary: 'FILTERS takes a column, not a table (an error here).',
-        message: `FILTERS lists the values the filters on one column allow, so its input must be a column, such as '${first.name}'[Column].`,
+        message: `It lists the values the filters on one column allow, such as '${first.name}'[Column].`,
       };
     }
     return null;
@@ -742,7 +743,7 @@ export function analyzeContext(
       if (rows.items.some((item) => item.kind !== 'TableConstructor')) {
         return {
           summary: "DATATABLE's rows must each be in their own {…} (an error here).",
-          message: 'DATATABLE takes its rows as a list of rows, each in its own braces: {{1, "a"}, {2, "b"}}. Values written straight in the outer braces are an error.',
+          message: 'For example: {{1, "a"}, {2, "b"}}.',
         };
       }
       const constant = (v: Expr) =>
@@ -756,7 +757,7 @@ export function analyzeContext(
       if (bad) {
         return {
           summary: `DATATABLE's values must be written out; ${snippet(bad, 30)} is worked out (an error here).`,
-          message: `DATATABLE only takes values written out in the code: numbers, text, TRUE, FALSE or BLANK(). ${snippet(bad, 40)} has to be worked out, so DAX shows an error. To build a table from values that are worked out, use a {…} list (with ROW for one row), or SELECTCOLUMNS.`,
+          message: 'It takes only numbers, text, TRUE, FALSE or BLANK(). For values that are worked out, use a {…} list (with ROW for one row), or SELECTCOLUMNS.',
         };
       }
     }
@@ -800,7 +801,7 @@ export function analyzeContext(
       const loops = name === 'EARLIEST' ? 'the outermost loop through its table' : n === 1 ? 'one loop out' : `${n} loops out`;
       return [
         `Reads ${label} from the row of ${target.functionName}${where}, not the current row of ${current.functionName}.`,
-        `${name} goes back to an earlier loop: here ${loops}, the ${target.functionName} going through ${target.table.description}. So ${label} is the value in that loop's current row, while ${current.functionName} goes through its own rows.`,
+        `${name} goes back to an earlier loop (here ${loops}).`,
       ];
     }
     const turned = ctx.rows.slice(0, ctx.rowsAsFilters ?? 0).some((row) => rowHasColumn(row, column));
@@ -808,8 +809,8 @@ export function analyzeContext(
       ? `${name} can't reach the earlier row here: inside CALCULATE it became a filter (an error).`
       : `There is no earlier loop through ${column.table || 'this column’s table'} for ${name} to read from (an error).`;
     const message = turned
-      ? `Inside CALCULATE, the rows of the loops around it have been turned into filters (context transition), so ${name} can't go back to them, and DAX shows an error. Store the value in a variable before the CALCULATE (VAR value = ${label}) and use the variable inside.`
-      : `${name} reads ${label} from an earlier loop (going row by row) through ${column.table || 'its table'}, one ${name === 'EARLIEST' ? 'outside the innermost loop' : `${n === 1 ? 'loop' : `${n} loops`} out`}. There is none here, so DAX shows an error ("an earlier row context doesn't exist").`;
+      ? `That happens inside CALCULATE (context transition). Store the value in a variable before the CALCULATE (VAR value = ${label}) and use the variable inside.`
+      : `It needs a loop (going row by row) through ${column.table || 'its table'} ${name === 'EARLIEST' ? 'outside the innermost one' : `${n === 1 ? 'one loop' : `${n} loops`} out`}. DAX's message: "an earlier row context doesn't exist".`;
     insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
     return [summary, message];
   }
@@ -874,7 +875,7 @@ export function analyzeContext(
         const none = hasAlternate ? snippet(rest[rest.length - 1], 30) : 'BLANK';
         return [
           `Looks up ${result ? snippet(result, 30) : '…'} where ${where}, ignoring the filters.`,
-          `It searches every row, whatever the filters shown above say (the report's, CALCULATE's, or ones reaching it from other tables). Only its own conditions (${where}) decide. No matching row gives ${none}. Several matching rows give that value if they all agree, and otherwise ${hasAlternate ? none : 'an error'}.`,
+          `No match gives ${none}. Several matches give the value if they all agree, otherwise ${hasAlternate ? none : 'an error'}.`,
         ];
       }
       default:
@@ -963,7 +964,12 @@ export function analyzeContext(
           return 'the number of the current row';
       }
     })();
-    const order = orderBy && orderBy.args.length > 0 ? `sorted by ${orderBy.args.map((a) => snippet(a, 30)).join(', ')}` : "sorted by the table's own columns";
+    // No ASC or DESC written: ASC (smallest first).
+    const direction = (a: Expr) => a.kind === 'TableRef' && ['ASC', 'DESC'].includes(a.name.toUpperCase());
+    const order =
+      orderBy && orderBy.args.length > 0
+        ? `sorted by ${orderBy.args.map((a) => snippet(a, 30)).join(', ')}${orderBy.args.some(direction) ? '' : ' (smallest first)'}`
+        : "sorted by the table's own columns";
     const summary = `${spec.name}: ${what} of ${table}, ${order}.`;
 
     // Where the current row comes from: the nearest loop whose row has the table's columns, else the filters.
@@ -991,7 +997,6 @@ export function analyzeContext(
         : []),
       ...(spec.name === 'ROWNUMBER' ? ["Ties are broken by the table's other columns, so every row gets its own number."] : []),
       ...(partitionBy ? [`It counts within each value of ${partitionBy.args.map((a) => snippet(a, 30)).join(', ')} separately.`] : []),
-      ...(orderBy ? [`ORDERBY's expressions are worked out for each row of ${table}, to sort them (ASC unless DESC).`] : []),
       ...(written ? [] : [`No table is written, so it uses ${table}: the rows the visual's filters allow, so the result depends on how the visual is built.`]),
     ];
     record({ nodeId: node.id, context: ctx, operations: [], summary, notes });
@@ -1919,14 +1924,14 @@ export function analyzeContext(
       const turned = [...ctx.rows.slice(0, ctx.rowsAsFilters ?? 0)].reverse().find((row) => column.table !== '' && rowHasColumn(row, column));
       if (turned) {
         const summary = `${label} can't be read here: the row of ${turned.functionName} became a filter (an error).`;
-        const message = `Inside CALCULATE, the current row of ${turned.functionName} has been turned into a filter (context transition), so ${label} can no longer be read from it, and DAX shows an error. To use the row's value, store it in a variable before the CALCULATE (VAR value = ${label}) and use the variable inside.`;
+        const message = `That happens inside CALCULATE (context transition). To use the row's value, store it in a variable before the CALCULATE (VAR value = ${label}) and use the variable inside.`;
         if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
         return { summary, notes: [message] };
       }
     }
     if (rows.length === 0) {
       const summary = `${label} has no current row to read from (an error in a measure).`;
-      const message = `${label} is used on its own here, but nothing is going row by row, so there is no "current row" to read it from. In a measure, DAX can't pick one value out of a whole column and shows an error. Wrap it in something like SUM(${label}) or SELECTEDVALUE(${label}).`;
+      const message = `Nothing is going row by row here, so DAX can't pick one value from the whole column. Wrap it in something like SUM(${label}) or SELECTEDVALUE(${label}).`;
       if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
       return { summary, notes: [message] };
     }
@@ -1951,7 +1956,7 @@ export function analyzeContext(
         innermost.functionName === 'SUMMARIZE'
           ? `Use an aggregation such as MAX(${label}) or SUM(${label}): SUMMARIZE filters the table to the group's rows, so it works per group.`
           : `Use CALCULATE(MAX(${label})): CALCULATE turns the current row into a filter, so MAX sees that row's data. (MAX on its own would see every row.)`;
-      const message = `${innermost.functionName} goes through ${innermost.table.description}, so its current row has only ${has}. ${label} isn't one of them, so there is no single value to read, and DAX shows an error. ${fix}`;
+      const message = `${innermost.functionName} goes through ${innermost.table.description}. ${fix}`;
       if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
       return { summary, notes: [message] };
     }
@@ -1959,7 +1964,7 @@ export function analyzeContext(
       // Checked in Power BI Desktop: MAXX(GENERATESERIES(1, 3), 'Date'[Year]) is an error.
       const has = innermost.table.names.map((n) => `[${n}]`).join(', ');
       const summary = `${label} isn't in the current row of ${innermost.functionName}, which has only ${has} (an error).`;
-      const message = `${innermost.functionName} goes through ${innermost.table.description}, a table made in the code: its rows have only ${has}, with no link to the model's tables. ${label} isn't one of them, so there is no single value to read, and DAX shows an error.`;
+      const message = `${innermost.functionName} goes through ${innermost.table.description}, a table made in the code, with no link to the model's tables.`;
       if (reportInsight) insights.push({ kind: 'column-without-row-context', nodeId: node.id, summary, message });
       return { summary, notes: [message] };
     }
