@@ -154,6 +154,7 @@ function ColumnBorder({ left, layout, onLayout, grid }: { left: number; layout: 
 export function StepPanel({ entries, index, onStep, onSelectNode, values, connected, stepInto, isExpanded, onExpand, hintsAt, onShowHints, runTimings, layout, onLayout }: StepPanelProps) {
   const current = entries[index];
   const grid = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   if (!current) {
     return <p className="empty-note">Nothing to step through yet. Pick a measure, or write your own DAX and press Explain.</p>;
   }
@@ -213,11 +214,18 @@ export function StepPanel({ entries, index, onStep, onSelectNode, values, connec
         {/* Why: the step's sentence when there is no change to show (otherwise "what changes" says it), then
             the notes, for what the changes don't say. */}
         {parts.diff.length === 0 && <p className="step-why">{current.summary}</p>}
-        {notes.map((note, i) => (
-          <p key={i} className="step-note">
-            {note}
-          </p>
-        ))}
+        {/* The first note is the one that matters most; the rest fold away under More (it stays open while stepping). */}
+        {notes.length > 0 && <p className="step-note">{notes[0]}</p>}
+        {notes.length > 1 && (
+          <details className="hint-more step-more" open={moreOpen} onToggle={(e) => setMoreOpen(e.currentTarget.open)}>
+            <summary>More</summary>
+            {notes.slice(1).map((note, i) => (
+              <p key={i} className="step-note">
+                {note}
+              </p>
+            ))}
+          </details>
+        )}
         {current.kind === 'start' && entries.length > 1 && (
           <p className="step-hint">
             Press <strong>Next</strong> (or the <kbd>→</kbd> key) to go through the calculation one step at a time.

@@ -447,10 +447,10 @@ describe('FIRSTNONBLANK and LASTNONBLANK (checked in Power BI Desktop on Initech
     const { step } = run("FIRSTNONBLANK('Date'[Date], [Total Sales])");
     const s = step("FIRSTNONBLANK('Date'[Date], [Total Sales])");
     expect(s.summary).toBe("FIRSTNONBLANK goes through the values of 'Date'[Date] one row at a time.");
-    expect(s.notes[1]).toContain("smallest first (text alphabetically, not in a sort-by column's order)");
-    expect(s.notes[1]).toContain('as a one-row table, or an empty table');
+    expect(s.notes[0]).toContain("smallest first (text alphabetically, not in a sort-by column's order)");
+    expect(s.notes[0]).toContain('as a one-row table, or an empty table');
     const v = run("LASTNONBLANKVALUE('Date'[Date], [Total Sales])").step("LASTNONBLANKVALUE('Date'[Date], [Total Sales])");
-    expect(v.notes[1]).toContain('the expression’s value there, or BLANK');
+    expect(v.notes[0]).toContain('the expression’s value there, or BLANK');
   });
 
   it('a measure inside is worked out for each value (context transition)', () => {
@@ -473,11 +473,12 @@ describe('SUMMARIZE (checked in Power BI Desktop on Initech)', () => {
     const { step } = run(source);
     const s = step(source);
     expect(s.summary).toBe("SUMMARIZE groups Sales by Product[Category], one group at a time.");
-    expect(s.notes[1]).toBe("Each extra column is worked out per group, with Sales filtered to that group's rows.");
+    // First (the step shows it; the rest fold under More).
+    expect(s.notes[0]).toBe("Each extra column is worked out per group, with Sales filtered to that group's rows.");
     // The note on removing filters only when an extra column removes some.
     expect(s.notes).toHaveLength(2);
     const withAll = `SUMMARIZE(Sales, 'Product'[Category], "All", CALCULATE(SUM(Sales[Amount]), ALL('Product')))`;
-    expect(run(withAll).step(withAll).notes[2]).toBe("Removing filters from another table (such as ALL on a related table) doesn't undo this; removing filters from Sales does.");
+    expect(run(withAll).step(withAll).notes[1]).toBe("Removing filters from another table (such as ALL on a related table) doesn't undo this; removing filters from Sales does.");
     const inner = step('SUM(Sales[Amount])');
     expect(describeContext(inner.context)).toContain('table Sales limited to the rows of the current group  (set by SUMMARIZE for each group)');
   });

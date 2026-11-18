@@ -978,7 +978,9 @@ export function analyzeContext(
       .reverse()
       .find((r) => (shape.kind === 'table' ? r.table.kind === 'table' && same(r.table.table, shape.table) : tableColumns.length > 0 && tableColumns.every((c) => rowHasColumn(r, c))));
     const scalar = spec.returns === 'scalar';
+    // The step shows the first note and folds the rest under More: a missing table matters most.
     const notes = [
+      ...(written ? [] : [`No table is written, so it uses ${table}: the rows the visual's filters allow, so the result depends on how the visual is built.`]),
       spec.name === 'INDEX'
         ? `It picks by position in the sorted table, whatever the current row is.`
         : loop
@@ -997,7 +999,6 @@ export function analyzeContext(
         : []),
       ...(spec.name === 'ROWNUMBER' ? ["Ties are broken by the table's other columns, so every row gets its own number."] : []),
       ...(partitionBy ? [`It counts within each value of ${partitionBy.args.map((a) => snippet(a, 30)).join(', ')} separately.`] : []),
-      ...(written ? [] : [`No table is written, so it uses ${table}: the rows the visual's filters allow, so the result depends on how the visual is built.`]),
     ];
     record({ nodeId: node.id, context: ctx, operations: [], summary, notes });
   }
@@ -1024,8 +1025,8 @@ export function analyzeContext(
       operations: [{ kind: 'row-context', row }],
       innerContext: rowCtx,
       summary: `${spec.name} goes through ${row.table.description} one row at a time.`,
+      // The general note last: the step shows the first note and folds the rest under More.
       notes: [
-        `Row by row (row context): the inputs marked "per row" are calculated for each row. This doesn't filter anything by itself.`,
         // Checked in Power BI Desktop: GENERATE(VALUES(Category), VALUES(Product[Product])) gave all 12 products for
         // each category (48 rows); with CALCULATETABLE around the second table, each category's own (12 rows).
         // Checked in Power BI Desktop: on Initech (a DirectQuery model) TOPNSKIP with a skip above 0 was an error.
@@ -1041,6 +1042,7 @@ export function analyzeContext(
               `It goes through them smallest first (text alphabetically, not in a sort-by column's order) and keeps the ${nonBlank[1] === 'FIRST' ? 'first' : 'last'} one where ${node.args[1] ? snippet(node.args[1], 40) : 'the expression'} isn't blank. ${nonBlank[2] ? 'It returns the expression’s value there' : 'It returns that value, as a one-row table'}, or ${nonBlank[2] ? 'BLANK' : 'an empty table'} when every one is blank.`,
             ]
           : []),
+        'The inputs marked "per row" are calculated for each row.',
       ],
     });
   }
@@ -1093,12 +1095,12 @@ export function analyzeContext(
       innerContext: inner,
       summary: `SUMMARIZE groups ${tableText} by ${byText}, one group at a time.`,
       notes: [
-        `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
         ...(extra.length > 0 ? [`Each extra column is worked out per group, with ${tableText} filtered to that group's rows.`] : []),
         // Only when an extra column removes filters: the group filter is on the table itself (checked in Power BI Desktop).
         ...(extra.some((arg) => allNodesOf(arg).some((n) => n.kind === 'FunctionCall' && REMOVERS.has(n.name.toUpperCase())))
           ? [`Removing filters from another table (such as ALL on a related table) doesn't undo this; removing filters from ${tableText} does.`]
           : []),
+        `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
       ],
     });
   }
@@ -1188,10 +1190,10 @@ export function analyzeContext(
       notes: [
         ...(byText
           ? [
+              ...(expressions.length > 0 ? ["In the extra columns, each group's values are filters, not a current row."] : []),
               tables.size > 1
                 ? `Lists every combination of ${byText} (they're from different tables) that the filters allow.`
                 : `Lists the combinations of ${byText} that exist and that the filters allow.`,
-              ...(expressions.length > 0 ? ["In the extra columns, each group's values are filters, not a current row."] : []),
             ]
           : []),
         ...(loops.length > 0
@@ -1246,10 +1248,10 @@ export function analyzeContext(
       innerContext: ctx,
       summary: `GROUPBY groups ${tableText} by ${byText}, one group at a time.`,
       notes: [
-        `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
         ...(extra.length > 0
           ? [`Each extra column goes through the group's rows (CURRENTGROUP()) with SUMX, AVERAGEX or the like. Nothing is filtered for the group, so CALCULATE and measures aren't allowed.`]
           : []),
+        `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
       ],
     });
   }
