@@ -1403,7 +1403,7 @@ export function analyzeContext(
         const ignoresFilters = arg.kind === 'FunctionCall' && (specOf(arg)?.name === 'ALLNOBLANKROW' || WINDOW_FUNCTIONS.has(specOf(arg)?.name ?? ''));
         step.notes = [
           ...(c.entry.mode === 'intersect' ? ['Only rows that pass both this filter and the ones already there are included.'] : []),
-          ...(ignoresFilters ? step.notes : [`Its condition is checked using the filters from before the ${spec.name} (shown above).`]),
+          ...(ignoresFilters ? step.notes : [`Worked out with the filters from before the ${spec.name} (shown above).`]),
         ];
       }
     }
@@ -1547,13 +1547,13 @@ export function analyzeContext(
       n.n === null ? `moved by ${n.text} ${u}` : n.n === 0 ? 'not moved' : `${Math.abs(n.n)} ${u} ${n.n < 0 ? 'earlier' : 'later'}`;
     switch (name) {
       case 'DATESYTD':
-        return `every date from the start of the year up to the last date in the current filter${args[1] ? ` (for a year ending ${arg(1)})` : ''}`;
+        return `every date of the year up to the last date in the current filter${args[1] ? ` (for a year ending ${arg(1)})` : ''}`;
       case 'DATESQTD':
-        return 'every date from the start of the quarter up to the last date in the current filter';
+        return 'every date of the quarter up to the last date in the current filter';
       case 'DATESMTD':
-        return 'every date from the start of the month up to the last date in the current filter';
+        return 'every date of the month up to the last date in the current filter';
       case 'DATESWTD':
-        return 'every date from the start of the week up to the last date in the current filter';
+        return 'every date of the week up to the last date in the current filter';
       case 'SAMEPERIODLASTYEAR':
         return 'the same dates as the current filter, one year earlier';
       case 'DATEADD': {

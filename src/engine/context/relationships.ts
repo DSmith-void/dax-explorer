@@ -191,7 +191,7 @@ export function wholeTableDateRule(model: RelationshipModel, column: ColumnName)
   const keyOfRelationship = model.relationships.some(
     (r) => (same(r.toTable, column.table) && same(r.toColumn, column.column) && !r.toMany) || (same(r.fromTable, column.table) && same(r.fromColumn, column.column) && !r.fromMany),
   );
-  return keyOfRelationship ? `${column.table}[${column.column}] is a date column that a relationship uses` : null;
+  return keyOfRelationship ? `a relationship uses the date column ${column.table}[${column.column}]` : null;
 }
 
 /** The relationship between two columns (in either order), if the model has one. */

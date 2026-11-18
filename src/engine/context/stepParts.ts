@@ -79,7 +79,7 @@ const lineFor = (op: Operation, prepared: boolean): DiffLine[] => {
         {
           kind: 'remove',
           text: removalText(op.removal),
-          note: op.because ? `removed by DAX itself, because ${op.because}${including}` : `${op.functionName} removes these filters${including}${inside}`,
+          note: op.because ? `removed automatically: ${op.because}${including}` : `${op.functionName} removes these filters${including}${inside}`,
           nodeId: op.because ? null : op.nodeId,
         },
       ];

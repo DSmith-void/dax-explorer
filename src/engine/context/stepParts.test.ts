@@ -61,7 +61,7 @@ describe('stepParts: what changes', () => {
   it('filters DAX removes by itself say so, with the reason', () => {
     const p = steps(`M = CALCULATE([Total Sales], 'Date'[Date] >= DATE(2026, 1, 1))`).parts('CALCULATE applies its filters');
     expect(p.diff[0]).toMatchObject({ kind: 'remove', text: 'table Date', nodeId: null });
-    expect(p.diff[0].note).toMatch(/^removed by DAX itself, because Date\[Date\] is a date column that a relationship uses/);
+    expect(p.diff[0].note).toMatch(/^removed automatically: a relationship uses the date column Date\[Date\]/);
   });
 
   it('nested: where lists the loops and CALCULATEs around the step, outermost first', () => {

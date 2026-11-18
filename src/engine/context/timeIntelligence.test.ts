@@ -26,12 +26,12 @@ describe('time intelligence in CALCULATE', () => {
   it('DATESYTD replaces the date filter with a rule, and DAX clears the rest of the Date table by itself', () => {
     const { calculate } = explain("M = CALCULATE([Total Sales], DATESYTD('Date'[Date]))");
     expect(calculate.operations.map(technicalOperation)).toEqual([
-      'Automatic REMOVEFILTERS(Date): Date[Date] is a date column that a relationship uses',
-      'Filter Date[Date] = every date from the start of the year up to the last date in the current filter: overwrites existing filters on the same columns',
+      'Automatic REMOVEFILTERS(Date): a relationship uses the date column Date[Date]',
+      'Filter Date[Date] = every date of the year up to the last date in the current filter: overwrites existing filters on the same columns',
     ]);
     expect(describeContext(calculate.innerContext!)).toEqual([
       "The report's filters, except any filter on table Date",
-      'Date[Date] = every date from the start of the year up to the last date in the current filter  (added by CALCULATE)',
+      'Date[Date] = every date of the year up to the last date in the current filter  (added by CALCULATE)',
     ]);
   });
 
@@ -61,7 +61,7 @@ describe('time intelligence in CALCULATE', () => {
     ["NEXTYEAR('Date'[Date])", 'the whole year after the last date in the current filter'],
     ["DATESBETWEEN('Date'[Date], DATE(2025, 1, 1), DATE(2025, 6, 30))", 'every date from DATE(2025, 1, 1) to DATE(2025, 6, 30)'],
     ["DATESINPERIOD('Date'[Date], MAX('Date'[Date]), -3, MONTH)", "the 3 months up to MAX('Date'[Date])"],
-    ["DATESYTD('Date'[Date], \"6/30\")", 'every date from the start of the year up to the last date in the current filter (for a year ending "6/30")'],
+    ["DATESYTD('Date'[Date], \"6/30\")", 'every date of the year up to the last date in the current filter (for a year ending "6/30")'],
   ])('%s: %s', (filter, rule) => {
     const { calculate } = explain(`M = CALCULATE([Total Sales], ${filter})`);
     const add = calculate.operations.find((op) => op.kind === 'add-filter');
@@ -206,7 +206,7 @@ describe('calendar-based time intelligence', () => {
   });
 
   it('knows the week functions', () => {
-    expect(calendarFilter("M = CALCULATE([Total Sales], DATESWTD('Fiscal Calendar'))")[0]).toContain('every date from the start of the week');
+    expect(calendarFilter("M = CALCULATE([Total Sales], DATESWTD('Fiscal Calendar'))")[0]).toContain('every date of the week');
     expect(calendarFilter("M = CALCULATE([Total Sales], PREVIOUSWEEK('Fiscal Calendar'))")[0]).toContain('the whole week before');
   });
 
