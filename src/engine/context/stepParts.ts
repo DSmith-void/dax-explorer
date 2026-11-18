@@ -87,7 +87,7 @@ const lineFor = (op: Operation, prepared: boolean): DiffLine[] => {
     case 'context-transition':
       return op.added.map((entry) => ({ kind: 'row' as const, text: entryText(entry), note: 'the current row becomes a filter (context transition)', nodeId: null }));
     case 'row-context':
-      return [{ kind: 'loop', text: `each row of ${op.row.table.description}`, note: `${op.row.functionName} goes row by row: a current row, no filter yet (row context)`, nodeId: null }];
+      return [{ kind: 'loop', text: `each row of ${op.row.table.description}`, note: 'a current row, not a filter (row context)', nodeId: null }];
     case 'relationship':
       return [{ kind: 'relationship', text: relationshipChangeText(op.change), note: `${op.change.functionName}${inside}`, nodeId: op.nodeId }];
     case 'not-modeled':

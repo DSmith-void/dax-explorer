@@ -59,6 +59,9 @@ import { TOTALS } from './totals';
 /** The aggregations Power BI accepts in GROUPBY's columns, over CURRENTGROUP() (checked in Power BI Desktop). */
 const GROUPBY_AGGREGATIONS = new Set(['SUMX', 'AVERAGEX', 'MINX', 'MAXX', 'COUNTX', 'COUNTAX', 'PRODUCTX']);
 
+/** Functions that remove filters (for notes that only matter when one is used). */
+const REMOVERS = new Set(['ALL', 'REMOVEFILTERS', 'ALLEXCEPT', 'ALLSELECTED', 'ALLNOBLANKROW', 'ALLCROSSFILTERED']);
+
 /** A node and everything inside it. */
 function allNodesOf(node: AstNode): AstNode[] {
   return [node, ...childrenOf(node).flatMap((c) => allNodesOf(c.node))];
@@ -974,10 +977,8 @@ export function analyzeContext(
         ? `It picks by position in the sorted table, whatever the current row is.`
         : loop
           ? `The current row is the row ${loop.functionName} is on.`
-          : `The current row comes from the filters here: the row of ${table} they leave. ${
-              scalar
-                ? `When they leave more than one row of ${table} (on a total, for example), it gives BLANK: it can only return one number.`
-                : `When they leave more than one row of ${table} (on a total, for example), it does this for each of them and returns all the rows it finds together.`
+          : `The current row is the one the filters leave in ${table}. If they leave several (on a total), ${
+              scalar ? 'it gives BLANK.' : 'it does this for each and returns them all.'
             }`,
       // Checked in Power BI Desktop: with every row tied, RANK(SKIP) gave 1 to all four categories, and ROWNUMBER
       // gave 1 to 4 in the order of the table's other column (alphabetically).
@@ -1088,10 +1089,10 @@ export function analyzeContext(
       summary: `SUMMARIZE groups ${tableText} by ${byText}, one group at a time.`,
       notes: [
         `It lists each combination of ${byText} that has rows in ${tableText}, with the filters shown above.`,
-        ...(extra.length > 0
-          ? [
-              `Each extra column is worked out once per group: it can read the group's columns (${byText}), and ${tableText} is filtered to that group's rows. That filter is on ${tableText} itself, so removing filters from another table (such as ALL on a related table) doesn't remove it; removing filters from ${tableText} does.`,
-            ]
+        ...(extra.length > 0 ? [`Each extra column is worked out per group, with ${tableText} filtered to that group's rows.`] : []),
+        // Only when an extra column removes filters: the group filter is on the table itself (checked in Power BI Desktop).
+        ...(extra.some((arg) => allNodesOf(arg).some((n) => n.kind === 'FunctionCall' && REMOVERS.has(n.name.toUpperCase())))
+          ? [`Removing filters from another table (such as ALL on a related table) doesn't undo this; removing filters from ${tableText} does.`]
           : []),
       ],
     });
@@ -1182,16 +1183,14 @@ export function analyzeContext(
       notes: [
         ...(byText
           ? [
-              `It lists ${tables.size > 1 ? `every combination of ${byText} (they come from different tables)` : `the combinations of ${byText} that exist`} that the filters shown above allow. ${
-                expressions.length > 0 ? 'Groups where every extra column is BLANK are left out (a column wrapped in IGNORE doesn’t count).' : ''
-              }`.trim(),
-              "For the extra columns, each group's values become filters (so ALL on their table inside removes them). There is no current row: a column on its own there is an error.",
+              tables.size > 1
+                ? `Lists every combination of ${byText} (they're from different tables) that the filters allow.`
+                : `Lists the combinations of ${byText} that exist and that the filters allow.`,
+              ...(expressions.length > 0 ? ["In the extra columns, each group's values are filters, not a current row."] : []),
             ]
           : []),
         ...(loops.length > 0
-          ? [
-              `The row of ${loops[loops.length - 1].functionName} doesn't filter the groups (unless CALCULATE is used); its columns can still be read in the extra columns, and a measure there sees it, through its own context transition.`,
-            ]
+          ? [`The row of ${loops[loops.length - 1].functionName} doesn't filter the groups unless CALCULATE is used, but its columns can still be read in the extra columns.`]
           : []),
       ],
     });

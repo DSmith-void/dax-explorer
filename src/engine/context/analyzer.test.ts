@@ -473,7 +473,11 @@ describe('SUMMARIZE (checked in Power BI Desktop on Initech)', () => {
     const { step } = run(source);
     const s = step(source);
     expect(s.summary).toBe("SUMMARIZE groups Sales by Product[Category], one group at a time.");
-    expect(s.notes[1]).toContain("Sales is filtered to that group's rows");
+    expect(s.notes[1]).toBe("Each extra column is worked out per group, with Sales filtered to that group's rows.");
+    // The note on removing filters only when an extra column removes some.
+    expect(s.notes).toHaveLength(2);
+    const withAll = `SUMMARIZE(Sales, 'Product'[Category], "All", CALCULATE(SUM(Sales[Amount]), ALL('Product')))`;
+    expect(run(withAll).step(withAll).notes[2]).toBe("Removing filters from another table (such as ALL on a related table) doesn't undo this; removing filters from Sales does.");
     const inner = step('SUM(Sales[Amount])');
     expect(describeContext(inner.context)).toContain('table Sales limited to the rows of the current group  (set by SUMMARIZE for each group)');
   });
@@ -737,7 +741,7 @@ describe('window functions (checked in Power BI Desktop on Initech)', () => {
     const { step } = run(source);
     expect(step(source).innerContext!.filter.entries.map((e) => e.target)).toEqual(year);
     expect(run(offset).step(offset).summary).toBe(`OFFSET: the row just before the current one of ALL('Date'[Year]), sorted by 'Date'[Year].`);
-    expect(step(offset).notes.join(' ')).toContain('returns all the rows it finds together');
+    expect(step(offset).notes.join(' ')).toContain('If they leave several (on a total), it does this for each and returns them all.');
   });
 
   it('the current row comes from a loop whose row has the table’s columns', () => {
@@ -792,7 +796,7 @@ describe('RANK and ROWNUMBER ties (checked in Power BI Desktop: all tied gave 1,
     expect(run(skip).step(skip).notes.join(' ')).toContain('(1, 1, 3)');
     const number = `ROWNUMBER(ALL('Product'[Category]), ORDERBY([Total Sales], DESC))`;
     expect(run(number).step(number).notes.join(' ')).toContain('every row gets its own number');
-    expect(run(number).step(number).notes[0]).toContain("more than one row of ALL('Product'[Category])");
+    expect(run(number).step(number).notes[0]).toBe("The current row is the one the filters leave in ALL('Product'[Category]). If they leave several (on a total), it gives BLANK.");
   });
 });
 
@@ -814,11 +818,15 @@ describe('SUMMARIZECOLUMNS in a measure (checked in Power BI Desktop on Initech)
     expect(errors(`SUMMARIZECOLUMNS('Product'[Category], "C", 'Product'[Category])`)[0]).toContain('no current row');
   });
 
-  it("says a loop's row doesn't filter the groups, and that blank groups are left out", () => {
+  it("says a loop's row doesn't filter the groups, and (after the last group) that blank groups are left out", () => {
     const sc = `SUMMARIZECOLUMNS('Product'[Category], "S", SUM(Sales[Amount]))`;
     const notes = run(`SUMX(VALUES('Date'[Year]), COUNTROWS(${sc}))`).step(sc).notes.join(' ');
     expect(notes).toContain("The row of SUMX doesn't filter the groups");
-    expect(notes).toContain('every extra column is BLANK are left out');
+    expect(notes).not.toContain('BLANK');
+    const alone = run(sc);
+    const binding = bind(alone.root, CONVENTION);
+    const done = buildTimeline(alone.root, binding, alone.analysis, sc).find((e) => e.title === 'SUMMARIZECOLUMNS: after the last group')!;
+    expect(done.summary).toContain('groups where every extra column is BLANK are left out');
     expect(run(`SUMMARIZECOLUMNS('Product'[Category], 'Customer'[Region])`).step(`SUMMARIZECOLUMNS('Product'[Category], 'Customer'[Region])`).notes[0]).toContain('every combination');
   });
 

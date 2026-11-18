@@ -51,7 +51,7 @@ describe('stepParts: what changes', () => {
   it('inside a loop: the loop, then the current row becoming a filter', () => {
     const { parts } = steps(sample('average-per-customer'));
     expect(lines(parts('AVERAGEX goes row by row'))).toEqual([
-      'loop each row of VALUES(Customer[Customer Key]) — AVERAGEX goes row by row: a current row, no filter yet (row context)',
+      'loop each row of VALUES(Customer[Customer Key]) — a current row, not a filter (row context)',
     ]);
     const measure = parts('Calculate [Total Sales]');
     expect(lines(measure)).toEqual(['row Customer[Customer Key] = the current row of AVERAGEX — the current row becomes a filter (context transition)']);

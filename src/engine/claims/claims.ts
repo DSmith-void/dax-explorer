@@ -96,7 +96,7 @@ function windowClaims(entry: TimelineEntry, node: AstNode, options: StepQueryOpt
   const name = node.name.toUpperCase();
   if (!['RANK', 'ROWNUMBER', 'OFFSET', 'INDEX'].includes(name)) return [];
   const notes = analysis.steps.get(node.id)?.notes ?? [];
-  const fromFilters = notes.some((n) => n.startsWith('The current row comes from the filters') || n.startsWith('It picks by position'));
+  const fromFilters = notes.some((n) => n.startsWith('The current row is the one the filters leave') || n.startsWith('It picks by position'));
   if (!fromFilters) return [];
   const text = (n: AstNode) => options.source.slice(n.span.start, n.span.end);
   const isCall = (a: Expr, fn: string) => a.kind === 'FunctionCall' && a.name.toUpperCase() === fn;
