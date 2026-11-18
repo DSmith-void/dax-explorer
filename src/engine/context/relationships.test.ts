@@ -68,7 +68,7 @@ describe('where filters reach', () => {
   it('a filter on Product reaches Sales but not Customer, Plant or Date (Initech)', () => {
     const { state, result } = reach(INITECH_MODEL, INITIAL_CONTEXT, [CATEGORY]);
     expect(state).toEqual({ Sales: 'reached', Product: 'filtered', Customer: 'not-reached', Plant: 'not-reached', Date: 'not-reached' });
-    expect(pathText(result.tables.find((t) => t.table === 'Sales')!)).toBe('Product → Sales (through Sales[Product Key] → Product[Product Key])');
+    expect(pathText(result.tables.find((t) => t.table === 'Sales')!)).toBe('Product → Sales, matched on Product Key');
     expect(result.flowing.map((r) => r.toTable)).toEqual(['Product']);
   });
 
@@ -92,7 +92,9 @@ describe('a filter on a whole table', () => {
     expect(result.against).toHaveLength(4);
     const product = result.tables.find((t) => t.table === 'Product')!;
     expect(product.expanded).toBe(true);
-    expect(pathText(product)).toContain('only Product rows with matching Sales rows are kept');
+    expect(pathText(product)).toBe(
+      'Sales → Product, matched on Product Key: only Product rows with a Sales row are kept (the whole Sales table is filtered)',
+    );
   });
 });
 
@@ -145,7 +147,7 @@ describe('USERELATIONSHIP, CROSSFILTER and TREATAS', () => {
     const order = result.model.relationships.find((r) => r.fromColumn === 'Date')!;
     expect([ship.active, order.active, ship.changedBy, order.switchedOffBy]).toEqual([true, false, 'USERELATIONSHIP', 'USERELATIONSHIP']);
     expect(result.flowing).toEqual([ship]);
-    expect(pathText(result.tables.find((t) => t.table === 'Sales')!)).toBe('Date → Sales (through Sales[Ship Date] → Date[Date])');
+    expect(pathText(result.tables.find((t) => t.table === 'Sales')!)).toBe('Date → Sales, matched on Date[Date] = Sales[Ship Date]');
   });
 
   it('CROSSFILTER BOTH: a Product filter reaches Customer through Sales', () => {

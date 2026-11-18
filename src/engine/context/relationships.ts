@@ -423,18 +423,24 @@ export function filterReach(
   return { tables: [...reach.values()], flowing: [...flowing], against: [...against], unknown, unchecked: [...unchecked], model, problems, treatAs };
 }
 
-/** "Product → Sales (through Sales[Product Key] → Product[Product Key])" for a reached table. */
+/**
+ * "Product → Sales, matched on Product Key" for a reached table. Columns with different names are
+ * shown in travel order: "Date → Sales, matched on Date[Date] = Sales[Ship Date]".
+ */
 export function pathText(reach: TableReach): string {
   if (reach.state !== 'reached' || !reach.source) return '';
   const steps = [reach.source];
+  const keys: string[] = [];
   let at = reach.source;
   for (const r of reach.path) {
-    at = otherEnd(r, at) ?? at;
-    steps.push(at);
+    const next = otherEnd(r, at) ?? at;
+    const [fromCol, toCol] = r.fromTable === at ? [r.fromColumn, r.toColumn] : [r.toColumn, r.fromColumn];
+    keys.push(fromCol === toCol ? fromCol : `${at}[${fromCol}] = ${next}[${toCol}]`);
+    steps.push(next);
+    at = next;
   }
-  const through = reach.path.map((r) => `${r.fromTable}[${r.fromColumn}] → ${r.toTable}[${r.toColumn}]`).join(', then ');
-  if (reach.expanded) {
-    return `${steps.join(' → ')} (the filter is on the whole ${reach.source} table, which also covers the tables it looks up: only ${reach.table} rows with matching ${reach.source} rows are kept, through ${through})`;
-  }
-  return `${steps.join(' → ')} (through ${through})`;
+  const text = `${steps.join(' → ')}, matched on ${keys.join(', then ')}`;
+  return reach.expanded
+    ? `${text}: only ${reach.table} rows with a ${reach.source} row are kept (the whole ${reach.source} table is filtered)`
+    : text;
 }
